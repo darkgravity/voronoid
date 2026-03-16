@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voronoi Shader</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: sans-serif; }
+    canvas#glCanvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+
+    #ui {
+      position: fixed; top: 0; left: 0; height: 100vh;
+      width: 320px;
+      background: rgba(20,20,20,0.92);
+      border-right: 1px solid rgba(255,255,255,0.1);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+      z-index: 10;
+    }
+    #ui.hidden { transform: translateX(-320px); }
+
+    #ui-scroll {
+      flex: 1; overflow-y: auto; padding: 12px 14px 20px;
+      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;
+    }
+
+    #ui-toggle {
+      position: fixed; top: 12px; left: 12px;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: rgba(20,20,20,0.92); border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.7); font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; z-index: 100;
+      transition: opacity 0.2s;
+      opacity: 0; pointer-events: none;
+    }
+    #ui-toggle.visible { opacity: 1; pointer-events: all; }
+
+    #ui-collapse {
+      display: flex; align-items: center; justify-content: flex-end;
+      padding: 8px 10px 4px; flex-shrink: 0;
+    }
+    #btn-collapse {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: transparent; border: 1px solid rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.5); font-size: 12px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    #btn-collapse:hover { background: rgba(255,255,255,0.08); }
+
+    .section-title {
+      color: rgba(255,255,255,0.35); font-size: 10px; letter-spacing: 0.1em;
+      text-transform: uppercase; margin: 14px 0 6px;
+    }
+
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+
+    label {
+      color: rgba(255,255,255,0.45); font-size: 11px;
+      width: 80px; flex-shrink: 0; text-align: right;
+    }
+
+    input[type=range] { flex: 1; accent-color: #4a9eff; height: 2px; }
+
+    .val { color: #fff; font-size: 11px; width: 38px; text-align: right; flex-shrink: 0; }
+
+    .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+
+    button {
+      padding: 4px 12px; border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: transparent; color: rgba(255,255,255,0.5);
+      font-size: 11px; cursor: pointer; transition: background 0.1s, color 0.1s;
+    }
+    button:hover { background: rgba(255,255,255,0.08); }
+    button.active { background: #fff; color: #000; border-color: #fff; }
+    button.small { padding: 3px 8px; font-size: 10px; }
+    button.danger { border-color: rgba(255,80,80,0.4); color: rgba(255,100,100,0.7); }
+    button.danger:hover { background: rgba(255,60,60,0.15); }
+
+    .divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 8px 0; }
+
+    .color-swatch {
+      width: 22px; height: 22px; border-radius: 3px; flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.25); cursor: pointer;
+      position: relative; overflow: hidden;
+    }
+    .color-swatch input[type=color] {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: 0; cursor: pointer; border: none; padding: 0;
+    }
+
+    #groups-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 14px 0 8px;
+    }
+    #groups-header span {
+      color: rgba(255,255,255,0.35); font-size: 10px; letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .group-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 6px; margin-bottom: 8px; overflow: hidden;
+    }
+    .group-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      user-select: none;
+    }
+    .group-header .g-title {
+      flex: 1; color: rgba(255,255,255,0.7); font-size: 12px; font-weight: 500;
+    }
+    .group-header .g-actions { display: flex; gap: 4px; }
+    .group-body { padding: 8px 10px; }
+    .group-body .row label { width: 70px; }
+    .drag-handle { color: rgba(255,255,255,0.25); font-size: 14px; cursor: grab; padding: 0 2px; }
+
+    .toggle-active {
+      width: 28px; height: 15px; border-radius: 8px;
+      background: rgba(255,255,255,0.12); border: none;
+      position: relative; cursor: pointer; flex-shrink: 0; padding: 0;
+      transition: background 0.15s;
+    }
+    .toggle-active::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 11px; height: 11px; border-radius: 50%;
+      background: rgba(255,255,255,0.4); transition: transform 0.15s, background 0.15s;
+    }
+    .toggle-active.on { background: #4a9eff; }
+    .toggle-active.on::after { transform: translateX(13px); background: #fff; }
+
+    select {
+      flex: 1; background: #1a1a1a; color: #ccc;
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;
+      font-size: 11px; padding: 3px 6px; cursor: pointer; outline: none;
+    }
+    select option { background: #1a1a1a; color: #ccc; }
+    select:hover { background: #252525; }
+
+    /* ── Gradient editor ────────────────────────── */
+    .grad-editor { position: relative; margin: 8px 0; user-select: none; }
+    .grad-bar {
+      width: 100%; height: 24px; border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.15);
+      cursor: crosshair;
+    }
+    .grad-track {
+      position: relative; width: 100%; height: 20px; margin-top: 2px;
+    }
+    .grad-handle {
+      position: absolute; top: 0;
+      width: 14px; height: 14px;
+      margin-left: -7px;
+      border-radius: 2px;
+      border: 2px solid rgba(255,255,255,0.7);
+      cursor: grab;
+      transition: border-color 0.1s;
+    }
+    .grad-handle:hover, .grad-handle.dragging {
+      border-color: #fff;
+      z-index: 2;
+    }
+    .grad-handle.selected {
+      border-color: #4a9eff;
+    }
+    /* hidden color input inside each handle */
+    .grad-handle input[type=color] {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: 0; cursor: pointer; border: none; padding: 0;
+    }
+    .grad-hint {
+      color: rgba(255,255,255,0.25); font-size: 9px; margin-top: 4px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="glCanvas"></canvas>
+
+  <div id="ui-toggle" onclick="toggleUI()">&#9654;</div>
+
+  <div id="ui">
+    <div id="ui-collapse">
+      <button id="btn-collapse" onclick="toggleUI()">&#9664;</button>
+    </div>
+    <div id="ui-scroll">
+
+      <div class="btn-row" style="margin-bottom:4px">
+        <button onclick="saveConfig()">Save</button>
+        <button onclick="loadConfig()">Load</button>
+        <button id="btn-play" onclick="togglePlay()">Play Animation</button>
+      </div>
+      <div class="row" id="speedRow" style="display:none">
+        <label>Speed</label>
+        <input type="range" id="sSpeed" min="1" max="120" step="1" value="10">
+        <span class="val" id="vSpeed">10</span>
+      </div>
+      <div class="row">
+        <label>Flavor</label>
+        <select id="selFlavor" onchange="loadFlavor(this.value)">
+          <option value="">-- select --</option>
+        </select>
+      </div>
+      <input type="file" id="configFileInput" accept=".json" style="display:none" onchange="handleConfigLoad(event)">
+
+      <div class="divider"></div>
+      <div class="section-title">Metric</div>
+      <div class="btn-row">
+        <button id="btn-chebyshev" class="active" onclick="setMode(0)">Chebyshev</button>
+        <button id="btn-manhattan" onclick="setMode(1)">Manhattan</button>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Points</div>
+
+      <div class="row">
+        <label>Count</label>
+        <input type="range" id="sPoints" min="2" max="64" step="1" value="14">
+        <span class="val" id="vPoints">14</span>
+      </div>
+      <div class="row">
+        <label>Seed</label>
+        <input type="range" id="sSeed" min="0" max="100" step="1" value="0">
+        <span class="val" id="vSeed">0</span>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Transform</div>
+
+      <div class="row">
+        <label>Rotation</label>
+        <input type="range" id="sRot" min="0" max="360" step="1" value="117">
+        <span class="val" id="vRot">117°</span>
+      </div>
+      <div class="row">
+        <label>Displace X</label>
+        <input type="range" id="sDx" min="-1" max="1" step="0.01" value="0">
+        <span class="val" id="vDx">0.00</span>
+      </div>
+      <div class="row">
+        <label>Displace Y</label>
+        <input type="range" id="sDy" min="-1" max="1" step="0.01" value="0">
+        <span class="val" id="vDy">0.00</span>
+      </div>
+      <div class="row">
+        <label>Scale X</label>
+        <input type="range" id="sSx" min="0" max="2" step="0.01" value="1">
+        <span class="val" id="vSx">1.00</span>
+      </div>
+      <div class="row">
+        <label>Scale Y</label>
+        <input type="range" id="sSy" min="0" max="2" step="0.01" value="1">
+        <span class="val" id="vSy">1.00</span>
+      </div>
+      <div class="row">
+        <label>Spring</label>
+        <input type="range" id="sSpring" min="0" max="10" step="0.1" value="0">
+        <span class="val" id="vSpring">0.0</span>
+      </div>
+      <div class="btn-row">
+        <button id="btn-snapgrid" onclick="toggleSnapGrid()">Snap To Grid</button>
+      </div>
+      <div id="snapgrid-controls" style="display:none">
+        <div class="row">
+          <label>Grid Unit</label>
+          <input type="range" id="sGridUnit" min="10" max="500" step="1" value="50">
+          <span class="val" id="vGridUnit">50</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Mirror</div>
+      <div class="btn-row">
+        <button id="btn-mx" class="active" onclick="toggleMirror('x')">mirror x</button>
+        <button id="btn-my" class="active" onclick="toggleMirror('y')">mirror y</button>
+      </div>
+      <div class="btn-row">
+        <button id="btn-fx" onclick="toggleFlip('x')">flip x</button>
+        <button id="btn-fy" onclick="toggleFlip('y')">flip y</button>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Color</div>
+
+      <div class="btn-row" style="margin-bottom:8px">
+        <button id="btn-cm-grad" class="active" onclick="setColorMode(0)">Gradient</button>
+        <button id="btn-cm-hue" onclick="setColorMode(1)">Hue</button>
+      </div>
+
+      <!-- Hue mode controls -->
+      <div id="hue-controls" style="display:none">
+        <div class="row">
+          <label>Hue Seed</label>
+          <input type="range" id="sColorSeed" min="0" max="100" step="1" value="0">
+          <span class="val" id="vColorSeed">0</span>
+        </div>
+        <div class="row">
+          <label>Bright Min</label>
+          <input type="range" id="sValueMin" min="0" max="2" step="0.01" value="0.75">
+          <span class="val" id="vValueMin">0.75</span>
+        </div>
+        <div class="row">
+          <label>Bright Max</label>
+          <input type="range" id="sValueMax" min="0" max="2" step="0.01" value="1.00">
+          <span class="val" id="vValueMax">1.00</span>
+        </div>
+      </div>
+
+      <!-- Gradient mode controls -->
+      <div id="gradient-controls">
+        <div class="row">
+          <label>Seed</label>
+          <input type="range" id="sGradientSeed" min="0" max="100" step="1" value="0">
+          <span class="val" id="vGradientSeed">0</span>
+        </div>
+        <div class="grad-editor" id="gradEditor">
+          <canvas class="grad-bar" id="gradBar" height="24"></canvas>
+          <div class="grad-track" id="gradTrack"></div>
+          <div class="grad-hint">click bar to add · double-click handle to pick color · drag off to delete</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Display</div>
+
+      <div class="btn-row">
+        <button id="btn-outline" onclick="toggleOutline()">Outline</button>
+      </div>
+      <div id="outline-controls" style="display:none">
+        <div class="row">
+          <label>Outline Px</label>
+          <input type="range" id="sOutline" min="0" max="20" step="0.5" value="0">
+          <span class="val" id="vOutline">0.0</span>
+          <div class="color-swatch" id="outlineSwatch" style="background:#000000;">
+            <input type="color" id="outlineColor" value="#000000">
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>Points</label>
+        <div class="btn-row" style="margin:0">
+          <button id="btn-dots" onclick="toggleDots()">show dots</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Banding</div>
+      <div class="btn-row">
+        <button id="btn-banding" class="active" onclick="toggleBanding()">Add Banding</button>
+      </div>
+      <div id="banding-controls">
+        <div class="row">
+          <label>Bands</label>
+          <input type="range" id="sBandCount" min="1" max="20" step="1" value="12">
+          <span class="val" id="vBandCount">12</span>
+        </div>
+        <div class="row">
+          <label>Strength</label>
+          <input type="range" id="sBandStrength" min="0" max="1" step="0.01" value="1.00">
+          <span class="val" id="vBandStrength">1.00</span>
+        </div>
+        <div class="row">
+          <label>V min</label>
+          <input type="range" id="sBandLumMin" min="0" max="1" step="0.01" value="0.69">
+          <span class="val" id="vBandLumMin">0.69</span>
+        </div>
+        <div class="row">
+          <label>V Max</label>
+          <input type="range" id="sBandLumMax" min="0" max="1" step="0.01" value="1.00">
+          <span class="val" id="vBandLumMax">1.00</span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-band-random" onclick="toggleBandRandomize()">Randomize Band</button>
+        </div>
+        <div class="row">
+          <label>Blend</label>
+          <select id="selBandBlend" onchange="window.shaderParams.bandBlendMode=parseInt(this.value);window.shaderDirty=true">
+            <option value="0" selected>Overlay</option>
+            <option value="1">Multiply</option>
+            <option value="2">Screen</option>
+            <option value="3">Soft Light</option>
+            <option value="4">Hard Light</option>
+            <option value="5">Color Dodge</option>
+            <option value="6">Color Burn</option>
+            <option value="7">Linear Light</option>
+            <option value="8">Normal</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Hue Strength</label>
+          <input type="range" id="sBandHueStrength" min="0" max="1" step="0.01" value="0.00">
+          <span class="val" id="vBandHueStrength">0.00</span>
+        </div>
+        <div class="row">
+          <label>Hue Opacity</label>
+          <input type="range" id="sBandHueRadius" min="0" max="1" step="0.01" value="0.50">
+          <span class="val" id="vBandHueRadius">0.50</span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-band-outline" onclick="toggleBandOutline()">Outline Banding</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Pixelate</div>
+      <div class="btn-row">
+        <button id="btn-pixelate" onclick="togglePixelate()">Pixelate</button>
+      </div>
+      <div id="pixelate-controls" style="display:none">
+        <div class="row">
+          <label>Pixel Width</label>
+          <input type="range" id="sPixelW" min="1" max="50" step="1" value="23">
+          <span class="val" id="vPixelW">23</span>
+        </div>
+        <div class="row">
+          <label>Pixel Height</label>
+          <input type="range" id="sPixelH" min="1" max="50" step="1" value="11">
+          <span class="val" id="vPixelH">11</span>
+        </div>
+        <div class="row">
+          <label>Scale</label>
+          <input type="range" id="sPixelScale" min="0.1" max="2" step="0.01" value="1.00">
+          <span class="val" id="vPixelScale">1.00</span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-oblique" onclick="toggleOblique()">Oblique</button>
+        </div>
+
+        <div class="section-title" style="margin-top:6px">Weave</div>
+        <div class="btn-row">
+          <button id="btn-weave-none" class="active" onclick="setWeaveMode(0)">None</button>
+          <button id="btn-weave-brick" onclick="setWeaveMode(1)">Brick</button>
+          <button id="btn-weave-weave" onclick="setWeaveMode(2)">Weave</button>
+        </div>
+
+        <div class="section-title" style="margin-top:6px">Shape</div>
+        <div class="btn-row">
+          <button id="btn-shape-none" class="active" onclick="setPixelShape(0)">None</button>
+          <button id="btn-shape-pill" onclick="setPixelShape(1)">Pill</button>
+          <button id="btn-shape-diamond" onclick="setPixelShape(2)">Diamond</button>
+          <button id="btn-shape-square" onclick="setPixelShape(3)">Square</button>
+          <button id="btn-shape-pointed" onclick="setPixelShape(4)">Chevron</button>
+        </div>
+        <div id="shape-controls" style="display:none">
+          <div class="row">
+            <label>Margin</label>
+            <input type="range" id="sShapeMargin" min="1" max="10" step="1" value="3">
+            <span class="val" id="vShapeMargin">3</span>
+          </div>
+          <div class="row">
+            <label>Bleed</label>
+            <input type="range" id="sShapeBleed" min="0" max="20" step="1" value="0">
+            <span class="val" id="vShapeBleed">0</span>
+          </div>
+          <div class="row">
+            <label>Gap Color</label>
+            <input type="range" id="sGapOpacity" min="0" max="1" step="0.01" value="1.00">
+            <span class="val" id="vGapOpacity">1.00</span>
+            <div class="color-swatch" id="gapSwatch" style="background:#000000;">
+              <input type="color" id="gapColorPicker" value="#000000">
+            </div>
+          </div>
+
+          <div class="section-title" style="margin-top:8px">Tile Gradient</div>
+          <div class="grad-editor" id="shapeGradEditor">
+            <canvas class="grad-bar" id="shapeGradBar" height="24"></canvas>
+            <div class="grad-track" id="shapeGradTrack"></div>
+            <div class="grad-hint">click bar to add · double-click handle to pick color</div>
+          </div>
+          <div class="row">
+            <label>Opacity</label>
+            <input type="range" id="sShapeGradOpacity" min="0" max="1" step="0.01" value="0.20">
+            <span class="val" id="vShapeGradOpacity">0.20</span>
+          </div>
+          <div class="btn-row">
+            <button id="btn-sgdir-h" class="active" onclick="setShapeGradDir(0)">Horizontal</button>
+            <button id="btn-sgdir-v" onclick="setShapeGradDir(1)">Vertical</button>
+          </div>
+          <div class="row">
+            <label>Blend</label>
+            <select id="selEmbossBlend" onchange="window.shaderParams.embossBlendMode=parseInt(this.value);window.shaderDirty=true">
+              <option value="0">Overlay</option>
+              <option value="1">Multiply</option>
+              <option value="2">Screen</option>
+              <option value="3">Soft Light</option>
+              <option value="4">Hard Light</option>
+              <option value="5">Color Dodge</option>
+              <option value="6">Color Burn</option>
+              <option value="7">Linear Light</option>
+              <option value="8" selected>Normal</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Color Grading</div>
+      <div class="row">
+        <label>Hue</label>
+        <input type="range" id="sGradeHue" min="0" max="360" step="1" value="0">
+        <span class="val" id="vGradeHue">0°</span>
+      </div>
+      <div class="row">
+        <label>Saturation</label>
+        <input type="range" id="sGradeSat" min="0" max="2" step="0.01" value="1.27">
+        <span class="val" id="vGradeSat">1.27</span>
+      </div>
+      <div class="row">
+        <label>Value</label>
+        <input type="range" id="sGradeVal" min="0" max="2" step="0.01" value="1.05">
+        <span class="val" id="vGradeVal">1.05</span>
+      </div>
+      <div class="row">
+        <label>Contrast</label>
+        <input type="range" id="sGradeContrast" min="0" max="2" step="0.01" value="1.68">
+        <span class="val" id="vGradeContrast">1.68</span>
+      </div>
+
+      <div id="groups-header">
+        <span>Secondary Noise</span>
+        <button class="small" onclick="addGroup()">+ add</button>
+      </div>
+
+      <div id="groups-list"></div>
+
+    </div>
+  </div>
+
+  <script>
+    let groupIdCounter = 6;
+
+    window.shaderParams = {
+      mode: 0, points: 14, seed: 0,
+      rot: 117, dx: 0, dy: 0,
+      sx: 1, sy: 1,
+      mirrorX: 1, mirrorY: 1,
+      flipX: 0,   flipY: 0,
+      spring: 0,
+      snapGrid: false,
+      gridUnit: 50,
+      showDots: false,
+      colorSeed: 0,
+      colorMode: 0,  // 0=gradient, 1=hue
+      gradientSeed: 0,
+      valueMin: 0.75,
+      valueMax: 1.0,
+      animating: false,
+      animSpeed: 10,
+      outlineWidth: 0.0,
+      outlineColor: '#000000',
+      showOutline: false,
+      pixelate: false,
+      pixelW: 23,
+      pixelH: 11,
+      weaveMode: 0,     // 0=none, 1=brick, 2=weave
+      pixelShape: 0,    // 0=none, 1=pill, 2=diamond, 3=square
+      shapeMargin: 3,
+      shapeBleed: 0,
+      pixelScale: 1.0,
+      oblique: false,
+      shapeGradOpacity: 0.2,
+      shapeGradDir: 0,
+      embossBlendMode: 8,  // 0=horizontal, 1=vertical
+      shapeGradStops: [
+        { pos: 0.0, r: 0,   g: 0,   b: 0,   hex: '#000000' },
+        { pos: 0.5, r: 255, g: 255, b: 255, hex: '#ffffff' },
+        { pos: 1.0, r: 0,   g: 0,   b: 0,   hex: '#000000' }
+      ],
+      gapColor: '#000000',
+      gapOpacity: 1.0,
+      banding: true,
+      bandCount: 12,
+      bandLumMin: 0.69,
+      bandLumMax: 1.0,
+      bandStrength: 1.0,
+      bandRandomize: false,
+      bandBlendMode: 0,
+      bandHueStrength: 0.0,
+      bandHueRadius: 0.5,
+      bandOutline: false,   // 0=overlay,1=multiply,2=screen,3=soft light,4=hard light,5=dodge,6=burn,7=linear light,8=normal
+      gradeHue: 0,
+      gradeSat: 1.27,
+      gradeVal: 1.05,
+      gradeContrast: 1.68,
+      gradientStops: [
+        { pos: 0.0,  r: 40,  g: 40,  b: 80,  hex: '#282850' },
+        { pos: 0.25, r: 80,  g: 120, b: 200, hex: '#5078c8' },
+        { pos: 0.5,  r: 160, g: 60,  b: 180, hex: '#a03cb4' },
+        { pos: 0.75, r: 200, g: 50,  b: 100, hex: '#c83264' },
+        { pos: 1.0,  r: 240, g: 200, b: 180, hex: '#f0c8b4' }
+      ],
+      groups: [
+        { id: 1, active: true, dx:  0.27, dy:  0.18, scale: 1.12, threshold: 0.000, seed:   1 },
+        { id: 2, active: true, dx:  0.27, dy:  0.18, scale: 1.22, threshold: 0.000, seed:   1 },
+        { id: 3, active: true, dx:  0.27, dy:  0.18, scale: 1.25, threshold: 0.000, seed: 914 },
+        { id: 4, active: true, dx:  0.27, dy:  0.18, scale: 0.95, threshold: 0.000, seed:   1 },
+        { id: 5, active: true, dx:  0.27, dy:  0.27, scale: 0.82, threshold: 0.000, seed:   1 },
+        { id: 6, active: true, dx:  0.27, dy:  0.09, scale: 0.71, threshold: 0.000, seed:   1 }
+      ]
+    };
+
+    let uiVisible = true;
+
+    function toggleUI() {
+      uiVisible = !uiVisible;
+      document.getElementById('ui').classList.toggle('hidden', !uiVisible);
+      document.getElementById('ui-toggle').classList.toggle('visible', !uiVisible);
+    }
+
+    function setMode(m) {
+      window.shaderParams.mode = m;
+      document.getElementById('btn-chebyshev').classList.toggle('active', m === 0);
+      document.getElementById('btn-manhattan').classList.toggle('active', m === 1);
+      window.shaderDirty = true;
+    }
+
+    function setColorMode(m) {
+      window.shaderParams.colorMode = m;
+      document.getElementById('btn-cm-grad').classList.toggle('active', m === 0);
+      document.getElementById('btn-cm-hue').classList.toggle('active', m === 1);
+      document.getElementById('gradient-controls').style.display = m === 0 ? '' : 'none';
+      document.getElementById('hue-controls').style.display = m === 1 ? '' : 'none';
+      if (m === 0) {
+        renderGradientBar();
+        syncGradientToGL();
+      }
+      window.shaderDirty = true;
+    }
+
+    function toggleMirror(axis) {
+      if (axis === 'x') {
+        window.shaderParams.mirrorX ^= 1;
+        document.getElementById('btn-mx').classList.toggle('active', window.shaderParams.mirrorX === 1);
+      } else {
+        window.shaderParams.mirrorY ^= 1;
+        document.getElementById('btn-my').classList.toggle('active', window.shaderParams.mirrorY === 1);
+      }
+      window.shaderDirty = true;
+    }
+
+    function toggleFlip(axis) {
+      if (axis === 'x') {
+        window.shaderParams.flipX ^= 1;
+        document.getElementById('btn-fx').classList.toggle('active', window.shaderParams.flipX === 1);
+      } else {
+        window.shaderParams.flipY ^= 1;
+        document.getElementById('btn-fy').classList.toggle('active', window.shaderParams.flipY === 1);
+      }
+      window.shaderDirty = true;
+    }
+
+    function toggleDots() {
+      window.shaderParams.showDots = !window.shaderParams.showDots;
+      document.getElementById('btn-dots').classList.toggle('active', window.shaderParams.showDots);
+      window.shaderDirty = true;
+    }
+
+    function toggleSnapGrid() {
+      window.shaderParams.snapGrid = !window.shaderParams.snapGrid;
+      document.getElementById('btn-snapgrid').classList.toggle('active', window.shaderParams.snapGrid);
+      document.getElementById('snapgrid-controls').style.display = window.shaderParams.snapGrid ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function togglePixelate() {
+      window.shaderParams.pixelate = !window.shaderParams.pixelate;
+      document.getElementById('btn-pixelate').classList.toggle('active', window.shaderParams.pixelate);
+      document.getElementById('pixelate-controls').style.display = window.shaderParams.pixelate ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleOblique() {
+      window.shaderParams.oblique = !window.shaderParams.oblique;
+      document.getElementById('btn-oblique').classList.toggle('active', window.shaderParams.oblique);
+      window.shaderDirty = true;
+    }
+
+    function setWeaveMode(m) {
+      window.shaderParams.weaveMode = m;
+      document.getElementById('btn-weave-none').classList.toggle('active', m === 0);
+      document.getElementById('btn-weave-brick').classList.toggle('active', m === 1);
+      document.getElementById('btn-weave-weave').classList.toggle('active', m === 2);
+      window.shaderDirty = true;
+    }
+
+    function setPixelShape(s) {
+      window.shaderParams.pixelShape = s;
+      document.getElementById('btn-shape-none').classList.toggle('active', s === 0);
+      document.getElementById('btn-shape-pill').classList.toggle('active', s === 1);
+      document.getElementById('btn-shape-diamond').classList.toggle('active', s === 2);
+      document.getElementById('btn-shape-square').classList.toggle('active', s === 3);
+      document.getElementById('btn-shape-pointed').classList.toggle('active', s === 4);
+      document.getElementById('shape-controls').style.display = s > 0 ? '' : 'none';
+      if (s > 0) { renderShapeGradBar(); renderShapeGradHandles(); }
+      window.shaderDirty = true;
+    }
+
+    function setShapeGradDir(d) {
+      window.shaderParams.shapeGradDir = d;
+      document.getElementById('btn-sgdir-h').classList.toggle('active', d === 0);
+      document.getElementById('btn-sgdir-v').classList.toggle('active', d === 1);
+      window.shaderDirty = true;
+    }
+
+    function toggleOutline() {
+      window.shaderParams.showOutline = !window.shaderParams.showOutline;
+      document.getElementById('btn-outline').classList.toggle('active', window.shaderParams.showOutline);
+      document.getElementById('outline-controls').style.display = window.shaderParams.showOutline ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleBanding() {
+      window.shaderParams.banding = !window.shaderParams.banding;
+      document.getElementById('btn-banding').classList.toggle('active', window.shaderParams.banding);
+      document.getElementById('banding-controls').style.display = window.shaderParams.banding ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleBandRandomize() {
+      window.shaderParams.bandRandomize = !window.shaderParams.bandRandomize;
+      document.getElementById('btn-band-random').classList.toggle('active', window.shaderParams.bandRandomize);
+      window.shaderDirty = true;
+    }
+
+    function toggleBandOutline() {
+      window.shaderParams.bandOutline = !window.shaderParams.bandOutline;
+      document.getElementById('btn-band-outline').classList.toggle('active', window.shaderParams.bandOutline);
+      window.shaderDirty = true;
+    }
+
+    let lastAnimTime = 0;
+    function togglePlay() {
+      const p = window.shaderParams;
+      p.animating = !p.animating;
+      const btn = document.getElementById('btn-play');
+      const speedRow = document.getElementById('speedRow');
+      btn.classList.toggle('active', p.animating);
+      btn.textContent = p.animating ? 'Stop Animation' : 'Play Animation';
+      speedRow.style.display = p.animating ? 'flex' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function saveConfig() {
+      const p = JSON.parse(JSON.stringify(window.shaderParams));
+      delete p.animating;
+      const json = JSON.stringify(p, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'voronoi-config.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function loadConfig() {
+      document.getElementById('configFileInput').click();
+    }
+
+    function handleConfigLoad(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const loaded = JSON.parse(e.target.result);
+          applyLoadedConfig(loaded);
+        } catch(err) {
+          console.error('Config load error:', err);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    function loadFlavor(url) {
+      if (!url) return;
+      fetch(url)
+        .then(r => { if (!r.ok) throw new Error('Not found: ' + url); return r.json(); })
+        .then(data => applyLoadedConfig(data))
+        .catch(err => console.error('Flavor load error:', err));
+    }
+
+    // Load flavors.json to populate dropdown
+    fetch('flavors.json')
+      .then(r => r.json())
+      .then(flavors => {
+        const sel = document.getElementById('selFlavor');
+        flavors.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f.file;
+          opt.textContent = f.name;
+          sel.appendChild(opt);
+        });
+      })
+      .catch(() => {}); // no flavors.json = silently skip
+
+    function applyLoadedConfig(loaded) {
+      // Stop animation first
+      window.shaderParams.animating = false;
+      const btn = document.getElementById('btn-play');
+      btn.classList.remove('active');
+      btn.textContent = 'Play Animation';
+      document.getElementById('speedRow').style.display = 'none';
+
+      // Merge loaded config
+      Object.assign(window.shaderParams, loaded);
+      window.shaderParams.animating = false;
+
+      // Update groupIdCounter
+      const groups = window.shaderParams.groups || [];
+      groupIdCounter = groups.reduce((mx, g) => Math.max(mx, g.id || 0), 0);
+
+      applyConfigToUI();
+      window.shaderDirty = true;
+    }
+
+    function applyConfigToUI() {
+      const p = window.shaderParams;
+
+      function el(id) { return document.getElementById(id); }
+      function setSlider(id, val, dispId, fmt) {
+        const s = el(id), d = el(dispId);
+        if (s && val != null) s.value = val;
+        if (d && fmt && val != null) d.textContent = fmt(val);
+      }
+      function setToggle(id, active) {
+        const e = el(id); if (e) e.classList.toggle('active', !!active);
+      }
+      function setVis(id, show) {
+        const e = el(id); if (e) e.style.display = show ? '' : 'none';
+      }
+
+      // Mode
+      setToggle('btn-chebyshev', p.mode === 0);
+      setToggle('btn-manhattan', p.mode === 1);
+
+      // Sliders
+      setSlider('sPoints', p.points, 'vPoints', v => Math.round(v));
+      setSlider('sSeed', p.seed, 'vSeed', v => Math.round(v));
+      setSlider('sRot', p.rot, 'vRot', v => Math.round(v) + '°');
+      setSlider('sDx', p.dx, 'vDx', v => v.toFixed(2));
+      setSlider('sDy', p.dy, 'vDy', v => v.toFixed(2));
+      setSlider('sSx', p.sx, 'vSx', v => v.toFixed(2));
+      setSlider('sSy', p.sy, 'vSy', v => v.toFixed(2));
+      setSlider('sSpring', p.spring, 'vSpring', v => v.toFixed(1));
+      setSlider('sGridUnit', p.gridUnit, 'vGridUnit', v => Math.round(v));
+      setSlider('sColorSeed', p.colorSeed, 'vColorSeed', v => Math.round(v));
+      setSlider('sValueMin', p.valueMin, 'vValueMin', v => v.toFixed(2));
+      setSlider('sValueMax', p.valueMax, 'vValueMax', v => v.toFixed(2));
+      setSlider('sOutlineWidth', p.outlineWidth, 'vOutlineWidth', v => v.toFixed(1));
+      setSlider('sBandCount', p.bandCount, 'vBandCount', v => Math.round(v));
+      setSlider('sBandStrength', p.bandStrength, 'vBandStrength', v => v.toFixed(2));
+      setSlider('sBandLumMin', p.bandLumMin, 'vBandLumMin', v => v.toFixed(2));
+      setSlider('sBandLumMax', p.bandLumMax, 'vBandLumMax', v => v.toFixed(2));
+      setSlider('sBandHueStrength', p.bandHueStrength, 'vBandHueStrength', v => v.toFixed(2));
+      setSlider('sBandHueRadius', p.bandHueRadius, 'vBandHueRadius', v => v.toFixed(2));
+      setSlider('sPixelW', p.pixelW, 'vPixelW', v => Math.round(v));
+      setSlider('sPixelH', p.pixelH, 'vPixelH', v => Math.round(v));
+      setSlider('sPixelScale', p.pixelScale, 'vPixelScale', v => v.toFixed(2));
+      setSlider('sShapeMargin', p.shapeMargin, 'vShapeMargin', v => Math.round(v));
+      setSlider('sShapeBleed', p.shapeBleed, 'vShapeBleed', v => Math.round(v));
+      setSlider('sShapeGradOpacity', p.shapeGradOpacity, 'vShapeGradOpacity', v => v.toFixed(2));
+      setSlider('sGapOpacity', p.gapOpacity, 'vGapOpacity', v => v.toFixed(2));
+      setSlider('sGradeHue', p.gradeHue, 'vGradeHue', v => Math.round(v) + '°');
+      setSlider('sGradeSat', p.gradeSat, 'vGradeSat', v => v.toFixed(2));
+      setSlider('sGradeVal', p.gradeVal, 'vGradeVal', v => v.toFixed(2));
+      setSlider('sGradeContrast', p.gradeContrast, 'vGradeContrast', v => v.toFixed(2));
+      setSlider('sSpeed', p.animSpeed, 'vSpeed', v => Math.round(v));
+
+      // Toggles
+      setToggle('btn-mx', p.mirrorX);
+      setToggle('btn-my', p.mirrorY);
+      setToggle('btn-fx', p.flipX);
+      setToggle('btn-fy', p.flipY);
+      setToggle('btn-dots', p.showDots);
+      setToggle('btn-snapgrid', p.snapGrid);
+      setVis('snapgrid-controls', p.snapGrid);
+      setToggle('btn-banding', p.banding);
+      setVis('banding-controls', p.banding);
+      setToggle('btn-band-random', p.bandRandomize);
+      setToggle('btn-band-outline', p.bandOutline);
+      setToggle('btn-pixelate', p.pixelate);
+      setVis('pixelate-controls', p.pixelate);
+      setToggle('btn-oblique', p.oblique);
+      setToggle('btn-outline', p.showOutline);
+      setVis('outline-controls', p.showOutline);
+
+      // Color mode
+      setToggle('btn-cm-grad', p.colorMode === 0);
+      setToggle('btn-cm-hue', p.colorMode === 1);
+      setVis('gradient-controls', p.colorMode === 0);
+      setVis('hue-controls', p.colorMode === 1);
+
+      // Weave
+      setToggle('btn-weave-none', p.weaveMode === 0);
+      setToggle('btn-weave-brick', p.weaveMode === 1);
+      setToggle('btn-weave-weave', p.weaveMode === 2);
+
+      // Shape
+      setToggle('btn-shape-none', p.pixelShape === 0);
+      setToggle('btn-shape-pill', p.pixelShape === 1);
+      setToggle('btn-shape-diamond', p.pixelShape === 2);
+      setToggle('btn-shape-square', p.pixelShape === 3);
+      setToggle('btn-shape-pointed', p.pixelShape === 4);
+      setVis('shape-controls', p.pixelShape > 0);
+
+      // Shape gradient dir
+      setToggle('btn-sgdir-h', p.shapeGradDir === 0);
+      setToggle('btn-sgdir-v', p.shapeGradDir === 1);
+
+      // Dropdowns (null-safe)
+      var sb = el('selBandBlend'); if (sb) sb.value = p.bandBlendMode || 0;
+      var se = el('selEmbossBlend'); if (se) se.value = p.embossBlendMode || 0;
+
+      // Color pickers (null-safe)
+      var oc = el('outlineColor'); if (oc && p.outlineColor) { oc.value = p.outlineColor; }
+      var os = el('outlineSwatch'); if (os && p.outlineColor) { os.style.background = p.outlineColor; }
+      var gc = el('gapColorPicker'); if (gc && p.gapColor) { gc.value = p.gapColor; }
+      var gs = el('gapSwatch'); if (gs && p.gapColor) { gs.style.background = p.gapColor; }
+
+      // Gradients
+      if (p.gradientStops) {
+        renderGradientBar(); renderGradientHandles();
+        if (window.uploadGradient) syncGradientToGL();
+      }
+      if (p.shapeGradStops) {
+        renderShapeGradBar(); renderShapeGradHandles();
+        if (window.uploadShapeGradient) syncShapeGradToGL();
+      }
+
+      // Groups
+      renderGroups();
+    }
+
+    function wire(sliderId, displayId, paramKey, fmt) {
+      const slider  = document.getElementById(sliderId);
+      const display = document.getElementById(displayId);
+      slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        window.shaderParams[paramKey] = v;
+        display.textContent = fmt(v);
+        window.shaderDirty = true;
+      });
+    }
+
+    wire('sPoints',  'vPoints',  'points',       v => Math.round(v));
+    wire('sSeed',    'vSeed',    'seed',         v => Math.round(v));
+    wire('sRot',     'vRot',     'rot',          v => Math.round(v) + '°');
+    wire('sSpeed',   'vSpeed',   'animSpeed',    v => Math.round(v));
+    wire('sDx',      'vDx',      'dx',           v => v.toFixed(2));
+    wire('sDy',      'vDy',      'dy',           v => v.toFixed(2));
+    wire('sSx',      'vSx',      'sx',           v => v.toFixed(2));
+    wire('sSy',      'vSy',      'sy',           v => v.toFixed(2));
+    wire('sSpring',  'vSpring',  'spring',       v => v.toFixed(1));
+    wire('sGridUnit','vGridUnit','gridUnit',     v => Math.round(v));
+    wire('sOutline', 'vOutline', 'outlineWidth', v => v.toFixed(1));
+    wire('sPixelW',  'vPixelW',  'pixelW',       v => Math.round(v));
+    wire('sPixelH',  'vPixelH',  'pixelH',       v => Math.round(v));
+    wire('sShapeMargin','vShapeMargin','shapeMargin', v => Math.round(v));
+    wire('sShapeBleed', 'vShapeBleed', 'shapeBleed',  v => Math.round(v));
+    wire('sPixelScale', 'vPixelScale', 'pixelScale',  v => v.toFixed(2));
+    wire('sShapeGradOpacity','vShapeGradOpacity','shapeGradOpacity', v => v.toFixed(2));
+    wire('sGapOpacity','vGapOpacity','gapOpacity', v => v.toFixed(2));
+    wire('sBandCount',   'vBandCount',   'bandCount',    v => Math.round(v));
+    wire('sBandStrength','vBandStrength','bandStrength',  v => v.toFixed(2));
+    wire('sBandLumMin',  'vBandLumMin',  'bandLumMin',   v => v.toFixed(2));
+    wire('sBandLumMax',  'vBandLumMax',  'bandLumMax',   v => v.toFixed(2));
+    wire('sBandHueStrength','vBandHueStrength','bandHueStrength', v => v.toFixed(2));
+    wire('sBandHueRadius','vBandHueRadius','bandHueRadius', v => v.toFixed(2));
+    wire('sGradeHue',     'vGradeHue',     'gradeHue',      v => Math.round(v) + '°');
+    wire('sGradeSat',     'vGradeSat',     'gradeSat',      v => v.toFixed(2));
+    wire('sGradeVal',     'vGradeVal',     'gradeVal',      v => v.toFixed(2));
+    wire('sGradeContrast','vGradeContrast','gradeContrast',  v => v.toFixed(2));
+
+    document.getElementById('gapColorPicker').addEventListener('input', e => {
+      window.shaderParams.gapColor = e.target.value;
+      document.getElementById('gapSwatch').style.background = e.target.value;
+      window.shaderDirty = true;
+    });
+    wire('sColorSeed','vColorSeed','colorSeed',  v => Math.round(v));
+    wire('sValueMin', 'vValueMin', 'valueMin',   v => v.toFixed(2));
+    wire('sValueMax', 'vValueMax', 'valueMax',   v => v.toFixed(2));
+    wire('sGradientSeed', 'vGradientSeed', 'gradientSeed', v => Math.round(v));
+
+    document.getElementById('outlineColor').addEventListener('input', e => {
+      window.shaderParams.outlineColor = e.target.value;
+      document.getElementById('outlineSwatch').style.background = e.target.value;
+      window.shaderDirty = true;
+    });
+
+    /* ── Gradient Editor ──────────────────────────────────────────── */
+    function hexToRgb(hex) {
+      return {
+        r: parseInt(hex.slice(1,3),16),
+        g: parseInt(hex.slice(3,5),16),
+        b: parseInt(hex.slice(5,7),16)
+      };
+    }
+    function rgbToHex(r,g,b) {
+      return '#' + [r,g,b].map(c => Math.round(c).toString(16).padStart(2,'0')).join('');
+    }
+
+    function sortedStops() {
+      return window.shaderParams.gradientStops.slice().sort((a,b) => a.pos - b.pos);
+    }
+
+    function renderGradientBar() {
+      const bar = document.getElementById('gradBar');
+      const ctx = bar.getContext('2d');
+      bar.width = bar.clientWidth;
+      const w = bar.width, h = bar.height;
+      const stops = sortedStops();
+      const grad = ctx.createLinearGradient(0,0,w,0);
+      stops.forEach(s => grad.addColorStop(s.pos, s.hex));
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    function renderGradientHandles() {
+      const track = document.getElementById('gradTrack');
+      track.innerHTML = '';
+      const stops = window.shaderParams.gradientStops;
+      stops.forEach((stop, idx) => {
+        const handle = document.createElement('div');
+        handle.className = 'grad-handle';
+        handle.style.left = (stop.pos * 100) + '%';
+        handle.style.background = stop.hex;
+        handle.dataset.idx = idx;
+
+        // hidden color picker inside handle
+        const picker = document.createElement('input');
+        picker.type = 'color';
+        picker.value = stop.hex;
+        picker.addEventListener('input', (e) => {
+          const c = hexToRgb(e.target.value);
+          stop.r = c.r; stop.g = c.g; stop.b = c.b;
+          stop.hex = e.target.value;
+          handle.style.background = stop.hex;
+          renderGradientBar();
+          syncGradientToGL();
+        });
+        handle.appendChild(picker);
+
+        // double-click → open color picker
+        handle.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          picker.click();
+        });
+
+        // drag
+        let dragging = false, startX = 0, startPos = 0, draggedOff = false;
+        handle.addEventListener('mousedown', (e) => {
+          if (e.detail >= 2) return; // ignore dblclick start
+          e.preventDefault();
+          e.stopPropagation();
+          dragging = true;
+          draggedOff = false;
+          startX = e.clientX;
+          startPos = stop.pos;
+          handle.classList.add('dragging');
+
+          const onMove = (ev) => {
+            if (!dragging) return;
+            const trackRect = track.getBoundingClientRect();
+            const newPos = (ev.clientX - trackRect.left) / trackRect.width;
+            stop.pos = Math.max(0, Math.min(1, newPos));
+            handle.style.left = (stop.pos * 100) + '%';
+
+            // check if dragged off vertically
+            const dy = Math.abs(ev.clientY - trackRect.top - trackRect.height/2);
+            draggedOff = dy > 50;
+            handle.style.opacity = draggedOff ? '0.3' : '1';
+
+            renderGradientBar();
+            syncGradientToGL();
+          };
+
+          const onUp = () => {
+            dragging = false;
+            handle.classList.remove('dragging');
+            handle.style.opacity = '1';
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+
+            // delete if dragged off and more than 2 stops remain
+            if (draggedOff && window.shaderParams.gradientStops.length > 2) {
+              window.shaderParams.gradientStops.splice(
+                window.shaderParams.gradientStops.indexOf(stop), 1
+              );
+              renderGradientHandles();
+              renderGradientBar();
+              syncGradientToGL();
+            }
+          };
+
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+
+        track.appendChild(handle);
+      });
+    }
+
+    // click on gradient bar → add new stop
+    document.getElementById('gradBar').addEventListener('click', (e) => {
+      const rect = e.target.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      // sample color at this position from sorted stops
+      const stops = sortedStops();
+      let lo = stops[0], hi = stops[stops.length-1];
+      for (let i = 0; i < stops.length - 1; i++) {
+        if (pos >= stops[i].pos && pos <= stops[i+1].pos) {
+          lo = stops[i]; hi = stops[i+1]; break;
+        }
+      }
+      const range = hi.pos - lo.pos;
+      const f = range < 0.0001 ? 0 : (pos - lo.pos) / range;
+      const r = Math.round(lo.r + (hi.r - lo.r) * f);
+      const g = Math.round(lo.g + (hi.g - lo.g) * f);
+      const b = Math.round(lo.b + (hi.b - lo.b) * f);
+      window.shaderParams.gradientStops.push({
+        pos, r, g, b, hex: rgbToHex(r,g,b)
+      });
+      renderGradientHandles();
+      renderGradientBar();
+      syncGradientToGL();
+    });
+
+    function syncGradientToGL() {
+      if (window.uploadGradient) {
+        window.uploadGradient(sortedStops());
+      }
+    }
+
+    // initial render
+    renderGradientBar();
+    renderGradientHandles();
+
+    /* ── Shape Gradient Editor ────────────────────────────────────── */
+    function sortedShapeStops() {
+      return window.shaderParams.shapeGradStops.slice().sort((a,b) => a.pos - b.pos);
+    }
+
+    function renderShapeGradBar() {
+      const bar = document.getElementById('shapeGradBar');
+      if (!bar) return;
+      const ctx = bar.getContext('2d');
+      bar.width = bar.clientWidth;
+      const w = bar.width, h = bar.height;
+      const stops = sortedShapeStops();
+      const grad = ctx.createLinearGradient(0,0,w,0);
+      stops.forEach(s => grad.addColorStop(s.pos, s.hex));
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    function renderShapeGradHandles() {
+      const track = document.getElementById('shapeGradTrack');
+      if (!track) return;
+      track.innerHTML = '';
+      const stops = window.shaderParams.shapeGradStops;
+      stops.forEach((stop, idx) => {
+        const handle = document.createElement('div');
+        handle.className = 'grad-handle';
+        handle.style.left = (stop.pos * 100) + '%';
+        handle.style.background = stop.hex;
+        handle.dataset.idx = idx;
+
+        const picker = document.createElement('input');
+        picker.type = 'color';
+        picker.value = stop.hex;
+        picker.addEventListener('input', (e) => {
+          const c = hexToRgb(e.target.value);
+          stop.r = c.r; stop.g = c.g; stop.b = c.b;
+          stop.hex = e.target.value;
+          handle.style.background = stop.hex;
+          renderShapeGradBar();
+          syncShapeGradToGL();
+        });
+        handle.appendChild(picker);
+
+        handle.addEventListener('dblclick', (e) => {
+          e.preventDefault(); e.stopPropagation(); picker.click();
+        });
+
+        let dragging = false, draggedOff = false;
+        handle.addEventListener('mousedown', (e) => {
+          if (e.detail >= 2) return;
+          e.preventDefault(); e.stopPropagation();
+          dragging = true; draggedOff = false;
+          handle.classList.add('dragging');
+
+          const onMove = (ev) => {
+            if (!dragging) return;
+            const trackRect = track.getBoundingClientRect();
+            stop.pos = Math.max(0, Math.min(1, (ev.clientX - trackRect.left) / trackRect.width));
+            handle.style.left = (stop.pos * 100) + '%';
+            draggedOff = Math.abs(ev.clientY - trackRect.top - trackRect.height/2) > 50;
+            handle.style.opacity = draggedOff ? '0.3' : '1';
+            renderShapeGradBar();
+            syncShapeGradToGL();
+          };
+
+          const onUp = () => {
+            dragging = false;
+            handle.classList.remove('dragging');
+            handle.style.opacity = '1';
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            if (draggedOff && window.shaderParams.shapeGradStops.length > 2) {
+              window.shaderParams.shapeGradStops.splice(
+                window.shaderParams.shapeGradStops.indexOf(stop), 1);
+              renderShapeGradHandles();
+              renderShapeGradBar();
+              syncShapeGradToGL();
+            }
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+        track.appendChild(handle);
+      });
+    }
+
+    document.getElementById('shapeGradBar').addEventListener('click', (e) => {
+      const rect = e.target.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      const stops = sortedShapeStops();
+      let lo = stops[0], hi = stops[stops.length-1];
+      for (let i = 0; i < stops.length - 1; i++) {
+        if (pos >= stops[i].pos && pos <= stops[i+1].pos) { lo = stops[i]; hi = stops[i+1]; break; }
+      }
+      const range = hi.pos - lo.pos;
+      const f = range < 0.0001 ? 0 : (pos - lo.pos) / range;
+      const r = Math.round(lo.r + (hi.r - lo.r) * f);
+      const g = Math.round(lo.g + (hi.g - lo.g) * f);
+      const b = Math.round(lo.b + (hi.b - lo.b) * f);
+      window.shaderParams.shapeGradStops.push({ pos, r, g, b, hex: rgbToHex(r,g,b) });
+      renderShapeGradHandles();
+      renderShapeGradBar();
+      syncShapeGradToGL();
+    });
+
+    function syncShapeGradToGL() {
+      if (window.uploadShapeGradient) {
+        window.uploadShapeGradient(sortedShapeStops());
+      }
+      window.shaderDirty = true;
+    }
+
+    renderShapeGradBar();
+    renderShapeGradHandles();
+
+    // also sync after shader.js loads
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        // Try loading default.json; if not found, use hardcoded defaults
+        fetch('default.json')
+          .then(r => { if (!r.ok) throw new Error('no default.json'); return r.json(); })
+          .then(data => {
+            applyLoadedConfig(data);
+            syncGradientToGL();
+            syncShapeGradToGL();
+            renderGradientBar();
+            renderGradientHandles();
+            renderShapeGradBar();
+            renderShapeGradHandles();
+          })
+          .catch(() => {
+            // No default.json, use hardcoded params
+            syncGradientToGL();
+            syncShapeGradToGL();
+            renderGradientBar();
+            renderGradientHandles();
+            renderShapeGradBar();
+            renderShapeGradHandles();
+          });
+      }, 200);
+    });
+
+    /* ── Groups (Secondary Noise) ─────────────────────────────────── */
+    function defaultGroup() {
+      return { id: ++groupIdCounter, active: true, dx: 0.27, dy: 0.18, scale: 1.0, threshold: 0.0, seed: 1 };
+    }
+
+    function addGroup(copyFrom) {
+      if (window.shaderParams.groups.length >= 8) return;
+      const base = copyFrom || defaultGroup();
+      const g = {
+        id:        ++groupIdCounter,
+        active:    base.active,
+        dx:        base.dx,
+        dy:        base.dy,
+        scale:     base.scale,
+        threshold: base.threshold,
+        seed:      base.seed
+      };
+      window.shaderParams.groups.push(g);
+      renderGroups();
+      window.shaderDirty = true;
+    }
+
+    function removeGroup(id) {
+      window.shaderParams.groups = window.shaderParams.groups.filter(g => g.id !== id);
+      renderGroups();
+      window.shaderDirty = true;
+    }
+
+    function moveGroup(id, dir) {
+      const arr = window.shaderParams.groups;
+      const idx = arr.findIndex(g => g.id === id);
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= arr.length) return;
+      [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+      renderGroups();
+      window.shaderDirty = true;
+    }
+
+    function renderGroups() {
+      const list = document.getElementById('groups-list');
+      list.innerHTML = '';
+
+      window.shaderParams.groups.forEach((grp, idx) => {
+        const card = document.createElement('div');
+        card.className = 'group-card';
+
+        card.innerHTML = `
+          <div class="group-header">
+            <span class="drag-handle">⠿</span>
+            <span class="g-title">Noise ${idx + 1}</span>
+            <button class="toggle-active ${grp.active ? 'on' : ''}" data-id="${grp.id}"></button>
+            <div class="g-actions">
+              <button class="small" data-action="up"   data-id="${grp.id}">↑</button>
+              <button class="small" data-action="down" data-id="${grp.id}">↓</button>
+              <button class="small" data-action="dup"  data-id="${grp.id}">⧉</button>
+              <button class="small danger" data-action="del" data-id="${grp.id}">✕</button>
+            </div>
+          </div>
+          <div class="group-body">
+            <div class="row">
+              <label>Displace X</label>
+              <input type="range" min="-1" max="1" step="0.01" value="${grp.dx}"
+                     data-id="${grp.id}" data-key="dx">
+              <span class="val" id="gdx-${grp.id}">${grp.dx.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <label>Displace Y</label>
+              <input type="range" min="-1" max="1" step="0.01" value="${grp.dy}"
+                     data-id="${grp.id}" data-key="dy">
+              <span class="val" id="gdy-${grp.id}">${grp.dy.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <label>Scale</label>
+              <input type="range" min="0" max="2" step="0.01" value="${grp.scale}"
+                     data-id="${grp.id}" data-key="scale">
+              <span class="val" id="gscl-${grp.id}">${grp.scale.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <label>Threshold</label>
+              <input type="range" min="0" max="1" step="0.001" value="${grp.threshold}"
+                     data-id="${grp.id}" data-key="threshold">
+              <span class="val" id="gthr-${grp.id}">${grp.threshold.toFixed(3)}</span>
+            </div>
+            <div class="row">
+              <label>Seed</label>
+              <input type="range" min="1" max="1000" step="1" value="${grp.seed}"
+                     data-id="${grp.id}" data-key="seed">
+              <span class="val" id="gseed-${grp.id}">${Math.round(grp.seed)}</span>
+            </div>
+          </div>
+        `;
+
+        list.appendChild(card);
+      });
+
+      list.querySelectorAll('.toggle-active').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id  = parseInt(btn.dataset.id);
+          const grp = window.shaderParams.groups.find(g => g.id === id);
+          if (!grp) return;
+          grp.active = !grp.active;
+          btn.classList.toggle('on', grp.active);
+          window.shaderDirty = true;
+        });
+      });
+
+      list.querySelectorAll('[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id  = parseInt(btn.dataset.id);
+          const act = btn.dataset.action;
+          if (act === 'up')   moveGroup(id, -1);
+          if (act === 'down') moveGroup(id,  1);
+          if (act === 'del')  removeGroup(id);
+          if (act === 'dup') {
+            const grp = window.shaderParams.groups.find(g => g.id === id);
+            if (grp) addGroup(grp);
+          }
+        });
+      });
+
+      list.querySelectorAll('input[type=range][data-id]').forEach(slider => {
+        slider.addEventListener('input', () => {
+          const id  = parseInt(slider.dataset.id);
+          const key = slider.dataset.key;
+          const v   = parseFloat(slider.value);
+          const grp = window.shaderParams.groups.find(g => g.id === id);
+          if (!grp) return;
+          grp[key] = v;
+          const displayId = key === 'dx'        ? `gdx-${id}`
+                          : key === 'dy'        ? `gdy-${id}`
+                          : key === 'scale'     ? `gscl-${id}`
+                          : key === 'threshold' ? `gthr-${id}`
+                          :                       `gseed-${id}`;
+          const fmt = key === 'threshold' ? v.toFixed(3)
+                    : key === 'seed'      ? String(Math.round(v))
+                    :                       v.toFixed(2);
+          const el = document.getElementById(displayId);
+          if (el) el.textContent = fmt;
+          window.shaderDirty = true;
+        });
+      });
+    }
+
+    window.addGroup    = addGroup;
+    window.removeGroup = removeGroup;
+    window.moveGroup   = moveGroup;
+
+    renderGroups();
+  </script>
+
+  <script src="shader.js"></script>
+</body>
+</html>

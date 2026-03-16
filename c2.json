@@ -1,0 +1,170 @@
+{
+  "mode": 0,
+  "points": 14,
+  "seed": 0,
+  "rot": 213.59299999998652,
+  "dx": 0,
+  "dy": 0,
+  "sx": 1,
+  "sy": 1,
+  "mirrorX": 1,
+  "mirrorY": 1,
+  "flipX": 0,
+  "flipY": 0,
+  "spring": 0,
+  "snapGrid": false,
+  "gridUnit": 50,
+  "showDots": false,
+  "colorSeed": 0,
+  "colorMode": 1,
+  "gradientSeed": 0,
+  "valueMin": 0.75,
+  "valueMax": 1,
+  "animSpeed": 10,
+  "outlineWidth": 0,
+  "outlineColor": "#000000",
+  "pixelate": true,
+  "pixelW": 23,
+  "pixelH": 11,
+  "weaveMode": 2,
+  "pixelShape": 1,
+  "shapeMargin": 1,
+  "shapeBleed": 5,
+  "pixelScale": 1,
+  "oblique": true,
+  "shapeGradOpacity": 0.2,
+  "shapeGradDir": 0,
+  "embossBlendMode": 8,
+  "shapeGradStops": [
+    {
+      "pos": 0,
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "hex": "#000000"
+    },
+    {
+      "pos": 0.5,
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "hex": "#ffffff"
+    },
+    {
+      "pos": 1,
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "hex": "#000000"
+    }
+  ],
+  "gapColor": "#000000",
+  "gapOpacity": 1,
+  "banding": true,
+  "bandCount": 12,
+  "bandLumMin": 0.69,
+  "bandLumMax": 1,
+  "bandStrength": 1,
+  "bandRandomize": false,
+  "bandBlendMode": 0,
+  "bandHueStrength": 0,
+  "bandHueRadius": 0.5,
+  "bandOutline": false,
+  "gradeHue": 0,
+  "gradeSat": 1.27,
+  "gradeVal": 1.05,
+  "gradeContrast": 1.68,
+  "gradientStops": [
+    {
+      "pos": 0,
+      "r": 40,
+      "g": 40,
+      "b": 80,
+      "hex": "#282850"
+    },
+    {
+      "pos": 0.25,
+      "r": 80,
+      "g": 120,
+      "b": 200,
+      "hex": "#5078c8"
+    },
+    {
+      "pos": 0.5,
+      "r": 160,
+      "g": 60,
+      "b": 180,
+      "hex": "#a03cb4"
+    },
+    {
+      "pos": 0.75,
+      "r": 200,
+      "g": 50,
+      "b": 100,
+      "hex": "#c83264"
+    },
+    {
+      "pos": 1,
+      "r": 240,
+      "g": 200,
+      "b": 180,
+      "hex": "#f0c8b4"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.12,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 2,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.22,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 3,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.25,
+      "threshold": 0,
+      "seed": 914
+    },
+    {
+      "id": 4,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 0.95,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 5,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.27,
+      "scale": 0.82,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 6,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.09,
+      "scale": 0.71,
+      "threshold": 0,
+      "seed": 1
+    }
+  ]
+}

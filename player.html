@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voronoi Player</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: -apple-system, sans-serif; }
+  canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: block; }
+
+  #controls {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); border-radius: 8px; padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px; z-index: 10;
+    backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+  }
+  button {
+    background: rgba(255,255,255,0.08); color: #ccc; border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+  }
+  button:hover { background: rgba(255,255,255,0.15); }
+  button.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
+  select {
+    background: #1a1a1a; color: #ccc; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 4px; font-size: 12px; padding: 4px 8px; cursor: pointer; outline: none;
+  }
+  select option { background: #1a1a1a; color: #ccc; }
+  input[type="range"] { width: 80px; accent-color: #4a9eff; }
+  label { color: #888; font-size: 11px; }
+  .val { color: #ccc; font-size: 11px; min-width: 24px; text-align: right; }
+  #speedGroup { display: none; align-items: center; gap: 6px; }
+  #speedGroup.visible { display: flex; }
+</style>
+</head>
+<body>
+
+<canvas id="glCanvas"></canvas>
+
+<div id="controls">
+  <select id="selFlavor" onchange="loadFlavor(this.value)">
+    <option value="">-- flavor --</option>
+  </select>
+  <button id="btn-play" onclick="togglePlay()">Play</button>
+  <div id="speedGroup">
+    <label>Speed</label>
+    <input type="range" id="sSpeed" min="1" max="120" step="1" value="10">
+    <span class="val" id="vSpeed">10</span>
+  </div>
+</div>
+
+<script>
+  // Default params — will be overridden by default.json or flavor
+  window.shaderParams = {
+    mode: 0, points: 14, seed: 0,
+    rot: 117, dx: 0, dy: 0, sx: 1, sy: 1,
+    mirrorX: 1, mirrorY: 1, flipX: 0, flipY: 0,
+    spring: 0, snapGrid: false, gridUnit: 50,
+    showDots: false, colorSeed: 0, colorMode: 0, gradientSeed: 0,
+    valueMin: 0.75, valueMax: 1.0,
+    animating: false, animSpeed: 10,
+    outlineWidth: 0.0, outlineColor: '#000000', showOutline: false,
+    pixelate: false, pixelW: 23, pixelH: 11,
+    weaveMode: 0, pixelShape: 0, shapeMargin: 3, shapeBleed: 0,
+    pixelScale: 1.0, oblique: false,
+    shapeGradOpacity: 0.2, shapeGradDir: 0, embossBlendMode: 8,
+    shapeGradStops: [
+      { pos: 0.0, r: 0, g: 0, b: 0, hex: '#000000' },
+      { pos: 0.5, r: 255, g: 255, b: 255, hex: '#ffffff' },
+      { pos: 1.0, r: 0, g: 0, b: 0, hex: '#000000' }
+    ],
+    gapColor: '#000000', gapOpacity: 1.0,
+    banding: true, bandCount: 12, bandLumMin: 0.69, bandLumMax: 1.0,
+    bandStrength: 1.0, bandRandomize: false, bandBlendMode: 0,
+    bandHueStrength: 0.0, bandHueRadius: 0.5, bandOutline: false,
+    gradeHue: 0, gradeSat: 1.27, gradeVal: 1.05, gradeContrast: 1.68,
+    gradientStops: [
+      { pos: 0.0, r: 40, g: 40, b: 80, hex: '#282850' },
+      { pos: 0.25, r: 80, g: 120, b: 200, hex: '#5078c8' },
+      { pos: 0.5, r: 160, g: 60, b: 180, hex: '#a03cb4' },
+      { pos: 0.75, r: 200, g: 50, b: 100, hex: '#c83264' },
+      { pos: 1.0, r: 240, g: 200, b: 180, hex: '#f0c8b4' }
+    ],
+    groups: [
+      { id: 1, active: true, dx: 0.27, dy: 0.18, scale: 1.12, threshold: 0.0, seed: 1 },
+      { id: 2, active: true, dx: 0.27, dy: 0.18, scale: 1.22, threshold: 0.0, seed: 1 },
+      { id: 3, active: true, dx: 0.27, dy: 0.18, scale: 1.25, threshold: 0.0, seed: 914 },
+      { id: 4, active: true, dx: 0.27, dy: 0.18, scale: 0.95, threshold: 0.0, seed: 1 },
+      { id: 5, active: true, dx: 0.27, dy: 0.27, scale: 0.82, threshold: 0.0, seed: 1 },
+      { id: 6, active: true, dx: 0.27, dy: 0.09, scale: 0.71, threshold: 0.0, seed: 1 }
+    ]
+  };
+
+  window.shaderDirty = true;
+
+  function togglePlay() {
+    const p = window.shaderParams;
+    p.animating = !p.animating;
+    document.getElementById('btn-play').classList.toggle('active', p.animating);
+    document.getElementById('btn-play').textContent = p.animating ? 'Stop' : 'Play';
+    document.getElementById('speedGroup').classList.toggle('visible', p.animating);
+    window.shaderDirty = true;
+  }
+
+  document.getElementById('sSpeed').addEventListener('input', function() {
+    window.shaderParams.animSpeed = parseFloat(this.value);
+    document.getElementById('vSpeed').textContent = Math.round(this.value);
+    window.shaderDirty = true;
+  });
+
+  function loadFlavor(url) {
+    if (!url) return;
+    fetch(url)
+      .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
+      .then(data => {
+        // Stop animation during load
+        window.shaderParams.animating = false;
+        document.getElementById('btn-play').classList.remove('active');
+        document.getElementById('btn-play').textContent = 'Play';
+        document.getElementById('speedGroup').classList.remove('visible');
+
+        Object.assign(window.shaderParams, data);
+        window.shaderParams.animating = false;
+
+        // Re-upload gradients after shader.js is ready
+        if (window.uploadGradient && data.gradientStops) {
+          window.uploadGradient(data.gradientStops);
+        }
+        if (window.uploadShapeGradient && data.shapeGradStops) {
+          window.uploadShapeGradient(data.shapeGradStops);
+        }
+        window.shaderDirty = true;
+      })
+      .catch(err => console.error('Flavor load error:', err));
+  }
+
+  // Populate flavors dropdown
+  fetch('flavors.json')
+    .then(r => r.json())
+    .then(flavors => {
+      const sel = document.getElementById('selFlavor');
+      flavors.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.file;
+        opt.textContent = f.name;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(() => {});
+
+  // Load default.json on startup
+  window.addEventListener('load', () => {
+    fetch('default.json')
+      .then(r => { if (!r.ok) throw new Error('no default'); return r.json(); })
+      .then(data => {
+        Object.assign(window.shaderParams, data);
+        window.shaderParams.animating = false;
+        setTimeout(() => {
+          if (window.uploadGradient) window.uploadGradient(window.shaderParams.gradientStops);
+          if (window.uploadShapeGradient) window.uploadShapeGradient(window.shaderParams.shapeGradStops);
+          window.shaderDirty = true;
+        }, 200);
+      })
+      .catch(() => {});
+  });
+</script>
+
+<script src="shader.js"></script>
+</body>
+</html>
