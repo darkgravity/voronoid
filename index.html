@@ -51,6 +51,16 @@
     }
     #btn-collapse:hover { background: rgba(255,255,255,0.08); }
 
+    /* Mobile close button — hidden on desktop */
+    #btn-mobile-close {
+      display: none;
+      position: absolute; top: 8px; right: 12px;
+      width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.7); cursor: pointer;
+      align-items: center; justify-content: center; padding: 0;
+    }
+
     .section-title {
       color: rgba(255,255,255,0.35); font-size: 10px; letter-spacing: 0.1em;
       text-transform: uppercase; margin: 14px 0 6px;
@@ -82,6 +92,24 @@
     button.danger:hover { background: rgba(255,60,60,0.15); }
 
     .divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 8px 0; }
+
+    /* ── Player strip ───────────────────────────── */
+    #player-strip {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 8px;
+    }
+    #player-strip #btn-play {
+      width: 36px; height: 36px; min-width: 36px;
+      border-radius: 50%; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid rgba(255,255,255,0.3);
+      background: transparent; color: rgba(255,255,255,0.6);
+      transition: all 0.15s;
+    }
+    #player-strip #btn-play:hover { border-color: rgba(255,255,255,0.5); color: rgba(255,255,255,0.8); }
+    #player-strip #btn-play.active { background: #4a9eff; border-color: #4a9eff; color: #fff; }
+    #player-strip input[type=range] { flex: 1; }
+    #player-strip .val { width: 28px; }
 
     .color-swatch {
       width: 22px; height: 22px; border-radius: 3px; flex-shrink: 0;
@@ -210,7 +238,8 @@
       #ui.hidden { transform: translateY(100%); }
 
       #ui-collapse {
-        justify-content: center; padding: 8px 0 4px;
+        justify-content: center; padding: 10px 0 4px;
+        position: relative;
       }
       #ui-collapse::before {
         content: ''; display: block;
@@ -219,6 +248,7 @@
         position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
       }
       #btn-collapse { display: none; }
+      #btn-mobile-close { display: flex; }
 
       #ui-scroll { padding: 8px 16px 24px; }
 
@@ -245,6 +275,9 @@
       #mobile-float button.active { background: #4a9eff; border-color: #4a9eff; color: #fff; }
 
       #btn-fullscreen { top: 10px; right: 10px; width: 40px; height: 40px; }
+
+      #player-strip #btn-play { width: 44px; height: 44px; min-width: 44px; border-width: 2px; }
+      #player-strip #btn-play svg { width: 20px; height: 20px; }
 
       .section-title { font-size: 11px; margin: 16px 0 8px; }
 
@@ -309,8 +342,8 @@
       <svg id="float-play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
       <svg id="float-stop-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
     </button>
-    <button id="btn-float-up" onclick="toggleUI()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,15 12,9 18,15"/></svg>
+    <button id="btn-float-settings" onclick="toggleUI()" title="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
     </button>
   </div>
 
@@ -319,6 +352,9 @@
   <div id="ui">
     <div id="ui-collapse">
       <button id="btn-collapse" onclick="toggleUI()">&#9664;</button>
+      <button id="btn-mobile-close" onclick="toggleUI()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>
+      </button>
     </div>
     <div id="ui-scroll">
 
@@ -326,10 +362,12 @@
         <button onclick="saveConfig()">Save</button>
         <button onclick="loadConfig()">Load</button>
         <button onclick="saveImage()">Image</button>
-        <button id="btn-play" onclick="togglePlay()">Play Animation</button>
       </div>
-      <div class="row" id="speedRow" style="display:none">
-        <label>Speed</label>
+      <div id="player-strip">
+        <button id="btn-play" onclick="togglePlay()">
+          <svg id="panel-play-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          <svg id="panel-stop-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        </button>
         <input type="range" id="sSpeed" min="1" max="120" step="1" value="10">
         <span class="val" id="vSpeed">10</span>
       </div>
@@ -738,7 +776,14 @@
       ]
     };
 
-    let uiVisible = true;
+    const isMobileUI = window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    let uiVisible = !isMobileUI;
+
+    // Apply initial state
+    if (isMobileUI) {
+      document.getElementById('ui').classList.add('hidden');
+      document.getElementById('mobile-float').classList.add('visible');
+    }
 
     function toggleUI() {
       uiVisible = !uiVisible;
@@ -900,11 +945,13 @@
       const p = window.shaderParams;
       p.animating = !p.animating;
       const btn = document.getElementById('btn-play');
-      const speedRow = document.getElementById('speedRow');
       btn.classList.toggle('active', p.animating);
-      btn.textContent = p.animating ? 'Stop Animation' : 'Play Animation';
-      speedRow.style.display = p.animating ? 'flex' : 'none';
-      // Sync mobile float play button
+      // Panel play/stop icons
+      const ppi = document.getElementById('panel-play-icon');
+      const psi = document.getElementById('panel-stop-icon');
+      if (ppi) ppi.style.display = p.animating ? 'none' : '';
+      if (psi) psi.style.display = p.animating ? '' : 'none';
+      // Mobile float play/stop icons
       const fp = document.getElementById('btn-float-play');
       if (fp) fp.classList.toggle('active', p.animating);
       const pi = document.getElementById('float-play-icon');
@@ -989,8 +1036,16 @@
       window.shaderParams.animating = false;
       const btn = document.getElementById('btn-play');
       btn.classList.remove('active');
-      btn.textContent = 'Play Animation';
-      document.getElementById('speedRow').style.display = 'none';
+      const ppi = document.getElementById('panel-play-icon');
+      const psi = document.getElementById('panel-stop-icon');
+      if (ppi) ppi.style.display = '';
+      if (psi) psi.style.display = 'none';
+      const fpi = document.getElementById('float-play-icon');
+      const fsi = document.getElementById('float-stop-icon');
+      if (fpi) fpi.style.display = '';
+      if (fsi) fsi.style.display = 'none';
+      const fpb = document.getElementById('btn-float-play');
+      if (fpb) fpb.classList.remove('active');
 
       // Merge loaded config
       Object.assign(window.shaderParams, loaded);
