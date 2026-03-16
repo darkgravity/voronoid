@@ -15,9 +15,17 @@ if (!gl) {
    loop checks once per rAF and skips the draw if clean.           */
 window.shaderDirty = true;
 
+// Mobile detection and render quality
+const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+                 || (window.innerWidth <= 768 && 'ontouchstart' in window);
+window.isMobile = isMobile;
+
+// On mobile, render at reduced resolution to maintain performance
+const renderScale = isMobile ? 0.5 : 1.0;
+
 let curW = 0, curH = 0;
 function syncSize() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = (window.devicePixelRatio || 1) * renderScale;
   const w = (canvas.clientWidth  * dpr) | 0;
   const h = (canvas.clientHeight * dpr) | 0;
   if (w === curW && h === curH) return false;
@@ -344,10 +352,12 @@ Promise.all([
 
   // ── Simple continuous render loop with dirty-flag skip ──
   let lastRenderTime = 0;
+  let frameCount = 0;
   window.shaderDirty = true;
 
   function render(now) {
     requestAnimationFrame(render);
+    frameCount++;
 
     // animation
     const p = window.shaderParams;
@@ -362,6 +372,8 @@ Promise.all([
       }
       lastRenderTime = now;
       window.shaderDirty = true;
+      // On mobile, skip every other frame to maintain responsiveness
+      if (isMobile && (frameCount % 2 !== 0)) return;
     } else {
       lastRenderTime = 0;
     }
@@ -379,7 +391,6 @@ Promise.all([
 
     gl.uniform2f(sRes,       W, H);
     gl.uniform1i(sMode,      p.mode);
-    gl.uniform1i(sNumPoints, p.points);
     gl.uniform1f(sSeed,      p.seed);
     gl.uniform1f(sRotation,  p.rot * Math.PI / 180.0);
     gl.uniform2f(sDisplace,  p.dx, p.dy);
@@ -413,9 +424,12 @@ Promise.all([
     gl.uniform1f(sBandHueRadius, p.bandHueRadius || 0.5);
 
     const groups = p.groups;
-    gl.uniform1i(sGroupCount, groups.length);
+    const maxGroups = isMobile ? Math.min(groups.length, 2) : groups.length;
+    const maxPoints = isMobile ? Math.min(p.points, 20) : p.points;
+    gl.uniform1i(sNumPoints, maxPoints);
+    gl.uniform1i(sGroupCount, maxGroups);
     for (let g = 0; g < 8; g++) {
-      if (g < groups.length) {
+      if (g < maxGroups) {
         const grp = groups[g];
         gl.uniform1i(sGroupActive[g],    grp.active ? 1 : 0);
         gl.uniform2f(sGroupDisplace[g],  grp.dx, grp.dy);
