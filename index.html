@@ -55,10 +55,11 @@
     #btn-mobile-close {
       display: none;
       position: absolute; top: 8px; right: 12px;
-      width: 32px; height: 32px; border-radius: 50%;
-      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
-      color: rgba(255,255,255,0.7); cursor: pointer;
+      width: 36px; height: 36px; border-radius: 50%;
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.8); cursor: pointer;
       align-items: center; justify-content: center; padding: 0;
+      z-index: 200;
     }
 
     .section-title {
@@ -73,7 +74,7 @@
       width: 80px; flex-shrink: 0; text-align: right;
     }
 
-    input[type=range] { flex: 1; accent-color: #4a9eff; height: 2px; }
+    input[type=range] { flex: 1; accent-color: #4a9eff; height: 2px; touch-action: none; }
 
     .val { color: #fff; font-size: 11px; width: 38px; text-align: right; flex-shrink: 0; }
 
@@ -90,6 +91,26 @@
     button.small { padding: 3px 8px; font-size: 10px; }
     button.danger { border-color: rgba(255,80,80,0.4); color: rgba(255,100,100,0.7); }
     button.danger:hover { background: rgba(255,60,60,0.15); }
+
+    /* ── Segmented button bar ───────────────────── */
+    .seg-bar {
+      display: inline-flex; border-radius: 8px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.18); margin-bottom: 4px;
+    }
+    .seg-bar button {
+      border: none; border-radius: 0; margin: 0;
+      padding: 5px 14px; font-size: 11px;
+      background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5);
+      border-right: 1px solid rgba(255,255,255,0.12);
+      min-height: 28px;
+    }
+    .seg-bar button:last-child { border-right: none; }
+    .seg-bar button:hover { background: rgba(255,255,255,0.1); }
+    .seg-bar button.active { background: rgba(255,255,255,0.9); color: #111; }
+
+    /* Shape icon buttons */
+    .seg-bar button.shape-icon { padding: 4px 8px; min-width: 32px; }
+    .seg-bar button.shape-icon svg { display: block; }
 
     .divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 8px 0; }
 
@@ -151,18 +172,19 @@
     .drag-handle { color: rgba(255,255,255,0.25); font-size: 14px; cursor: grab; padding: 0 2px; }
 
     .toggle-active {
-      width: 28px; height: 15px; border-radius: 8px;
+      width: 34px; height: 20px; border-radius: 10px;
       background: rgba(255,255,255,0.12); border: none;
       position: relative; cursor: pointer; flex-shrink: 0; padding: 0;
       transition: background 0.15s;
+      vertical-align: middle;
     }
     .toggle-active::after {
       content: ''; position: absolute; top: 2px; left: 2px;
-      width: 11px; height: 11px; border-radius: 50%;
+      width: 16px; height: 16px; border-radius: 50%;
       background: rgba(255,255,255,0.4); transition: transform 0.15s, background 0.15s;
     }
     .toggle-active.on { background: #4a9eff; }
-    .toggle-active.on::after { transform: translateX(13px); background: #fff; }
+    .toggle-active.on::after { transform: translateX(14px); background: #fff; }
 
     select {
       flex: 1; background: #1a1a1a; color: #ccc;
@@ -238,14 +260,8 @@
       #ui.hidden { transform: translateY(100%); }
 
       #ui-collapse {
-        justify-content: center; padding: 10px 0 4px;
-        position: relative;
-      }
-      #ui-collapse::before {
-        content: ''; display: block;
-        width: 36px; height: 4px; border-radius: 2px;
-        background: rgba(255,255,255,0.25);
-        position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+        justify-content: flex-end; padding: 6px 12px 4px;
+        position: relative; min-height: 44px;
       }
       #btn-collapse { display: none; }
       #btn-mobile-close { display: flex; }
@@ -374,14 +390,13 @@
       <div class="row">
         <label>Flavor</label>
         <select id="selFlavor" onchange="loadFlavor(this.value)">
-          <option value="">-- select --</option>
         </select>
       </div>
       <input type="file" id="configFileInput" accept=".json" style="display:none" onchange="handleConfigLoad(event)">
 
       <div class="divider"></div>
       <div class="section-title">Metric</div>
-      <div class="btn-row">
+      <div class="seg-bar">
         <button id="btn-chebyshev" class="active" onclick="setMode(0)">Chebyshev</button>
         <button id="btn-manhattan" onclick="setMode(1)">Manhattan</button>
       </div>
@@ -433,7 +448,14 @@
         <input type="range" id="sSpring" min="0" max="10" step="0.1" value="0">
         <span class="val" id="vSpring">0.0</span>
       </div>
+
+      <div class="divider"></div>
+      <div class="section-title">Mirror</div>
       <div class="btn-row">
+        <button id="btn-mx" class="active" onclick="toggleMirror('x')">Mirror X</button>
+        <button id="btn-my" class="active" onclick="toggleMirror('y')">Mirror Y</button>
+        <button id="btn-fx" onclick="toggleFlip('x')">Flip X</button>
+        <button id="btn-fy" onclick="toggleFlip('y')">Flip Y</button>
         <button id="btn-snapgrid" onclick="toggleSnapGrid()">Snap To Grid</button>
       </div>
       <div id="snapgrid-controls" style="display:none">
@@ -445,20 +467,9 @@
       </div>
 
       <div class="divider"></div>
-      <div class="section-title">Mirror</div>
-      <div class="btn-row">
-        <button id="btn-mx" class="active" onclick="toggleMirror('x')">mirror x</button>
-        <button id="btn-my" class="active" onclick="toggleMirror('y')">mirror y</button>
-      </div>
-      <div class="btn-row">
-        <button id="btn-fx" onclick="toggleFlip('x')">flip x</button>
-        <button id="btn-fy" onclick="toggleFlip('y')">flip y</button>
-      </div>
-
-      <div class="divider"></div>
       <div class="section-title">Color</div>
 
-      <div class="btn-row" style="margin-bottom:8px">
+      <div class="seg-bar" style="margin-bottom:8px">
         <button id="btn-cm-grad" class="active" onclick="setColorMode(0)">Gradient</button>
         <button id="btn-cm-hue" onclick="setColorMode(1)">Hue</button>
       </div>
@@ -501,6 +512,7 @@
 
       <div class="btn-row">
         <button id="btn-outline" onclick="toggleOutline()">Outline</button>
+        <button id="btn-dots" onclick="toggleDots()">Show Dots</button>
       </div>
       <div id="outline-controls" style="display:none">
         <div class="row">
@@ -512,11 +524,11 @@
           </div>
         </div>
       </div>
-
-      <div class="row">
-        <label>Points</label>
-        <div class="btn-row" style="margin:0">
-          <button id="btn-dots" onclick="toggleDots()">show dots</button>
+      <div id="dots-controls" style="display:none">
+        <div class="row">
+          <label>Dot Radius</label>
+          <input type="range" id="sDotRadius" min="0.001" max="0.02" step="0.001" value="0.008">
+          <span class="val" id="vDotRadius">0.008</span>
         </div>
       </div>
 
@@ -604,19 +616,29 @@
         </div>
 
         <div class="section-title" style="margin-top:6px">Weave</div>
-        <div class="btn-row">
+        <div class="seg-bar">
           <button id="btn-weave-none" class="active" onclick="setWeaveMode(0)">None</button>
           <button id="btn-weave-brick" onclick="setWeaveMode(1)">Brick</button>
           <button id="btn-weave-weave" onclick="setWeaveMode(2)">Weave</button>
         </div>
 
         <div class="section-title" style="margin-top:6px">Shape</div>
-        <div class="btn-row">
-          <button id="btn-shape-none" class="active" onclick="setPixelShape(0)">None</button>
-          <button id="btn-shape-pill" onclick="setPixelShape(1)">Pill</button>
-          <button id="btn-shape-diamond" onclick="setPixelShape(2)">Diamond</button>
-          <button id="btn-shape-square" onclick="setPixelShape(3)">Square</button>
-          <button id="btn-shape-pointed" onclick="setPixelShape(4)">Chevron</button>
+        <div class="seg-bar">
+          <button id="btn-shape-none" class="shape-icon active" onclick="setPixelShape(0)" title="None">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <button id="btn-shape-pill" class="shape-icon" onclick="setPixelShape(1)" title="Pill">
+            <svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="5" fill="currentColor"/></svg>
+          </button>
+          <button id="btn-shape-diamond" class="shape-icon" onclick="setPixelShape(2)" title="Diamond">
+            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12" fill="currentColor"/></svg>
+          </button>
+          <button id="btn-shape-square" class="shape-icon" onclick="setPixelShape(3)" title="Square">
+            <svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1" fill="currentColor"/></svg>
+          </button>
+          <button id="btn-shape-pointed" class="shape-icon" onclick="setPixelShape(4)" title="Chevron">
+            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="5,4 19,4 22,12 19,20 5,20 2,12" fill="currentColor"/></svg>
+          </button>
         </div>
         <div id="shape-controls" style="display:none">
           <div class="row">
@@ -649,7 +671,7 @@
             <input type="range" id="sShapeGradOpacity" min="0" max="1" step="0.01" value="0.20">
             <span class="val" id="vShapeGradOpacity">0.20</span>
           </div>
-          <div class="btn-row">
+          <div class="seg-bar">
             <button id="btn-sgdir-h" class="active" onclick="setShapeGradDir(0)">Horizontal</button>
             <button id="btn-sgdir-v" onclick="setShapeGradDir(1)">Vertical</button>
           </div>
@@ -695,7 +717,10 @@
 
       <div id="groups-header">
         <span>Secondary Noise</span>
-        <button class="small" onclick="addGroup()">+ add</button>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="toggle-active" id="btn-groups-toggle" onclick="toggleAllGroups()"></button>
+          <button class="small" onclick="addGroup()">+ Add</button>
+        </div>
       </div>
 
       <div id="groups-list"></div>
@@ -716,6 +741,7 @@
       snapGrid: false,
       gridUnit: 50,
       showDots: false,
+      dotRadius: 0.008,
       colorSeed: 0,
       colorMode: 0,  // 0=gradient, 1=hue
       gradientSeed: 0,
@@ -766,6 +792,7 @@
         { pos: 0.75, r: 200, g: 50,  b: 100, hex: '#c83264' },
         { pos: 1.0,  r: 240, g: 200, b: 180, hex: '#f0c8b4' }
       ],
+      groupsEnabled: true,
       groups: [
         { id: 1, active: true, dx:  0.27, dy:  0.18, scale: 1.12, threshold: 0.000, seed:   1 },
         { id: 2, active: true, dx:  0.27, dy:  0.18, scale: 1.22, threshold: 0.000, seed:   1 },
@@ -784,6 +811,34 @@
       document.getElementById('ui').classList.add('hidden');
       document.getElementById('mobile-float').classList.add('visible');
     }
+
+    // Mobile: left/right swipe on canvas to cycle flavors
+    (function() {
+      let swipeStartX = 0, swipeStartY = 0, swiping = false;
+      const canvas = document.getElementById('glCanvas');
+      canvas.addEventListener('touchstart', function(e) {
+        if (e.touches.length !== 1) return;
+        swipeStartX = e.touches[0].clientX;
+        swipeStartY = e.touches[0].clientY;
+        swiping = true;
+      }, {passive: true});
+      canvas.addEventListener('touchend', function(e) {
+        if (!swiping) return;
+        swiping = false;
+        const dx = e.changedTouches[0].clientX - swipeStartX;
+        const dy = e.changedTouches[0].clientY - swipeStartY;
+        if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+        const sel = document.getElementById('selFlavor');
+        if (!sel || sel.options.length === 0) return;
+        let idx = sel.selectedIndex;
+        if (dx < 0) idx = Math.min(idx + 1, sel.options.length - 1); // swipe left = next
+        else idx = Math.max(idx - 1, 0); // swipe right = prev
+        if (idx !== sel.selectedIndex) {
+          sel.selectedIndex = idx;
+          loadFlavor(sel.value);
+        }
+      }, {passive: true});
+    })();
 
     function toggleUI() {
       uiVisible = !uiVisible;
@@ -864,6 +919,7 @@
     function toggleDots() {
       window.shaderParams.showDots = !window.shaderParams.showDots;
       document.getElementById('btn-dots').classList.toggle('active', window.shaderParams.showDots);
+      document.getElementById('dots-controls').style.display = window.shaderParams.showDots ? '' : 'none';
       window.shaderDirty = true;
     }
 
@@ -937,6 +993,13 @@
     function toggleBandOutline() {
       window.shaderParams.bandOutline = !window.shaderParams.bandOutline;
       document.getElementById('btn-band-outline').classList.toggle('active', window.shaderParams.bandOutline);
+      window.shaderDirty = true;
+    }
+
+    function toggleAllGroups() {
+      const p = window.shaderParams;
+      p.groupsEnabled = !p.groupsEnabled;
+      document.getElementById('btn-groups-toggle').classList.toggle('on', p.groupsEnabled);
       window.shaderDirty = true;
     }
 
@@ -1118,6 +1181,8 @@
       setToggle('btn-fx', p.flipX);
       setToggle('btn-fy', p.flipY);
       setToggle('btn-dots', p.showDots);
+      setVis('dots-controls', p.showDots);
+      setSlider('sDotRadius', p.dotRadius, 'vDotRadius', v => v.toFixed(3));
       setToggle('btn-snapgrid', p.snapGrid);
       setVis('snapgrid-controls', p.snapGrid);
       setToggle('btn-banding', p.banding);
@@ -1127,6 +1192,10 @@
       setToggle('btn-pixelate', p.pixelate);
       setVis('pixelate-controls', p.pixelate);
       setToggle('btn-oblique', p.oblique);
+
+      // Groups master toggle
+      var gt = el('btn-groups-toggle');
+      if (gt) gt.classList.toggle('on', p.groupsEnabled !== false);
       setToggle('btn-outline', p.showOutline);
       setVis('outline-controls', p.showOutline);
 
@@ -1199,6 +1268,7 @@
     wire('sSpring',  'vSpring',  'spring',       v => v.toFixed(1));
     wire('sGridUnit','vGridUnit','gridUnit',     v => Math.round(v));
     wire('sOutline', 'vOutline', 'outlineWidth', v => v.toFixed(1));
+    wire('sDotRadius','vDotRadius','dotRadius', v => v.toFixed(3));
     wire('sPixelW',  'vPixelW',  'pixelW',       v => Math.round(v));
     wire('sPixelH',  'vPixelH',  'pixelH',       v => Math.round(v));
     wire('sShapeMargin','vShapeMargin','shapeMargin', v => Math.round(v));
@@ -1572,12 +1642,9 @@
 
         card.innerHTML = `
           <div class="group-header">
-            <span class="drag-handle">⠿</span>
             <span class="g-title">Noise ${idx + 1}</span>
-            <button class="toggle-active ${grp.active ? 'on' : ''}" data-id="${grp.id}"></button>
+            <button class="toggle-active ${grp.active ? 'on' : ''}" data-id="${grp.id}" style="height:24px;width:40px"></button>
             <div class="g-actions">
-              <button class="small" data-action="up"   data-id="${grp.id}">↑</button>
-              <button class="small" data-action="down" data-id="${grp.id}">↓</button>
               <button class="small" data-action="dup"  data-id="${grp.id}">⧉</button>
               <button class="small danger" data-action="del" data-id="${grp.id}">✕</button>
             </div>
@@ -1634,8 +1701,6 @@
         btn.addEventListener('click', () => {
           const id  = parseInt(btn.dataset.id);
           const act = btn.dataset.action;
-          if (act === 'up')   moveGroup(id, -1);
-          if (act === 'down') moveGroup(id,  1);
           if (act === 'del')  removeGroup(id);
           if (act === 'dup') {
             const grp = window.shaderParams.groups.find(g => g.id === id);
@@ -1672,6 +1737,7 @@
     window.moveGroup   = moveGroup;
 
     renderGroups();
+    document.getElementById('btn-groups-toggle').classList.toggle('on', window.shaderParams.groupsEnabled !== false);
   </script>
 
   <script src="shader.js"></script>

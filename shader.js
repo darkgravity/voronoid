@@ -209,6 +209,7 @@ Promise.all([
   const sFlipX          = gl.getUniformLocation(sceneProg, 'uFlipX');
   const sFlipY          = gl.getUniformLocation(sceneProg, 'uFlipY');
   const sShowDots       = gl.getUniformLocation(sceneProg, 'uShowDots');
+  const sDotRadius      = gl.getUniformLocation(sceneProg, 'uDotRadius');
   const sSpring         = gl.getUniformLocation(sceneProg, 'uSpring');
   const sSnapGrid       = gl.getUniformLocation(sceneProg, 'uSnapGrid');
   const sColorSeed      = gl.getUniformLocation(sceneProg, 'uColorSeed');
@@ -400,6 +401,7 @@ Promise.all([
     gl.uniform1i(sFlipX,     p.flipX);
     gl.uniform1i(sFlipY,     p.flipY);
     gl.uniform1i(sShowDots,  p.showDots ? 1 : 0);
+    gl.uniform1f(sDotRadius, p.dotRadius || 0.008);
     gl.uniform1f(sSpring,    p.spring);
     gl.uniform1f(sSnapGrid,  p.snapGrid ? p.gridUnit : 0);
     gl.uniform1f(sColorSeed, p.colorSeed);
@@ -424,7 +426,8 @@ Promise.all([
     gl.uniform1f(sBandHueRadius, p.bandHueRadius || 0.5);
 
     const groups = p.groups;
-    const maxGroups = isMobile ? Math.min(groups.length, 2) : groups.length;
+    const groupsOn = p.groupsEnabled !== false;
+    const maxGroups = groupsOn ? (isMobile ? Math.min(groups.length, 2) : groups.length) : 0;
     const maxPoints = isMobile ? Math.min(p.points, 20) : p.points;
     gl.uniform1i(sNumPoints, maxPoints);
     gl.uniform1i(sGroupCount, maxGroups);

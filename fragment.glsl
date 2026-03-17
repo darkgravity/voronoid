@@ -15,6 +15,7 @@ uniform int   uMirrorY;
 uniform int   uFlipX;
 uniform int   uFlipY;
 uniform int   uShowDots;
+uniform float uDotRadius;
 uniform float uColorSeed;
 uniform float uGradientSeed;
 uniform float uValueMin;
@@ -202,7 +203,7 @@ void main() {
 
     vec4 col = hit.ci==9999 ? vec4(0,0,0,1) : cellColor(hit.ci);
 
-    if(uShowDots==1 && hit.d<0.008) col=mix(col,hit.dotCol,smoothstep(0.008,0.003,hit.d));
+    if(uShowDots==1 && hit.d<uDotRadius) col=mix(col,hit.dotCol,smoothstep(uDotRadius,uDotRadius*0.4,hit.d));
 
     float borderDist = clamp((hit.d2-hit.d)*0.5/0.15, 0.0, 1.0);
 
