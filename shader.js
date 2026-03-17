@@ -296,9 +296,15 @@ Promise.all([
   window.addEventListener('mousemove',  e => panMove(e.clientX, e.clientY));
   window.addEventListener('mouseup',    panEnd);
 
-  // ── Touch: 1-finger pan, 2-finger rotate ──
+  // ── Touch: 1-finger pan, 2-finger rotate + pinch zoom ──
   let touches = {};
   let pinchStartAngle = null, pinchStartRot = 0;
+  let pinchStartDist = null, pinchStartSx = 1, pinchStartSy = 1;
+
+  function pinchDist(t0, t1) {
+    const dx = t1.x - t0.x, dy = t1.y - t0.y;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
 
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
@@ -306,15 +312,17 @@ Promise.all([
 
     const ids = Object.keys(touches);
     if (ids.length === 1) {
-      // single finger → pan
       panStart(e.touches[0].clientX, e.touches[0].clientY);
       pinchStartAngle = null;
+      pinchStartDist = null;
     } else if (ids.length >= 2) {
-      // two fingers → start rotate
       isPanning = false;
       const t0 = touches[ids[0]], t1 = touches[ids[1]];
       pinchStartAngle = Math.atan2(t1.y - t0.y, t1.x - t0.x);
       pinchStartRot = window.shaderParams.rot;
+      pinchStartDist = pinchDist(t0, t1);
+      pinchStartSx = window.shaderParams.sx;
+      pinchStartSy = window.shaderParams.sy;
     }
   }, {passive: false});
 
@@ -324,16 +332,35 @@ Promise.all([
 
     const ids = Object.keys(touches);
     if (ids.length >= 2 && pinchStartAngle !== null) {
-      // two-finger rotate
       const t0 = touches[ids[0]], t1 = touches[ids[1]];
+
+      // Rotate
       const angle = Math.atan2(t1.y - t0.y, t1.x - t0.x);
       let delta = (angle - pinchStartAngle) * (180 / Math.PI);
       window.shaderParams.rot = ((pinchStartRot + delta) % 360 + 360) % 360;
-      // sync UI slider
-      const slider = document.getElementById('sRot');
-      if (slider) slider.value = window.shaderParams.rot;
-      const label = document.getElementById('vRot');
-      if (label) label.textContent = Math.round(window.shaderParams.rot) + '°';
+      const rotSlider = document.getElementById('sRot');
+      if (rotSlider) rotSlider.value = window.shaderParams.rot;
+      const rotLabel = document.getElementById('vRot');
+      if (rotLabel) rotLabel.textContent = Math.round(window.shaderParams.rot) + '°';
+
+      // Pinch zoom — uniform scale
+      if (pinchStartDist !== null && pinchStartDist > 10) {
+        const dist = pinchDist(t0, t1);
+        const ratio = dist / pinchStartDist;
+        const newSx = Math.max(0.1, Math.min(5, pinchStartSx * ratio));
+        const newSy = Math.max(0.1, Math.min(5, pinchStartSy * ratio));
+        window.shaderParams.sx = newSx;
+        window.shaderParams.sy = newSy;
+        const sxSlider = document.getElementById('sSx');
+        if (sxSlider) sxSlider.value = newSx;
+        const sxLabel = document.getElementById('vSx');
+        if (sxLabel) sxLabel.textContent = newSx.toFixed(2);
+        const sySlider = document.getElementById('sSy');
+        if (sySlider) sySlider.value = newSy;
+        const syLabel = document.getElementById('vSy');
+        if (syLabel) syLabel.textContent = newSy.toFixed(2);
+      }
+
       window.shaderDirty = true;
     } else if (ids.length === 1) {
       panMove(e.touches[0].clientX, e.touches[0].clientY);
@@ -342,12 +369,12 @@ Promise.all([
 
   canvas.addEventListener('touchend', e => {
     for (const t of e.changedTouches) delete touches[t.identifier];
-    if (Object.keys(touches).length < 2) pinchStartAngle = null;
+    if (Object.keys(touches).length < 2) { pinchStartAngle = null; pinchStartDist = null; }
     if (Object.keys(touches).length === 0) panEnd();
   });
   canvas.addEventListener('touchcancel', e => {
     for (const t of e.changedTouches) delete touches[t.identifier];
-    if (Object.keys(touches).length < 2) pinchStartAngle = null;
+    if (Object.keys(touches).length < 2) { pinchStartAngle = null; pinchStartDist = null; }
     if (Object.keys(touches).length === 0) panEnd();
   });
 
