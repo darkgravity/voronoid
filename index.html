@@ -337,10 +337,81 @@
       label { width: 60px; font-size: 11px; }
       button { padding: 7px 10px; font-size: 11px; }
     }
+
+    /* ── Custom color picker overlay ────────────── */
+    #color-picker-overlay {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.6); align-items: center; justify-content: center;
+    }
+    #color-picker-overlay.open { display: flex; }
+    #color-picker-panel {
+      background: #222; border-radius: 12px; padding: 16px;
+      width: 280px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    #cp-sv-area {
+      width: 100%; height: 180px; border-radius: 6px; position: relative;
+      cursor: crosshair; touch-action: none; margin-bottom: 12px;
+    }
+    #cp-sv-cursor {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,0.5);
+      position: absolute; pointer-events: none;
+      transform: translate(-50%,-50%);
+    }
+    #cp-hue-bar {
+      width: 100%; height: 20px; border-radius: 10px; cursor: pointer;
+      touch-action: none; position: relative; margin-bottom: 12px;
+      background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+    }
+    #cp-hue-cursor {
+      width: 14px; height: 26px; border-radius: 7px; border: 2px solid #fff;
+      box-shadow: 0 0 4px rgba(0,0,0,0.4); position: absolute; top: -3px;
+      pointer-events: none; transform: translateX(-50%);
+    }
+    #cp-preview-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    #cp-preview {
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3);
+    }
+    #cp-rgb-inputs { display: flex; gap: 6px; flex: 1; }
+    #cp-rgb-inputs div { flex: 1; text-align: center; }
+    #cp-rgb-inputs input {
+      width: 100%; background: #333; border: 1px solid #555; color: #fff;
+      border-radius: 4px; padding: 4px; font-size: 13px; text-align: center;
+    }
+    #cp-rgb-inputs span { font-size: 10px; color: #888; }
+    #cp-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    #cp-actions button { min-height: 32px; }
   </style>
 </head>
 <body>
   <canvas id="glCanvas"></canvas>
+
+  <!-- Custom color picker overlay -->
+  <div id="color-picker-overlay" onclick="if(event.target===this)closeColorPicker()">
+    <div id="color-picker-panel">
+      <div id="cp-sv-area">
+        <div id="cp-sv-cursor"></div>
+      </div>
+      <div id="cp-hue-bar">
+        <div id="cp-hue-cursor"></div>
+      </div>
+      <div id="cp-preview-row">
+        <div id="cp-preview"></div>
+        <div id="cp-rgb-inputs">
+          <div><input id="cp-r" type="number" min="0" max="255" value="0"><span>R</span></div>
+          <div><input id="cp-g" type="number" min="0" max="255" value="0"><span>G</span></div>
+          <div><input id="cp-b" type="number" min="0" max="255" value="0"><span>B</span></div>
+        </div>
+      </div>
+      <div id="cp-actions">
+        <button onclick="closeColorPicker()">Cancel</button>
+        <button class="active" onclick="confirmColorPicker()">OK</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Fullscreen button (top-right, always visible) -->
   <button id="btn-fullscreen" onclick="toggleFullscreen()" title="Fullscreen">
@@ -812,27 +883,28 @@
       document.getElementById('mobile-float').classList.add('visible');
     }
 
-    // Mobile: left/right swipe on canvas to cycle flavors
+    // Mobile: quick horizontal flick on canvas to cycle flavors
+    // Distinguishes from pan by requiring high velocity + short duration
     (function() {
-      let swipeStartX = 0, swipeStartY = 0, swiping = false;
+      let swipeStartX = 0, swipeStartY = 0, swipeStartTime = 0;
       const canvas = document.getElementById('glCanvas');
       canvas.addEventListener('touchstart', function(e) {
         if (e.touches.length !== 1) return;
         swipeStartX = e.touches[0].clientX;
         swipeStartY = e.touches[0].clientY;
-        swiping = true;
+        swipeStartTime = Date.now();
       }, {passive: true});
       canvas.addEventListener('touchend', function(e) {
-        if (!swiping) return;
-        swiping = false;
+        const dt = Date.now() - swipeStartTime;
+        if (dt > 300) return; // too slow = pan, not flick
         const dx = e.changedTouches[0].clientX - swipeStartX;
         const dy = e.changedTouches[0].clientY - swipeStartY;
-        if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+        if (Math.abs(dx) < 80 || Math.abs(dy) > Math.abs(dx) * 0.5) return;
         const sel = document.getElementById('selFlavor');
         if (!sel || sel.options.length === 0) return;
         let idx = sel.selectedIndex;
-        if (dx < 0) idx = Math.min(idx + 1, sel.options.length - 1); // swipe left = next
-        else idx = Math.max(idx - 1, 0); // swipe right = prev
+        if (dx < 0) idx = Math.min(idx + 1, sel.options.length - 1);
+        else idx = Math.max(idx - 1, 0);
         if (idx !== sel.selectedIndex) {
           sel.selectedIndex = idx;
           loadFlavor(sel.value);
@@ -856,6 +928,144 @@
         document.exitFullscreen().catch(() => {});
       }
     }
+
+    /* ── Custom color picker ──────────────────────────────────────── */
+    let cpCallback = null;
+    let cpH = 0, cpS = 1, cpV = 1;
+
+    function hsv2rgbPicker(h, s, v) {
+      h = ((h % 1) + 1) % 1;
+      const i = Math.floor(h * 6), f = h * 6 - i;
+      const p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f));
+      let r, g, b;
+      switch (i % 6) {
+        case 0: r=v;g=t;b=p;break; case 1: r=q;g=v;b=p;break;
+        case 2: r=p;g=v;b=t;break; case 3: r=p;g=q;b=v;break;
+        case 4: r=t;g=p;b=v;break; default: r=v;g=p;b=q;
+      }
+      return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+    }
+
+    function rgb2hsvPicker(r, g, b) {
+      r/=255; g/=255; b/=255;
+      const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+      let h=0, s=mx?d/mx:0, v=mx;
+      if(d){if(mx===r)h=((g-b)/d+6)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h/=6;}
+      return [h, s, v];
+    }
+
+    function openColorPicker(hexColor, callback) {
+      cpCallback = callback;
+      const r = parseInt(hexColor.slice(1,3),16)||0;
+      const g = parseInt(hexColor.slice(3,5),16)||0;
+      const b = parseInt(hexColor.slice(5,7),16)||0;
+      [cpH, cpS, cpV] = rgb2hsvPicker(r, g, b);
+      document.getElementById('color-picker-overlay').classList.add('open');
+      updatePickerUI();
+    }
+
+    function closeColorPicker() {
+      document.getElementById('color-picker-overlay').classList.remove('open');
+      cpCallback = null;
+    }
+
+    function confirmColorPicker() {
+      if (cpCallback) {
+        const [r,g,b] = hsv2rgbPicker(cpH, cpS, cpV);
+        const hex = '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+        cpCallback(hex, r, g, b);
+      }
+      closeColorPicker();
+    }
+
+    function updatePickerUI() {
+      const svArea = document.getElementById('cp-sv-area');
+      const [r,g,b] = hsv2rgbPicker(cpH, 1, 1);
+      svArea.style.background = `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, rgb(${r},${g},${b}))`;
+      const cursor = document.getElementById('cp-sv-cursor');
+      cursor.style.left = (cpS * 100) + '%';
+      cursor.style.top = ((1 - cpV) * 100) + '%';
+      const hueCursor = document.getElementById('cp-hue-cursor');
+      hueCursor.style.left = (cpH * 100) + '%';
+      const hueCol = hsv2rgbPicker(cpH, 1, 1);
+      hueCursor.style.background = `rgb(${hueCol[0]},${hueCol[1]},${hueCol[2]})`;
+      const [cr,cg,cb] = hsv2rgbPicker(cpH, cpS, cpV);
+      document.getElementById('cp-preview').style.background = `rgb(${cr},${cg},${cb})`;
+      document.getElementById('cp-r').value = cr;
+      document.getElementById('cp-g').value = cg;
+      document.getElementById('cp-b').value = cb;
+    }
+
+    // SV area interaction
+    (function() {
+      const sv = document.getElementById('cp-sv-area');
+      function updateSV(x, y) {
+        const rect = sv.getBoundingClientRect();
+        cpS = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+        cpV = Math.max(0, Math.min(1, 1 - (y - rect.top) / rect.height));
+        updatePickerUI();
+      }
+      sv.addEventListener('mousedown', e => { updateSV(e.clientX, e.clientY);
+        const onMove = ev => updateSV(ev.clientX, ev.clientY);
+        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+        window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+      });
+      sv.addEventListener('touchstart', e => { e.preventDefault(); updateSV(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+      sv.addEventListener('touchmove', e => { e.preventDefault(); updateSV(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+    })();
+
+    // Hue bar interaction
+    (function() {
+      const bar = document.getElementById('cp-hue-bar');
+      function updateH(x) {
+        const rect = bar.getBoundingClientRect();
+        cpH = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+        updatePickerUI();
+      }
+      bar.addEventListener('mousedown', e => { updateH(e.clientX);
+        const onMove = ev => updateH(ev.clientX);
+        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+        window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+      });
+      bar.addEventListener('touchstart', e => { e.preventDefault(); updateH(e.touches[0].clientX); }, {passive:false});
+      bar.addEventListener('touchmove', e => { e.preventDefault(); updateH(e.touches[0].clientX); }, {passive:false});
+    })();
+
+    // RGB input fields
+    ['cp-r','cp-g','cp-b'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        const r = parseInt(document.getElementById('cp-r').value)||0;
+        const g = parseInt(document.getElementById('cp-g').value)||0;
+        const b = parseInt(document.getElementById('cp-b').value)||0;
+        [cpH, cpS, cpV] = rgb2hsvPicker(
+          Math.max(0,Math.min(255,r)), Math.max(0,Math.min(255,g)), Math.max(0,Math.min(255,b)));
+        updatePickerUI();
+      });
+    });
+
+    // Helper: open custom picker for any color swatch
+    function hookColorSwatch(swatchId, inputId, paramKey) {
+      const swatch = document.getElementById(swatchId);
+      if (!swatch) return;
+      // Remove native color input click, add custom picker
+      swatch.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopPropagation();
+        const current = window.shaderParams[paramKey] || '#000000';
+        openColorPicker(current, (hex) => {
+          window.shaderParams[paramKey] = hex;
+          swatch.style.background = hex;
+          const inp = document.getElementById(inputId);
+          if (inp) inp.value = hex;
+          window.shaderDirty = true;
+        });
+      });
+      // Prevent native input from opening
+      const inp = document.getElementById(inputId);
+      if (inp) inp.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+    }
+
+    hookColorSwatch('outlineSwatch', 'outlineColor', 'outlineColor');
+    hookColorSwatch('gapSwatch', 'gapColorPicker', 'gapColor');
 
     // Mobile: swipe down on the collapse area to close drawer
     (function() {
@@ -1356,62 +1566,60 @@
         });
         handle.appendChild(picker);
 
-        // double-click → open color picker
+        // double-click / double-tap → open custom color picker
         handle.addEventListener('dblclick', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          picker.click();
+          e.preventDefault(); e.stopPropagation();
+          openColorPicker(stop.hex, (hex, r, g, b) => {
+            stop.r = r; stop.g = g; stop.b = b; stop.hex = hex;
+            handle.style.background = hex;
+            renderGradientBar(); syncGradientToGL();
+          });
         });
 
-        // drag
+        // drag (mouse + touch)
         let dragging = false, startX = 0, startPos = 0, draggedOff = false;
-        handle.addEventListener('mousedown', (e) => {
-          if (e.detail >= 2) return; // ignore dblclick start
-          e.preventDefault();
-          e.stopPropagation();
-          dragging = true;
-          draggedOff = false;
-          startX = e.clientX;
-          startPos = stop.pos;
+
+        function startDrag(cx, cy, ev) {
+          if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+          dragging = true; draggedOff = false;
+          startX = cx; startPos = stop.pos;
           handle.classList.add('dragging');
+        }
+        function moveDrag(cx, cy) {
+          if (!dragging) return;
+          const trackRect = track.getBoundingClientRect();
+          stop.pos = Math.max(0, Math.min(1, (cx - trackRect.left) / trackRect.width));
+          handle.style.left = (stop.pos * 100) + '%';
+          draggedOff = Math.abs(cy - trackRect.top - trackRect.height/2) > 50;
+          handle.style.opacity = draggedOff ? '0.3' : '1';
+          renderGradientBar(); syncGradientToGL();
+        }
+        function endDrag() {
+          dragging = false;
+          handle.classList.remove('dragging');
+          handle.style.opacity = '1';
+          if (draggedOff && window.shaderParams.gradientStops.length > 2) {
+            window.shaderParams.gradientStops.splice(window.shaderParams.gradientStops.indexOf(stop), 1);
+            renderGradientHandles(); renderGradientBar(); syncGradientToGL();
+          }
+        }
 
-          const onMove = (ev) => {
-            if (!dragging) return;
-            const trackRect = track.getBoundingClientRect();
-            const newPos = (ev.clientX - trackRect.left) / trackRect.width;
-            stop.pos = Math.max(0, Math.min(1, newPos));
-            handle.style.left = (stop.pos * 100) + '%';
-
-            // check if dragged off vertically
-            const dy = Math.abs(ev.clientY - trackRect.top - trackRect.height/2);
-            draggedOff = dy > 50;
-            handle.style.opacity = draggedOff ? '0.3' : '1';
-
-            renderGradientBar();
-            syncGradientToGL();
-          };
-
-          const onUp = () => {
-            dragging = false;
-            handle.classList.remove('dragging');
-            handle.style.opacity = '1';
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-
-            // delete if dragged off and more than 2 stops remain
-            if (draggedOff && window.shaderParams.gradientStops.length > 2) {
-              window.shaderParams.gradientStops.splice(
-                window.shaderParams.gradientStops.indexOf(stop), 1
-              );
-              renderGradientHandles();
-              renderGradientBar();
-              syncGradientToGL();
-            }
-          };
-
-          window.addEventListener('mousemove', onMove);
-          window.addEventListener('mouseup', onUp);
+        handle.addEventListener('mousedown', (e) => {
+          if (e.detail >= 2) return;
+          startDrag(e.clientX, e.clientY, e);
+          const onMove = ev => moveDrag(ev.clientX, ev.clientY);
+          const onUp = () => { endDrag(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+          window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
         });
+        handle.addEventListener('touchstart', (e) => {
+          if (e.touches.length !== 1) return;
+          startDrag(e.touches[0].clientX, e.touches[0].clientY, e);
+        }, {passive: false});
+        handle.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          if (e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+        handle.addEventListener('touchend', () => endDrag());
 
         track.appendChild(handle);
       });
@@ -1496,44 +1704,44 @@
         handle.appendChild(picker);
 
         handle.addEventListener('dblclick', (e) => {
-          e.preventDefault(); e.stopPropagation(); picker.click();
+          e.preventDefault(); e.stopPropagation();
+          openColorPicker(stop.hex, (hex, r, g, b) => {
+            stop.r = r; stop.g = g; stop.b = b; stop.hex = hex;
+            handle.style.background = hex;
+            renderShapeGradBar(); syncShapeGradToGL();
+          });
         });
 
         let dragging = false, draggedOff = false;
+        function startDrag2(cx, cy, ev) {
+          if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+          dragging = true; draggedOff = false; handle.classList.add('dragging');
+        }
+        function moveDrag2(cx, cy) {
+          if (!dragging) return;
+          const tr = track.getBoundingClientRect();
+          stop.pos = Math.max(0, Math.min(1, (cx - tr.left) / tr.width));
+          handle.style.left = (stop.pos * 100) + '%';
+          draggedOff = Math.abs(cy - tr.top - tr.height/2) > 50;
+          handle.style.opacity = draggedOff ? '0.3' : '1';
+          renderShapeGradBar(); syncShapeGradToGL();
+        }
+        function endDrag2() {
+          dragging = false; handle.classList.remove('dragging'); handle.style.opacity = '1';
+          if (draggedOff && window.shaderParams.shapeGradStops.length > 2) {
+            window.shaderParams.shapeGradStops.splice(window.shaderParams.shapeGradStops.indexOf(stop), 1);
+            renderShapeGradHandles(); renderShapeGradBar(); syncShapeGradToGL();
+          }
+        }
         handle.addEventListener('mousedown', (e) => {
-          if (e.detail >= 2) return;
-          e.preventDefault(); e.stopPropagation();
-          dragging = true; draggedOff = false;
-          handle.classList.add('dragging');
-
-          const onMove = (ev) => {
-            if (!dragging) return;
-            const trackRect = track.getBoundingClientRect();
-            stop.pos = Math.max(0, Math.min(1, (ev.clientX - trackRect.left) / trackRect.width));
-            handle.style.left = (stop.pos * 100) + '%';
-            draggedOff = Math.abs(ev.clientY - trackRect.top - trackRect.height/2) > 50;
-            handle.style.opacity = draggedOff ? '0.3' : '1';
-            renderShapeGradBar();
-            syncShapeGradToGL();
-          };
-
-          const onUp = () => {
-            dragging = false;
-            handle.classList.remove('dragging');
-            handle.style.opacity = '1';
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-            if (draggedOff && window.shaderParams.shapeGradStops.length > 2) {
-              window.shaderParams.shapeGradStops.splice(
-                window.shaderParams.shapeGradStops.indexOf(stop), 1);
-              renderShapeGradHandles();
-              renderShapeGradBar();
-              syncShapeGradToGL();
-            }
-          };
-          window.addEventListener('mousemove', onMove);
-          window.addEventListener('mouseup', onUp);
+          if (e.detail >= 2) return; startDrag2(e.clientX, e.clientY, e);
+          const onM = ev => moveDrag2(ev.clientX, ev.clientY);
+          const onU = () => { endDrag2(); window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
+          window.addEventListener('mousemove', onM); window.addEventListener('mouseup', onU);
         });
+        handle.addEventListener('touchstart', (e) => { if (e.touches.length===1) startDrag2(e.touches[0].clientX, e.touches[0].clientY, e); }, {passive:false});
+        handle.addEventListener('touchmove', (e) => { e.preventDefault(); if(e.touches.length===1) moveDrag2(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+        handle.addEventListener('touchend', () => endDrag2());
         track.appendChild(handle);
       });
     }
