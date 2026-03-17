@@ -1,5 +1,6 @@
 [
   { "name": "Default", "file": "default.json" },
+  { "name": "Dreamweaver", "file": "dreamweaver.json" },
   { "name": "Pixel", "file": "pixel.json" },
   { "name": "Wallpaper", "file": "wallpaper.json" },
   { "name": "Camou", "file": "camou.json" }

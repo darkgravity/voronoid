@@ -1,0 +1,208 @@
+{
+  "mode": 0,
+  "points": 16,
+  "seed": 28,
+  "rot": 106.28449999998459,
+  "dx": 0.24615414887666698,
+  "dy": -0.2533651828765871,
+  "sx": 1,
+  "sy": 1,
+  "mirrorX": 1,
+  "mirrorY": 1,
+  "flipX": 0,
+  "flipY": 0,
+  "spring": 0,
+  "snapGrid": false,
+  "gridUnit": 50,
+  "showDots": false,
+  "dotRadius": 0.008,
+  "colorSeed": 0,
+  "colorMode": 0,
+  "gradientSeed": 0,
+  "valueMin": 0.75,
+  "valueMax": 1,
+  "animSpeed": 13,
+  "outlineWidth": 1,
+  "outlineColor": "#4f0000",
+  "showOutline": false,
+  "pixelate": true,
+  "pixelW": 18,
+  "pixelH": 6,
+  "weaveMode": 1,
+  "pixelShape": 1,
+  "shapeMargin": 2,
+  "shapeBleed": 0,
+  "pixelScale": 1.23,
+  "oblique": false,
+  "shapeGradOpacity": 0.67,
+  "shapeGradDir": 0,
+  "embossBlendMode": 3,
+  "shapeGradStops": [
+    {
+      "pos": 0,
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "hex": "#000000"
+    },
+    {
+      "pos": 0.5,
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "hex": "#ffffff"
+    },
+    {
+      "pos": 1,
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "hex": "#000000"
+    },
+    {
+      "pos": 0.8539540650123661,
+      "r": 74,
+      "g": 74,
+      "b": 74,
+      "hex": "#4a4a4a"
+    }
+  ],
+  "gapColor": "#140052",
+  "gapOpacity": 1,
+  "banding": true,
+  "bandCount": 8,
+  "bandLumMin": 0,
+  "bandLumMax": 0.72,
+  "bandStrength": 1,
+  "bandRandomize": true,
+  "bandBlendMode": 0,
+  "bandHueStrength": 0.2,
+  "bandHueRadius": 1,
+  "bandOutline": false,
+  "gradeHue": 0,
+  "gradeSat": 1.27,
+  "gradeVal": 1.31,
+  "gradeContrast": 1.69,
+  "gradientStops": [
+    {
+      "pos": 0,
+      "r": 40,
+      "g": 40,
+      "b": 80,
+      "hex": "#282850"
+    },
+    {
+      "pos": 0.25,
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "hex": "#ff0000"
+    },
+    {
+      "pos": 0.5,
+      "r": 0,
+      "g": 3,
+      "b": 77,
+      "hex": "#00034d"
+    },
+    {
+      "pos": 0.75,
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "hex": "#ff0000"
+    },
+    {
+      "pos": 1,
+      "r": 255,
+      "g": 255,
+      "b": 0,
+      "hex": "#ffff00"
+    },
+    {
+      "pos": 0.42006801903520924,
+      "r": 82,
+      "g": 2,
+      "b": 52,
+      "hex": "#520234"
+    },
+    {
+      "pos": 0.3039965927228488,
+      "r": 11,
+      "g": 0,
+      "b": 71,
+      "hex": "#0b0047"
+    },
+    {
+      "pos": 0.7959183518561859,
+      "r": 255,
+      "g": 47,
+      "b": 0,
+      "hex": "#ff2f00"
+    },
+    {
+      "pos": 0.8981717512265986,
+      "r": 0,
+      "g": 40,
+      "b": 87,
+      "hex": "#002857"
+    }
+  ],
+  "groupsEnabled": true,
+  "groups": [
+    {
+      "id": 1,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.12,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 2,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.22,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 3,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.25,
+      "threshold": 0,
+      "seed": 914
+    },
+    {
+      "id": 4,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 0.95,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 5,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.27,
+      "scale": 0.82,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 6,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.09,
+      "scale": 0.71,
+      "threshold": 0,
+      "seed": 1
+    }
+  ]
+}
