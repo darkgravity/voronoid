@@ -574,7 +574,7 @@
         <div class="grad-editor" id="gradEditor">
           <canvas class="grad-bar" id="gradBar" height="24"></canvas>
           <div class="grad-track" id="gradTrack"></div>
-          <div class="grad-hint">click bar to add · double-click handle to pick color · drag off to delete</div>
+          <div class="grad-hint">tap bar to add · tap handle to pick color · double-tap to delete</div>
         </div>
       </div>
 
@@ -591,7 +591,6 @@
           <input type="range" id="sOutline" min="0" max="20" step="0.5" value="0">
           <span class="val" id="vOutline">0.0</span>
           <div class="color-swatch" id="outlineSwatch" style="background:#000000;">
-            <input type="color" id="outlineColor" value="#000000">
           </div>
         </div>
       </div>
@@ -727,7 +726,6 @@
             <input type="range" id="sGapOpacity" min="0" max="1" step="0.01" value="1.00">
             <span class="val" id="vGapOpacity">1.00</span>
             <div class="color-swatch" id="gapSwatch" style="background:#000000;">
-              <input type="color" id="gapColorPicker" value="#000000">
             </div>
           </div>
 
@@ -735,7 +733,7 @@
           <div class="grad-editor" id="shapeGradEditor">
             <canvas class="grad-bar" id="shapeGradBar" height="24"></canvas>
             <div class="grad-track" id="shapeGradTrack"></div>
-            <div class="grad-hint">click bar to add · double-click handle to pick color</div>
+            <div class="grad-hint">tap bar to add · tap handle to pick color · double-tap to delete</div>
           </div>
           <div class="row">
             <label>Opacity</label>
@@ -1047,25 +1045,20 @@
     function hookColorSwatch(swatchId, inputId, paramKey) {
       const swatch = document.getElementById(swatchId);
       if (!swatch) return;
-      // Remove native color input click, add custom picker
+      swatch.style.cursor = 'pointer';
       swatch.addEventListener('click', function(e) {
         e.preventDefault(); e.stopPropagation();
         const current = window.shaderParams[paramKey] || '#000000';
         openColorPicker(current, (hex) => {
           window.shaderParams[paramKey] = hex;
           swatch.style.background = hex;
-          const inp = document.getElementById(inputId);
-          if (inp) inp.value = hex;
           window.shaderDirty = true;
         });
       });
-      // Prevent native input from opening
-      const inp = document.getElementById(inputId);
-      if (inp) inp.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
     }
 
-    hookColorSwatch('outlineSwatch', 'outlineColor', 'outlineColor');
-    hookColorSwatch('gapSwatch', 'gapColorPicker', 'gapColor');
+    hookColorSwatch('outlineSwatch', null, 'outlineColor');
+    hookColorSwatch('gapSwatch', null, 'gapColor');
 
     // Mobile: swipe down on the collapse area to close drawer
     (function() {
@@ -1437,9 +1430,7 @@
       var se = el('selEmbossBlend'); if (se) se.value = p.embossBlendMode || 0;
 
       // Color pickers (null-safe)
-      var oc = el('outlineColor'); if (oc && p.outlineColor) { oc.value = p.outlineColor; }
       var os = el('outlineSwatch'); if (os && p.outlineColor) { os.style.background = p.outlineColor; }
-      var gc = el('gapColorPicker'); if (gc && p.gapColor) { gc.value = p.gapColor; }
       var gs = el('gapSwatch'); if (gs && p.gapColor) { gs.style.background = p.gapColor; }
 
       // Gradients
@@ -1497,21 +1488,10 @@
     wire('sGradeVal',     'vGradeVal',     'gradeVal',      v => v.toFixed(2));
     wire('sGradeContrast','vGradeContrast','gradeContrast',  v => v.toFixed(2));
 
-    document.getElementById('gapColorPicker').addEventListener('input', e => {
-      window.shaderParams.gapColor = e.target.value;
-      document.getElementById('gapSwatch').style.background = e.target.value;
-      window.shaderDirty = true;
-    });
     wire('sColorSeed','vColorSeed','colorSeed',  v => Math.round(v));
     wire('sValueMin', 'vValueMin', 'valueMin',   v => v.toFixed(2));
     wire('sValueMax', 'vValueMax', 'valueMax',   v => v.toFixed(2));
     wire('sGradientSeed', 'vGradientSeed', 'gradientSeed', v => Math.round(v));
-
-    document.getElementById('outlineColor').addEventListener('input', e => {
-      window.shaderParams.outlineColor = e.target.value;
-      document.getElementById('outlineSwatch').style.background = e.target.value;
-      window.shaderDirty = true;
-    });
 
     /* ── Gradient Editor ──────────────────────────────────────────── */
     function hexToRgb(hex) {
@@ -1551,75 +1531,73 @@
         handle.style.left = (stop.pos * 100) + '%';
         handle.style.background = stop.hex;
         handle.dataset.idx = idx;
+        handle.style.touchAction = 'none';
 
-        // hidden color picker inside handle
-        const picker = document.createElement('input');
-        picker.type = 'color';
-        picker.value = stop.hex;
-        picker.addEventListener('input', (e) => {
-          const c = hexToRgb(e.target.value);
-          stop.r = c.r; stop.g = c.g; stop.b = c.b;
-          stop.hex = e.target.value;
-          handle.style.background = stop.hex;
-          renderGradientBar();
-          syncGradientToGL();
-        });
-        handle.appendChild(picker);
+        // State for distinguishing tap vs drag vs double-tap
+        let dragging = false, hasMoved = false, tapTimer = null, tapCount = 0;
 
-        // double-click / double-tap → open custom color picker
-        handle.addEventListener('dblclick', (e) => {
-          e.preventDefault(); e.stopPropagation();
-          openColorPicker(stop.hex, (hex, r, g, b) => {
-            stop.r = r; stop.g = g; stop.b = b; stop.hex = hex;
-            handle.style.background = hex;
-            renderGradientBar(); syncGradientToGL();
-          });
-        });
-
-        // drag (mouse + touch)
-        let dragging = false, startX = 0, startPos = 0, draggedOff = false;
-
-        function startDrag(cx, cy, ev) {
-          if (ev) { ev.preventDefault(); ev.stopPropagation(); }
-          dragging = true; draggedOff = false;
-          startX = cx; startPos = stop.pos;
+        function startDrag(cx, cy) {
+          dragging = true; hasMoved = false;
           handle.classList.add('dragging');
         }
         function moveDrag(cx, cy) {
           if (!dragging) return;
-          const trackRect = track.getBoundingClientRect();
-          stop.pos = Math.max(0, Math.min(1, (cx - trackRect.left) / trackRect.width));
+          hasMoved = true;
+          const tr = track.getBoundingClientRect();
+          stop.pos = Math.max(0, Math.min(1, (cx - tr.left) / tr.width));
           handle.style.left = (stop.pos * 100) + '%';
-          draggedOff = Math.abs(cy - trackRect.top - trackRect.height/2) > 50;
-          handle.style.opacity = draggedOff ? '0.3' : '1';
           renderGradientBar(); syncGradientToGL();
         }
         function endDrag() {
-          dragging = false;
+          const wasDrag = hasMoved;
+          dragging = false; hasMoved = false;
           handle.classList.remove('dragging');
-          handle.style.opacity = '1';
-          if (draggedOff && window.shaderParams.gradientStops.length > 2) {
-            window.shaderParams.gradientStops.splice(window.shaderParams.gradientStops.indexOf(stop), 1);
-            renderGradientHandles(); renderGradientBar(); syncGradientToGL();
+
+          if (!wasDrag) {
+            // It was a tap, not a drag
+            tapCount++;
+            if (tapCount === 1) {
+              tapTimer = setTimeout(() => {
+                // Single tap → open color picker
+                tapCount = 0;
+                openColorPicker(stop.hex, (hex, r, g, b) => {
+                  stop.r = r; stop.g = g; stop.b = b; stop.hex = hex;
+                  handle.style.background = hex;
+                  renderGradientBar(); syncGradientToGL();
+                });
+              }, 250);
+            } else if (tapCount >= 2) {
+              // Double tap → delete stop
+              clearTimeout(tapTimer); tapCount = 0;
+              if (stops.length > 2) {
+                stops.splice(stops.indexOf(stop), 1);
+                renderGradientHandles(); renderGradientBar(); syncGradientToGL();
+              }
+            }
+          } else {
+            tapCount = 0;
           }
         }
 
+        // Mouse events
         handle.addEventListener('mousedown', (e) => {
-          if (e.detail >= 2) return;
-          startDrag(e.clientX, e.clientY, e);
-          const onMove = ev => moveDrag(ev.clientX, ev.clientY);
-          const onUp = () => { endDrag(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-          window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+          e.preventDefault(); e.stopPropagation();
+          startDrag(e.clientX, e.clientY);
+          const onM = ev => moveDrag(ev.clientX, ev.clientY);
+          const onU = () => { endDrag(); window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
+          window.addEventListener('mousemove', onM); window.addEventListener('mouseup', onU);
         });
+        // Touch events
         handle.addEventListener('touchstart', (e) => {
           if (e.touches.length !== 1) return;
-          startDrag(e.touches[0].clientX, e.touches[0].clientY, e);
+          e.preventDefault(); e.stopPropagation();
+          startDrag(e.touches[0].clientX, e.touches[0].clientY);
         }, {passive: false});
         handle.addEventListener('touchmove', (e) => {
           e.preventDefault();
           if (e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY);
         }, {passive: false});
-        handle.addEventListener('touchend', () => endDrag());
+        handle.addEventListener('touchend', (e) => { e.preventDefault(); endDrag(); }, {passive: false});
 
         track.appendChild(handle);
       });
@@ -1689,59 +1667,58 @@
         handle.style.left = (stop.pos * 100) + '%';
         handle.style.background = stop.hex;
         handle.dataset.idx = idx;
+        handle.style.touchAction = 'none';
 
-        const picker = document.createElement('input');
-        picker.type = 'color';
-        picker.value = stop.hex;
-        picker.addEventListener('input', (e) => {
-          const c = hexToRgb(e.target.value);
-          stop.r = c.r; stop.g = c.g; stop.b = c.b;
-          stop.hex = e.target.value;
-          handle.style.background = stop.hex;
-          renderShapeGradBar();
-          syncShapeGradToGL();
-        });
-        handle.appendChild(picker);
+        let dragging = false, hasMoved = false, tapTimer = null, tapCount = 0;
 
-        handle.addEventListener('dblclick', (e) => {
-          e.preventDefault(); e.stopPropagation();
-          openColorPicker(stop.hex, (hex, r, g, b) => {
-            stop.r = r; stop.g = g; stop.b = b; stop.hex = hex;
-            handle.style.background = hex;
-            renderShapeGradBar(); syncShapeGradToGL();
-          });
-        });
-
-        let dragging = false, draggedOff = false;
-        function startDrag2(cx, cy, ev) {
-          if (ev) { ev.preventDefault(); ev.stopPropagation(); }
-          dragging = true; draggedOff = false; handle.classList.add('dragging');
-        }
-        function moveDrag2(cx, cy) {
-          if (!dragging) return;
+        function startDrag(cx, cy) { dragging = true; hasMoved = false; handle.classList.add('dragging'); }
+        function moveDrag(cx, cy) {
+          if (!dragging) return; hasMoved = true;
           const tr = track.getBoundingClientRect();
           stop.pos = Math.max(0, Math.min(1, (cx - tr.left) / tr.width));
           handle.style.left = (stop.pos * 100) + '%';
-          draggedOff = Math.abs(cy - tr.top - tr.height/2) > 50;
-          handle.style.opacity = draggedOff ? '0.3' : '1';
           renderShapeGradBar(); syncShapeGradToGL();
         }
-        function endDrag2() {
-          dragging = false; handle.classList.remove('dragging'); handle.style.opacity = '1';
-          if (draggedOff && window.shaderParams.shapeGradStops.length > 2) {
-            window.shaderParams.shapeGradStops.splice(window.shaderParams.shapeGradStops.indexOf(stop), 1);
-            renderShapeGradHandles(); renderShapeGradBar(); syncShapeGradToGL();
-          }
+        function endDrag() {
+          const wasDrag = hasMoved;
+          dragging = false; hasMoved = false; handle.classList.remove('dragging');
+          if (!wasDrag) {
+            tapCount++;
+            if (tapCount === 1) {
+              tapTimer = setTimeout(() => {
+                tapCount = 0;
+                openColorPicker(stop.hex, (hex, r, g, b) => {
+                  stop.r = r; stop.g = g; stop.b = b; stop.hex = hex;
+                  handle.style.background = hex;
+                  renderShapeGradBar(); syncShapeGradToGL();
+                });
+              }, 250);
+            } else if (tapCount >= 2) {
+              clearTimeout(tapTimer); tapCount = 0;
+              if (stops.length > 2) {
+                stops.splice(stops.indexOf(stop), 1);
+                renderShapeGradHandles(); renderShapeGradBar(); syncShapeGradToGL();
+              }
+            }
+          } else { tapCount = 0; }
         }
+
         handle.addEventListener('mousedown', (e) => {
-          if (e.detail >= 2) return; startDrag2(e.clientX, e.clientY, e);
-          const onM = ev => moveDrag2(ev.clientX, ev.clientY);
-          const onU = () => { endDrag2(); window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
+          e.preventDefault(); e.stopPropagation(); startDrag(e.clientX, e.clientY);
+          const onM = ev => moveDrag(ev.clientX, ev.clientY);
+          const onU = () => { endDrag(); window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
           window.addEventListener('mousemove', onM); window.addEventListener('mouseup', onU);
         });
-        handle.addEventListener('touchstart', (e) => { if (e.touches.length===1) startDrag2(e.touches[0].clientX, e.touches[0].clientY, e); }, {passive:false});
-        handle.addEventListener('touchmove', (e) => { e.preventDefault(); if(e.touches.length===1) moveDrag2(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-        handle.addEventListener('touchend', () => endDrag2());
+        handle.addEventListener('touchstart', (e) => {
+          if (e.touches.length !== 1) return;
+          e.preventDefault(); e.stopPropagation();
+          startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+        handle.addEventListener('touchmove', (e) => {
+          e.preventDefault(); if (e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+        handle.addEventListener('touchend', (e) => { e.preventDefault(); endDrag(); }, {passive: false});
+
         track.appendChild(handle);
       });
     }
