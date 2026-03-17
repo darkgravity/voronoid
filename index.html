@@ -903,8 +903,8 @@
         const sel = document.getElementById('selFlavor');
         if (!sel || sel.options.length === 0) return;
         let idx = sel.selectedIndex;
-        if (dx < 0) idx = Math.min(idx + 1, sel.options.length - 1);
-        else idx = Math.max(idx - 1, 0);
+        if (dx < 0) idx = (idx + 1) % sel.options.length;
+        else idx = (idx - 1 + sel.options.length) % sel.options.length;
         if (idx !== sel.selectedIndex) {
           sel.selectedIndex = idx;
           loadFlavor(sel.value);
