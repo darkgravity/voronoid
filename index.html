@@ -528,12 +528,20 @@
         <button id="btn-fx" onclick="toggleFlip('x')">Flip X</button>
         <button id="btn-fy" onclick="toggleFlip('y')">Flip Y</button>
         <button id="btn-snapgrid" onclick="toggleSnapGrid()">Snap To Grid</button>
+        <button id="btn-fast" onclick="toggleFastMode()">Fast</button>
       </div>
       <div id="snapgrid-controls" style="display:none">
         <div class="row">
           <label>Grid Unit</label>
           <input type="range" id="sGridUnit" min="10" max="500" step="1" value="50">
           <span class="val" id="vGridUnit">50</span>
+        </div>
+      </div>
+      <div id="fast-controls" style="display:none">
+        <div class="row">
+          <label>Resolution</label>
+          <input type="range" id="sRenderRes" min="1" max="16" step="1" value="2">
+          <span class="val" id="vRenderRes">1/2</span>
         </div>
       </div>
 
@@ -809,6 +817,8 @@
       spring: 0,
       snapGrid: false,
       gridUnit: 50,
+      fastMode: false,
+      renderRes: 2,
       showDots: false,
       dotRadius: 0.008,
       colorSeed: 0,
@@ -1133,6 +1143,13 @@
       window.shaderDirty = true;
     }
 
+    function toggleFastMode() {
+      window.shaderParams.fastMode = !window.shaderParams.fastMode;
+      document.getElementById('btn-fast').classList.toggle('active', window.shaderParams.fastMode);
+      document.getElementById('fast-controls').style.display = window.shaderParams.fastMode ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
     function togglePixelate() {
       window.shaderParams.pixelate = !window.shaderParams.pixelate;
       document.getElementById('btn-pixelate').classList.toggle('active', window.shaderParams.pixelate);
@@ -1388,6 +1405,12 @@
       setSlider('sDotRadius', p.dotRadius, 'vDotRadius', v => v.toFixed(3));
       setToggle('btn-snapgrid', p.snapGrid);
       setVis('snapgrid-controls', p.snapGrid);
+      setToggle('btn-fast', p.fastMode);
+      setVis('fast-controls', p.fastMode);
+      var resSlider = el('sRenderRes');
+      var resDisp = el('vRenderRes');
+      if (resSlider && p.renderRes) { resSlider.value = p.renderRes; }
+      if (resDisp && p.renderRes) { resDisp.textContent = p.renderRes === 1 ? 'Full' : '1/' + p.renderRes; }
       setToggle('btn-banding', p.banding);
       setVis('banding-controls', p.banding);
       setToggle('btn-band-random', p.bandRandomize);
@@ -1468,6 +1491,18 @@
     wire('sSy',      'vSy',      'sy',           v => v.toFixed(2));
     wire('sSpring',  'vSpring',  'spring',       v => v.toFixed(1));
     wire('sGridUnit','vGridUnit','gridUnit',     v => Math.round(v));
+
+    // Resolution slider — custom wire with fraction display
+    (function() {
+      const slider = document.getElementById('sRenderRes');
+      const display = document.getElementById('vRenderRes');
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value);
+        window.shaderParams.renderRes = v;
+        display.textContent = v === 1 ? 'Full' : '1/' + v;
+        window.shaderDirty = true;
+      });
+    })();
     wire('sOutline', 'vOutline', 'outlineWidth', v => v.toFixed(1));
     wire('sDotRadius','vDotRadius','dotRadius', v => v.toFixed(3));
     wire('sPixelW',  'vPixelW',  'pixelW',       v => Math.round(v));

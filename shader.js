@@ -20,12 +20,14 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
                  || (window.innerWidth <= 768 && 'ontouchstart' in window);
 window.isMobile = isMobile;
 
-// On mobile, render at reduced resolution to maintain performance
+function isFast() { return isMobile || (window.shaderParams && window.shaderParams.fastMode); }
+
 const renderScale = isMobile ? 0.5 : 1.0;
+let currentRenderScale = renderScale;
 
 let curW = 0, curH = 0;
 function syncSize() {
-  const dpr = (window.devicePixelRatio || 1) * renderScale;
+  const dpr = (window.devicePixelRatio || 1) * currentRenderScale;
   const w = (canvas.clientWidth  * dpr) | 0;
   const h = (canvas.clientHeight * dpr) | 0;
   if (w === curW && h === curH) return false;
@@ -387,8 +389,23 @@ Promise.all([
     requestAnimationFrame(render);
     frameCount++;
 
-    // animation
+    // Check if fast mode changed — force resize to update resolution
     const p = window.shaderParams;
+    const resDivisor = isFast() ? (p.renderRes || 2) : 1;
+    const wantScale = 1.0 / resDivisor;
+    if (wantScale !== currentRenderScale) {
+      currentRenderScale = wantScale;
+      curW = 0; curH = 0;
+    }
+
+    // resize check
+    if (syncSize()) {
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      rebuildFBO();
+      window.shaderDirty = true;
+    }
+
+    // animation
     if (p.animating) {
       if (lastRenderTime > 0) {
         const dt = (now - lastRenderTime) / 1000.0;
@@ -400,8 +417,8 @@ Promise.all([
       }
       lastRenderTime = now;
       window.shaderDirty = true;
-      // On mobile, skip every other frame to maintain responsiveness
-      if (isMobile && (frameCount % 2 !== 0)) return;
+      // In fast mode, skip every other frame to maintain responsiveness
+      if (isFast() && (frameCount % 2 !== 0)) return;
     } else {
       lastRenderTime = 0;
     }
@@ -454,8 +471,8 @@ Promise.all([
 
     const groups = p.groups;
     const groupsOn = p.groupsEnabled !== false;
-    const maxGroups = groupsOn ? (isMobile ? Math.min(groups.length, 2) : groups.length) : 0;
-    const maxPoints = isMobile ? Math.min(p.points, 20) : p.points;
+    const maxGroups = groupsOn ? (isFast() ? Math.min(groups.length, 2) : groups.length) : 0;
+    const maxPoints = isFast() ? Math.min(p.points, 20) : p.points;
     gl.uniform1i(sNumPoints, maxPoints);
     gl.uniform1i(sGroupCount, maxGroups);
     for (let g = 0; g < 8; g++) {
