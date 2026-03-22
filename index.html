@@ -15,7 +15,6 @@
       background: rgba(20,20,20,0.92);
       border-right: 1px solid rgba(255,255,255,0.1);
       display: flex; flex-direction: column;
-      overflow: hidden;
       transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
       z-index: 10;
     }
@@ -28,46 +27,47 @@
 
     #ui-toggle {
       position: fixed; top: 12px; left: 12px;
-      width: 28px; height: 28px; border-radius: 50%;
-      background: rgba(20,20,20,0.92); border: 1px solid rgba(255,255,255,0.2);
-      color: rgba(255,255,255,0.7); font-size: 13px;
+      width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(20,20,20,0.92); border: 1px solid rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.5);
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; z-index: 100;
       transition: opacity 0.2s;
       opacity: 0; pointer-events: none;
     }
+    #ui-toggle:hover { background: rgba(30,30,30,0.95); color: rgba(255,255,255,0.8); border-color: rgba(255,255,255,0.25); }
     #ui-toggle.visible { opacity: 1; pointer-events: all; }
 
     #ui-collapse {
-      display: flex; align-items: center; justify-content: flex-end;
-      padding: 8px 10px 4px; flex-shrink: 0;
+      display: flex; align-items: center;
+      padding: 8px 10px 6px; flex-shrink: 0; gap: 4px;
     }
     #btn-collapse {
-      width: 24px; height: 24px; border-radius: 50%;
-      background: transparent; border: 1px solid rgba(255,255,255,0.15);
-      color: rgba(255,255,255,0.5); font-size: 12px;
+      width: 32px; height: 32px; min-width: 32px; border-radius: 50%;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.45);
       display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
+      cursor: pointer; flex-shrink: 0; padding: 0;
     }
-    #btn-collapse:hover { background: rgba(255,255,255,0.08); }
+    #btn-collapse:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
 
     /* Mobile close button — hidden on desktop */
     #btn-mobile-close {
       display: none;
-      position: absolute; top: 8px; right: 12px;
-      width: 36px; height: 36px; border-radius: 50%;
-      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25);
-      color: rgba(255,255,255,0.8); cursor: pointer;
+      width: 34px; height: 34px; min-width: 34px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.6); cursor: pointer;
       align-items: center; justify-content: center; padding: 0;
-      z-index: 200;
+      flex-shrink: 0;
     }
 
     .section-title {
-      color: rgba(255,255,255,0.35); font-size: 10px; letter-spacing: 0.1em;
-      text-transform: uppercase; margin: 14px 0 6px;
+      color: rgba(255,255,255,0.35); font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase; margin: 14px 0 6px;
     }
 
-    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.03); }
 
     label {
       color: rgba(255,255,255,0.45); font-size: 11px;
@@ -78,7 +78,7 @@
 
     .val { color: #fff; font-size: 11px; width: 38px; text-align: right; flex-shrink: 0; }
 
-    .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+    .btn-row { display: flex; gap: 0; margin-bottom: 4px; }
 
     button {
       padding: 4px 12px; border-radius: 4px;
@@ -94,12 +94,12 @@
 
     /* ── Segmented button bar ───────────────────── */
     .seg-bar {
-      display: inline-flex; border-radius: 8px; overflow: hidden;
+      display: flex; border-radius: 8px; overflow: hidden;
       border: 1px solid rgba(255,255,255,0.18); margin-bottom: 4px;
     }
     .seg-bar button {
-      border: none; border-radius: 0; margin: 0;
-      padding: 5px 14px; font-size: 11px;
+      flex: 1; border: none; border-radius: 0; margin: 0;
+      padding: 5px 8px; font-size: 11px;
       background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5);
       border-right: 1px solid rgba(255,255,255,0.12);
       min-height: 28px;
@@ -111,6 +111,46 @@
     /* Shape icon buttons */
     .seg-bar button.shape-icon { padding: 4px 8px; min-width: 32px; }
     .seg-bar button.shape-icon svg { display: block; }
+
+
+
+    /* ── Action bar (header) ────────────────────── */
+    #action-bar {
+      display: flex; gap: 4px; align-items: center;
+    }
+    .action-icon {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 50%; color: rgba(255,255,255,0.45); padding: 0;
+      cursor: pointer; transition: all 0.15s; display: flex;
+      align-items: center; justify-content: center;
+      width: 32px; height: 32px; flex-shrink: 0;
+    }
+    .action-icon:hover { color: rgba(255,255,255,0.8); border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); }
+    .action-icon:active { background: rgba(255,255,255,0.15); }
+
+    /* ── Tab bar ────────────────────────────────── */
+
+    .tab-bar {
+      display: flex; gap: 0; margin: 8px 0 4px;
+      background: rgba(255,255,255,0.04); border-radius: 8px;
+      padding: 3px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      flex: 1; min-width: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2px;
+      padding: 7px 2px 5px;
+      background: none; border: none; color: rgba(255,255,255,0.3);
+      cursor: pointer; border-radius: 6px;
+      transition: all 0.15s; font-size: 7px; font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .tab-btn:hover { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.04); }
+    .tab-btn.active { color: #fff; background: rgba(255,255,255,0.1); }
+    .tab-btn svg { opacity: 0.5; transition: opacity 0.15s; }
+    .tab-btn.active svg { opacity: 1; }
+.tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
     .divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 8px 0; }
 
@@ -142,14 +182,7 @@
       opacity: 0; cursor: pointer; border: none; padding: 0;
     }
 
-    #groups-header {
-      display: flex; align-items: center; justify-content: space-between;
-      margin: 14px 0 8px;
-    }
-    #groups-header span {
-      color: rgba(255,255,255,0.35); font-size: 10px; letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
+
 
     .group-card {
       background: rgba(255,255,255,0.04);
@@ -171,20 +204,45 @@
     .group-body .row label { width: 70px; }
     .drag-handle { color: rgba(255,255,255,0.25); font-size: 14px; cursor: grab; padding: 0 2px; }
 
+
+    /* ── Toggle header (label + toggle switch) ──── */
+    .toggle-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 0 0 10px; padding: 0;
+    }
+    .toggle-header .toggle-label {
+      color: rgba(255,255,255,0.35); font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    /* Disabled overlay for untoggled controls */
+    .controls-disabled {
+      opacity: 0.3; pointer-events: none;
+    }
     .toggle-active {
-      width: 34px; height: 20px; border-radius: 10px;
-      background: rgba(255,255,255,0.12); border: none;
-      position: relative; cursor: pointer; flex-shrink: 0; padding: 0;
-      transition: background 0.15s;
-      vertical-align: middle;
+      width: 44px !important; height: 26px !important; min-width: 44px; min-height: 26px;
+      max-width: 44px; max-height: 26px;
+      border-radius: 13px !important;
+      background: rgba(255,255,255,0.15) !important; border: none !important;
+      position: relative; cursor: pointer; flex-shrink: 0; flex-grow: 0;
+      padding: 0 !important; margin: 0; line-height: 0; font-size: 0;
+      transition: background 0.2s;
+      -webkit-appearance: none; appearance: none;
+      box-sizing: content-box !important;
+      outline: none;
+      display: inline-block;
+      overflow: hidden;
     }
+    .toggle-active:hover { background: rgba(255,255,255,0.2) !important; }
     .toggle-active::after {
-      content: ''; position: absolute; top: 2px; left: 2px;
-      width: 16px; height: 16px; border-radius: 50%;
-      background: rgba(255,255,255,0.4); transition: transform 0.15s, background 0.15s;
+      content: ''; position: absolute; top: 3px; left: 3px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: rgba(255,255,255,0.5); transition: transform 0.2s, background 0.2s;
+      box-sizing: border-box;
     }
-    .toggle-active.on { background: #4a9eff; }
-    .toggle-active.on::after { transform: translateX(14px); background: #fff; }
+
+
+    .toggle-active.on { background: #4a9eff !important; }
+    .toggle-active.on::after { transform: translateX(18px); background: #fff; }
 
     select {
       flex: 1; background: #1a1a1a; color: #ccc;
@@ -206,6 +264,20 @@
       padding: 0; transition: background 0.15s;
     }
     #btn-fullscreen:hover { background: rgba(60,60,60,0.8); }
+
+    /* ── Recording indicator ────────────────────── */
+    #rec-indicator {
+      display: none; position: fixed; top: 14px; left: 14px; z-index: 100;
+      background: rgba(0,0,0,0.6); border-radius: 6px; padding: 6px 12px;
+      color: #fff; font-size: 12px; font-weight: 600;
+      align-items: center; gap: 6px; backdrop-filter: blur(6px);
+    }
+    #rec-indicator.visible { display: flex; }
+    #rec-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: #f44;
+      animation: recBlink 1s infinite;
+    }
+    @keyframes recBlink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
     /* ── Mobile floating controls ───────────────── */
     #mobile-float {
@@ -260,13 +332,18 @@
       #ui.hidden { transform: translateY(100%); }
 
       #ui-collapse {
-        justify-content: flex-end; padding: 6px 12px 4px;
-        position: relative; min-height: 44px;
+        padding: 8px 12px 6px; min-height: 48px;
       }
-      #btn-collapse { display: none; }
-      #btn-mobile-close { display: flex; }
+      #btn-collapse { display: none !important; }
+      #btn-mobile-close { display: flex !important; }
+      .action-icon { width: 36px; height: 36px; }
 
       #ui-scroll { padding: 8px 16px 24px; }
+
+    .tab-bar { margin: 4px 0; padding: 2px; }
+      .tab-btn { padding: 5px 1px 3px; font-size: 7px; }
+      .tab-btn svg { width: 18px; height: 18px; }
+      #action-bar { gap: 5px; }
 
       #ui-toggle {
         top: auto; bottom: 12px; left: 50%; transform: translateX(-50%);
@@ -324,9 +401,21 @@
       .group-body { padding: 10px 12px; }
       .group-body .row label { width: 65px; }
 
-      .toggle-active { width: 36px; height: 20px; border-radius: 10px; }
-      .toggle-active::after { width: 16px; height: 16px; }
-      .toggle-active.on::after { transform: translateX(16px); }
+  
+    /* ── Toggle header (label + toggle switch) ──── */
+    .toggle-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 0 0 10px; padding: 0;
+    }
+    .toggle-header .toggle-label {
+      color: rgba(255,255,255,0.35); font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    /* Disabled overlay for untoggled controls */
+    .controls-disabled {
+      opacity: 0.3; pointer-events: none;
+    }
+      /* toggle same on all devices */
 
       #groups-header { margin: 16px 0 10px; }
     }
@@ -388,6 +477,7 @@
 </head>
 <body>
   <canvas id="glCanvas"></canvas>
+  <video id="cameraVideo" playsinline autoplay muted style="display:none"></video>
 
   <!-- Custom color picker overlay -->
   <div id="color-picker-overlay" onclick="if(event.target===this)closeColorPicker()">
@@ -414,6 +504,7 @@
   </div>
 
   <!-- Fullscreen button (top-right, always visible) -->
+  <div id="rec-indicator"><div id="rec-dot"></div><span id="rec-text">REC 0:00</span></div>
   <button id="btn-fullscreen" onclick="toggleFullscreen()" title="Fullscreen">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
@@ -422,7 +513,7 @@
 
   <!-- Mobile floating controls (visible when panel is hidden) -->
   <div id="mobile-float">
-    <button id="btn-float-save" onclick="saveImage()" title="Save Image">
+    <button id="btn-float-save" onclick="saveImage();return false" title="Save Image">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
     <button id="btn-float-play" onclick="togglePlay()">
@@ -434,21 +525,60 @@
     </button>
   </div>
 
-  <div id="ui-toggle" onclick="toggleUI()">&#9654;</div>
+  <div id="ui-toggle" onclick="toggleUI()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9,6 15,12 9,18"/></svg>
+  </div>
 
   <div id="ui">
     <div id="ui-collapse">
-      <button id="btn-collapse" onclick="toggleUI()">&#9664;</button>
+      <div id="action-bar">
+        <button class="action-icon" onclick="saveImage();return false" title="Save Image">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </button>
+        <button class="action-icon" id="btn-video" onclick="toggleVideoPanel()" title="Record Video">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="14" height="14" rx="2"/><polygon points="22,7 17,10.5 17,13.5 22,17"/></svg>
+        </button>
+        <button class="action-icon" onclick="saveConfig();return false" title="Export JSON">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+        </button>
+        <button class="action-icon" onclick="loadConfig()" title="Import JSON">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        </button>
+      </div>
+      <div style="flex:1"></div>
+      <button id="btn-collapse" onclick="toggleUI()">
+        <svg id="collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15,6 9,12 15,18"/></svg>
+      </button>
       <button id="btn-mobile-close" onclick="toggleUI()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>
       </button>
     </div>
     <div id="ui-scroll">
 
-      <div class="btn-row" style="margin-bottom:4px">
-        <button onclick="saveConfig()">Save</button>
-        <button onclick="loadConfig()">Load</button>
-        <button onclick="saveImage()">Image</button>
+
+      <div id="video-panel" style="display:none">
+        <div class="row">
+          <label>Length</label>
+          <input type="range" id="sVideoLen" min="1" max="10" step="0.5" value="3">
+          <span class="val" id="vVideoLen">3 min</span>
+        </div>
+        <div class="row">
+          <label>Format</label>
+          <select id="selVideoFmt">
+            <option value="webm-hq" selected>WebM HQ (50 Mbps)</option>
+            <option value="png-zip">PNG Sequence (ZIP)</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button id="btn-record" onclick="startRecording()">Record</button>
+          <button id="btn-cancel-record" onclick="cancelRecording()" style="display:none">Cancel</button>
+        </div>
+        <div id="video-progress" style="display:none">
+          <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:6px;margin:6px 0;overflow:hidden">
+            <div id="video-bar" style="background:#4a9eff;height:100%;width:0%;transition:width 0.1s"></div>
+          </div>
+          <div id="video-status" style="color:rgba(255,255,255,0.5);font-size:10px;text-align:center"></div>
+        </div>
       </div>
       <div id="player-strip">
         <button id="btn-play" onclick="togglePlay()">
@@ -457,6 +587,12 @@
         </button>
         <input type="range" id="sSpeed" min="1" max="120" step="1" value="10">
         <span class="val" id="vSpeed">10</span>
+        <select id="selFps" onchange="window.shaderParams.fps=parseInt(this.value);window.shaderDirty=true" style="width:60px;flex-shrink:0">
+          <option value="12">12 fps</option>
+          <option value="25">25 fps</option>
+          <option value="30" selected>30 fps</option>
+          <option value="60">60 fps</option>
+        </select>
       </div>
       <div class="row">
         <label>Flavor</label>
@@ -465,11 +601,54 @@
       </div>
       <input type="file" id="configFileInput" accept=".json" style="display:none" onchange="handleConfigLoad(event)">
 
+      <!-- ── Tab Bar ── -->
+      <div class="tab-bar" id="tabBar">
+        <button class="tab-btn active" onclick="switchTab('general')" id="tab-general">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4M4.2 19.8l2.8-2.8M17 7l2.8-2.8"/></svg>
+        </button>
+        <button class="tab-btn" onclick="switchTab('color')" id="tab-color">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="8" r="2.5"/><circle cx="8" cy="14" r="2.5"/><circle cx="16" cy="14" r="2.5"/></svg>
+        </button>
+        <button class="tab-btn" onclick="switchTab('banding')" id="tab-banding">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="4" x2="21" y2="4"/><line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="16" x2="21" y2="16"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
+        </button>
+        <button class="tab-btn" onclick="switchTab('pixelate')" id="tab-pixelate">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="6" height="6"/><rect x="9" y="2" width="6" height="6"/><rect x="16" y="2" width="6" height="6"/><rect x="2" y="9" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/><rect x="16" y="9" width="6" height="6"/><rect x="2" y="16" width="6" height="6"/><rect x="9" y="16" width="6" height="6"/><rect x="16" y="16" width="6" height="6"/></svg>
+        </button>
+        <button class="tab-btn" onclick="switchTab('opacity')" id="tab-opacity">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7" opacity="0.5"/><rect x="3" y="14" width="7" height="7" opacity="0.5"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button class="tab-btn" onclick="switchTab('noise')" id="tab-noise">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="16" r="4"/><circle cx="19" cy="18" r="2.5"/></svg>
+        </button>
+        <button class="tab-btn" onclick="switchTab('grading')" id="tab-grading">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="8" cy="14" r="2"/><circle cx="16" cy="14" r="2"/></svg>
+        </button>
+      </div>
+
+      <div class="tab-panel active" id="panel-general">
+      <div class="divider"></div>
+      <div class="section-title">Source</div>
+      <div class="seg-bar">
+        <button id="btn-src-voronoi" class="active" onclick="setSource('voronoi')">Voronoi</button>
+        <button id="btn-src-camera" onclick="setSource('camera')">Camera</button>
+      </div>
+
+      <!-- Camera controls (hidden by default) -->
+      <div id="camera-controls" style="display:none">
+        <div class="btn-row" style="margin-top:6px">
+          <button id="btn-cam-flip" onclick="flipCamera()">Flip Camera</button>
+        </div>
+      </div>
+
+      <!-- Voronoi-only sections -->
+      <div id="voronoi-sections">
       <div class="divider"></div>
       <div class="section-title">Metric</div>
       <div class="seg-bar">
         <button id="btn-chebyshev" class="active" onclick="setMode(0)">Chebyshev</button>
         <button id="btn-manhattan" onclick="setMode(1)">Manhattan</button>
+        <button id="btn-circuit" onclick="setMode(2)">Circuit</button>
       </div>
 
       <div class="divider"></div>
@@ -482,7 +661,7 @@
       </div>
       <div class="row">
         <label>Seed</label>
-        <input type="range" id="sSeed" min="0" max="100" step="1" value="0">
+        <input type="range" id="sSeed" min="0" max="1000" step="1" value="0">
         <span class="val" id="vSeed">0</span>
       </div>
 
@@ -521,14 +700,25 @@
       </div>
 
       <div class="divider"></div>
-      <div class="section-title">Mirror</div>
-      <div class="btn-row">
-        <button id="btn-mx" class="active" onclick="toggleMirror('x')">Mirror X</button>
-        <button id="btn-my" class="active" onclick="toggleMirror('y')">Mirror Y</button>
-        <button id="btn-fx" onclick="toggleFlip('x')">Flip X</button>
-        <button id="btn-fy" onclick="toggleFlip('y')">Flip Y</button>
-        <button id="btn-snapgrid" onclick="toggleSnapGrid()">Snap To Grid</button>
-        <button id="btn-fast" onclick="toggleFastMode()">Fast</button>
+      <div class="seg-bar">
+        <button id="btn-mx" class="active" onclick="toggleMirror('x')" title="Mirror X">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2,2"/><polyline points="8,8 4,12 8,16"/><polyline points="16,8 20,12 16,16"/></svg>
+        </button>
+        <button id="btn-my" class="active" onclick="toggleMirror('y')" title="Mirror Y">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2,2"/><polyline points="8,8 12,4 16,8"/><polyline points="8,16 12,20 16,16"/></svg>
+        </button>
+        <button id="btn-fx" onclick="toggleFlip('x')" title="Flip X">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21"/><polygon points="4,7 10,12 4,17"/><polygon points="20,7 14,12 20,17" fill="currentColor"/></svg>
+        </button>
+        <button id="btn-fy" onclick="toggleFlip('y')" title="Flip Y">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><polygon points="7,4 12,10 17,4"/><polygon points="7,20 12,14 17,20" fill="currentColor"/></svg>
+        </button>
+        <button id="btn-snapgrid" onclick="toggleSnapGrid()" title="Snap Grid">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="4" x2="4" y2="20"/><line x1="10" y1="4" x2="10" y2="20"/><line x1="16" y1="4" x2="16" y2="20"/><line x1="4" y1="4" x2="20" y2="4"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="10" r="2" fill="currentColor"/></svg>
+        </button>
+        <button id="btn-fast" onclick="toggleFastMode()" title="Fast Mode">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>
+        </button>
       </div>
       <div id="snapgrid-controls" style="display:none">
         <div class="row">
@@ -545,50 +735,9 @@
         </div>
       </div>
 
-      <div class="divider"></div>
-      <div class="section-title">Color</div>
-
-      <div class="seg-bar" style="margin-bottom:8px">
-        <button id="btn-cm-grad" class="active" onclick="setColorMode(0)">Gradient</button>
-        <button id="btn-cm-hue" onclick="setColorMode(1)">Hue</button>
-      </div>
-
-      <!-- Hue mode controls -->
-      <div id="hue-controls" style="display:none">
-        <div class="row">
-          <label>Hue Seed</label>
-          <input type="range" id="sColorSeed" min="0" max="100" step="1" value="0">
-          <span class="val" id="vColorSeed">0</span>
-        </div>
-        <div class="row">
-          <label>Bright Min</label>
-          <input type="range" id="sValueMin" min="0" max="2" step="0.01" value="0.75">
-          <span class="val" id="vValueMin">0.75</span>
-        </div>
-        <div class="row">
-          <label>Bright Max</label>
-          <input type="range" id="sValueMax" min="0" max="2" step="0.01" value="1.00">
-          <span class="val" id="vValueMax">1.00</span>
-        </div>
-      </div>
-
-      <!-- Gradient mode controls -->
-      <div id="gradient-controls">
-        <div class="row">
-          <label>Seed</label>
-          <input type="range" id="sGradientSeed" min="0" max="100" step="1" value="0">
-          <span class="val" id="vGradientSeed">0</span>
-        </div>
-        <div class="grad-editor" id="gradEditor">
-          <canvas class="grad-bar" id="gradBar" height="24"></canvas>
-          <div class="grad-track" id="gradTrack"></div>
-          <div class="grad-hint">tap bar to add · tap handle to pick color · double-tap to delete</div>
-        </div>
-      </div>
 
       <div class="divider"></div>
       <div class="section-title">Display</div>
-
       <div class="btn-row">
         <button id="btn-outline" onclick="toggleOutline()">Outline</button>
         <button id="btn-dots" onclick="toggleDots()">Show Dots</button>
@@ -610,16 +759,116 @@
         </div>
       </div>
 
-      <div class="divider"></div>
-      <div class="section-title">Banding</div>
-      <div class="btn-row">
-        <button id="btn-banding" class="active" onclick="toggleBanding()">Add Banding</button>
+      </div><!-- end voronoi-sections -->
+      </div><!-- end panel-general -->
+
+      <div class="tab-panel" id="panel-color">
+
+      <div class="seg-bar" style="margin-bottom:8px">
+        <button id="btn-cm-raw" style="display:none" onclick="setColorMode(2)">Raw</button>
+        <button id="btn-cm-grad" class="active" onclick="setColorMode(0)">Gradient</button>
+        <button id="btn-cm-hue" onclick="setColorMode(1)">Hue</button>
+      </div>
+
+      <!-- Raw camera preprocessing controls -->
+      <div id="raw-controls" style="display:none">
+        <div class="row">
+          <label>Hue</label>
+          <input type="range" id="sCamHue" min="0" max="360" step="1" value="0">
+          <span class="val" id="vCamHue">0°</span>
+        </div>
+        <div class="row">
+          <label>Saturation</label>
+          <input type="range" id="sCamSat" min="0" max="2" step="0.01" value="1.00">
+          <span class="val" id="vCamSat">1.00</span>
+        </div>
+        <div class="row">
+          <label>Value</label>
+          <input type="range" id="sCamVal" min="0" max="2" step="0.01" value="1.00">
+          <span class="val" id="vCamVal">1.00</span>
+        </div>
+        <div class="row">
+          <label>Contrast</label>
+          <input type="range" id="sCamContrast" min="0" max="2" step="0.01" value="1.00">
+          <span class="val" id="vCamContrast">1.00</span>
+        </div>
+      </div>
+
+      <!-- Hue mode controls -->
+      <div id="hue-controls" style="display:none">
+        <div class="row">
+          <label>Hue Seed</label>
+          <input type="range" id="sColorSeed" min="0" max="1000" step="1" value="0">
+          <span class="val" id="vColorSeed">0</span>
+        </div>
+        <div class="row">
+          <label>Bright Min</label>
+          <input type="range" id="sValueMin" min="0" max="2" step="0.01" value="0.75">
+          <span class="val" id="vValueMin">0.75</span>
+        </div>
+        <div class="row">
+          <label>Bright Max</label>
+          <input type="range" id="sValueMax" min="0" max="2" step="0.01" value="1.00">
+          <span class="val" id="vValueMax">1.00</span>
+        </div>
+      </div>
+
+      <!-- Gradient mode controls -->
+      <div id="gradient-controls">
+        <div class="row">
+          <label>Seed</label>
+          <input type="range" id="sGradientSeed" min="0" max="1000" step="1" value="0">
+          <span class="val" id="vGradientSeed">0</span>
+        </div>
+        <div class="grad-editor" id="gradEditor">
+          <canvas class="grad-bar" id="gradBar" height="24"></canvas>
+          <div class="grad-track" id="gradTrack"></div>
+          <div class="grad-hint">tap bar to add · tap handle to pick color · double-tap to delete</div>
+        </div>
+      </div>
+
+      </div><!-- end panel-color -->
+
+      <div class="tab-panel" id="panel-banding">
+      <div id="voronoi-sections-2">
+      <div class="toggle-header">
+        <span class="toggle-label">Banding</span>
+        <button class="toggle-active" id="btn-banding-toggle" onclick="toggleBanding()"></button>
       </div>
       <div id="banding-controls">
+        <div class="seg-bar" style="margin-bottom:6px">
+          <button id="btn-bandangle-all" class="active" onclick="setBandAngleMode(0)">All Sides</button>
+          <button id="btn-bandangle-random" onclick="setBandAngleMode(1)">Random</button>
+        </div>
+        <div id="bandangle-seed-row" class="row" style="display:none">
+          <label>Angle Seed</label>
+          <input type="range" id="sBandAngleSeed" min="0" max="1000" step="1" value="0">
+          <span class="val" id="vBandAngleSeed">0</span>
+        </div>
         <div class="row">
           <label>Bands</label>
-          <input type="range" id="sBandCount" min="1" max="20" step="1" value="12">
+          <input type="range" id="sBandCount" min="1" max="100" step="1" value="12">
           <span class="val" id="vBandCount">12</span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-randcount" onclick="toggleRandBandCount()">Random Count</button>
+        </div>
+        <div id="randcount-controls" style="display:none">
+          <div class="row">
+            <label>Count Min</label>
+            <input type="range" id="sRandCountMin" min="0" max="1" step="0.01" value="0.2">
+            <span class="val" id="vRandCountMin">0.20</span>
+          </div>
+          <div class="row">
+            <label>Count Max</label>
+            <input type="range" id="sRandCountMax" min="0" max="1" step="0.01" value="1.0">
+            <span class="val" id="vRandCountMax">1.00</span>
+          </div>
+          <div class="row">
+            <label>Count Seed</label>
+            <input type="range" id="sRandCountSeed" min="0" max="1000" step="1" value="0">
+            <span class="val" id="vRandCountSeed">0</span>
+          </div>
         </div>
         <div class="row">
           <label>Strength</label>
@@ -668,12 +917,15 @@
         </div>
       </div>
 
-      <div class="divider"></div>
-      <div class="section-title">Pixelate</div>
-      <div class="btn-row">
-        <button id="btn-pixelate" onclick="togglePixelate()">Pixelate</button>
+      </div><!-- end voronoi-sections-2 -->
+      </div><!-- end panel-banding -->
+
+      <div class="tab-panel" id="panel-pixelate">
+      <div class="toggle-header">
+        <span class="toggle-label">Pixelate</span>
+        <button class="toggle-active" id="btn-pixelate-toggle" onclick="togglePixelate()"></button>
       </div>
-      <div id="pixelate-controls" style="display:none">
+      <div id="pixelate-controls">
         <div class="row">
           <label>Pixel Width</label>
           <input type="range" id="sPixelW" min="1" max="50" step="1" value="23">
@@ -686,11 +938,23 @@
         </div>
         <div class="row">
           <label>Scale</label>
-          <input type="range" id="sPixelScale" min="0.1" max="2" step="0.01" value="1.00">
+          <input type="range" id="sPixelScale" min="0.1" max="10" step="0.01" value="1.00">
           <span class="val" id="vPixelScale">1.00</span>
         </div>
         <div class="btn-row">
           <button id="btn-oblique" onclick="toggleOblique()">Oblique</button>
+        </div>
+
+        <div class="section-title" style="margin-top:6px">Quadtree</div>
+        <div class="btn-row">
+          <button id="btn-quadtree" onclick="toggleQuadtree()">Quadtree</button>
+        </div>
+        <div id="quadtree-controls" style="display:none">
+          <div class="row">
+            <label>Steps</label>
+            <input type="range" id="sQuadSteps" min="2" max="5" step="1" value="4">
+            <span class="val" id="vQuadSteps">4</span>
+          </div>
         </div>
 
         <div class="section-title" style="margin-top:6px">Weave</div>
@@ -698,8 +962,14 @@
           <button id="btn-weave-none" class="active" onclick="setWeaveMode(0)">None</button>
           <button id="btn-weave-brick" onclick="setWeaveMode(1)">Brick</button>
           <button id="btn-weave-weave" onclick="setWeaveMode(2)">Weave</button>
+          <button id="btn-weave-hex" onclick="setWeaveMode(3)">Hex</button>
+          <button id="btn-weave-oct" onclick="setWeaveMode(4)">Oct</button>
+        </div>
+        <div id="gen-diamond-row" class="btn-row" style="display:none;margin-top:4px">
+          <button id="btn-gen-diamond" onclick="toggleGenDiamond()">Generate Diamond</button>
         </div>
 
+        <div id="shape-section">
         <div class="section-title" style="margin-top:6px">Shape</div>
         <div class="seg-bar">
           <button id="btn-shape-none" class="shape-icon active" onclick="setPixelShape(0)" title="None">
@@ -717,11 +987,18 @@
           <button id="btn-shape-pointed" class="shape-icon" onclick="setPixelShape(4)" title="Chevron">
             <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="5,4 19,4 22,12 19,20 5,20 2,12" fill="currentColor"/></svg>
           </button>
+          <button id="btn-shape-hex" class="shape-icon" onclick="setPixelShape(5)" title="Hexagon">
+            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="6,2 18,2 23,12 18,22 6,22 1,12" fill="currentColor"/></svg>
+          </button>
+          <button id="btn-shape-oct" class="shape-icon" onclick="setPixelShape(6)" title="Octagon">
+            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8" fill="currentColor"/></svg>
+          </button>
+        </div>
         </div>
         <div id="shape-controls" style="display:none">
           <div class="row">
             <label>Margin</label>
-            <input type="range" id="sShapeMargin" min="1" max="10" step="1" value="3">
+            <input type="range" id="sShapeMargin" min="0" max="10" step="1" value="3">
             <span class="val" id="vShapeMargin">3</span>
           </div>
           <div class="row">
@@ -751,6 +1028,24 @@
           <div class="seg-bar">
             <button id="btn-sgdir-h" class="active" onclick="setShapeGradDir(0)">Horizontal</button>
             <button id="btn-sgdir-v" onclick="setShapeGradDir(1)">Vertical</button>
+            <button id="btn-sgdir-r" onclick="setShapeGradDir(2)">Radial</button>
+          </div>
+          <div id="radial-controls" style="display:none">
+            <div class="row">
+              <label>Center X</label>
+              <input type="range" id="sRadialX" min="-1" max="1" step="0.01" value="0">
+              <span class="val" id="vRadialX">0.00</span>
+            </div>
+            <div class="row">
+              <label>Center Y</label>
+              <input type="range" id="sRadialY" min="-1" max="1" step="0.01" value="0">
+              <span class="val" id="vRadialY">0.00</span>
+            </div>
+            <div class="row">
+              <label>Scale</label>
+              <input type="range" id="sRadialScale" min="0" max="2" step="0.01" value="1">
+              <span class="val" id="vRadialScale">1.00</span>
+            </div>
           </div>
           <div class="row">
             <label>Blend</label>
@@ -769,8 +1064,9 @@
         </div>
       </div>
 
-      <div class="divider"></div>
-      <div class="section-title">Color Grading</div>
+      </div><!-- end panel-pixelate -->
+
+      <div class="tab-panel" id="panel-grading">
       <div class="row">
         <label>Hue</label>
         <input type="range" id="sGradeHue" min="0" max="360" step="1" value="0">
@@ -792,23 +1088,85 @@
         <span class="val" id="vGradeContrast">1.68</span>
       </div>
 
-      <div id="groups-header">
-        <span>Secondary Noise</span>
+      </div><!-- end panel-grading -->
+
+      <div class="tab-panel" id="panel-opacity">
+      <div class="toggle-header">
+        <span class="toggle-label">Opacity Pattern</span>
         <div style="display:flex;gap:4px;align-items:center">
-          <button class="toggle-active" id="btn-groups-toggle" onclick="toggleAllGroups()"></button>
+          <button class="small" onclick="addOpPattern()">+ Add</button>
+          <button class="toggle-active" id="btn-oppattern-toggle" onclick="toggleAllOpPatterns()"></button>
+        </div>
+      </div>
+      <div id="oppattern-controls">
+      <div id="oppattern-seed-row" class="row">
+        <label>Seed</label>
+        <input type="range" id="sOpPatSeed" min="0" max="1000" step="1" value="0">
+        <span class="val" id="vOpPatSeed">0</span>
+      </div>
+      <div id="oppattern-mode-row">
+        <div class="row">
+          <label>Group By</label>
+          <div class="seg-bar">
+            <button id="btn-oppat-color" class="active" onclick="setOpPatMode(0)">Color</button>
+            <button id="btn-oppat-shape" onclick="setOpPatMode(1)">Shape</button>
+          </div>
+        </div>
+      </div>
+      <div id="oppattern-list"></div>
+      </div><!-- end oppattern-controls -->
+
+      </div><!-- end panel-opacity -->
+
+      <div class="tab-panel" id="panel-noise">
+      <div class="toggle-header">
+        <span class="toggle-label">Secondary Noise</span>
+        <div style="display:flex;gap:4px;align-items:center">
           <button class="small" onclick="addGroup()">+ Add</button>
+          <button class="toggle-active" id="btn-groups-toggle" onclick="toggleAllGroups()"></button>
         </div>
       </div>
 
+      <div id="groups-controls">
       <div id="groups-list"></div>
+      </div><!-- end groups-controls -->
+      </div><!-- end panel-noise -->
 
     </div>
   </div>
 
   <script>
+
+    function switchTab(name) {
+      var panels = document.querySelectorAll('.tab-panel');
+      var btns = document.querySelectorAll('.tab-btn');
+      for(var i=0;i<panels.length;i++) panels[i].classList.remove('active');
+      for(var i=0;i<btns.length;i++) btns[i].classList.remove('active');
+      var p = document.getElementById('panel-' + name);
+      var b = document.getElementById('tab-' + name);
+      if(p) p.classList.add('active');
+      if(b) b.classList.add('active');
+      // Re-render gradient bar when switching to color tab (canvas needs visible width)
+      if(name === 'color') {
+        setTimeout(function() {
+          if(typeof renderGradientBar === 'function') renderGradientBar();
+          if(typeof renderGradientHandles === 'function') renderGradientHandles();
+          if(typeof renderShapeGradBar === 'function') renderShapeGradBar();
+        }, 50);
+      }
+      if(name === 'pixelate') {
+        setTimeout(function() {
+          if(typeof renderShapeGradBar === 'function') renderShapeGradBar();
+          if(typeof renderShapeGradHandles === 'function') renderShapeGradHandles();
+        }, 50);
+      }
+    }
+
     let groupIdCounter = 6;
 
     window.shaderParams = {
+      source: 'voronoi',
+      cameraFacing: 'user',
       mode: 0, points: 14, seed: 0,
       rot: 117, dx: 0, dy: 0,
       sx: 1, sy: 1,
@@ -822,12 +1180,14 @@
       showDots: false,
       dotRadius: 0.008,
       colorSeed: 0,
-      colorMode: 0,  // 0=gradient, 1=hue
+      colorMode: 0,
+      camHue: 0, camSat: 1, camVal: 1, camContrast: 1,  // 0=gradient, 1=hue
       gradientSeed: 0,
       valueMin: 0.75,
       valueMax: 1.0,
       animating: false,
       animSpeed: 10,
+      fps: 30,
       outlineWidth: 0.0,
       outlineColor: '#000000',
       showOutline: false,
@@ -840,8 +1200,14 @@
       shapeBleed: 0,
       pixelScale: 1.0,
       oblique: false,
+      quadSteps: 4,
+      quadEnabled: false,
+      genDiamond: false,
       shapeGradOpacity: 0.2,
       shapeGradDir: 0,
+      radialCenterX: 0,
+      radialCenterY: 0,
+      radialScale: 1,
       embossBlendMode: 8,  // 0=horizontal, 1=vertical
       shapeGradStops: [
         { pos: 0.0, r: 0,   g: 0,   b: 0,   hex: '#000000' },
@@ -857,6 +1223,12 @@
       bandStrength: 1.0,
       bandRandomize: false,
       bandBlendMode: 0,
+      bandAngleMode: 0,
+      bandAngleSeed: 0,
+      bandRandCount: false,
+      bandRandCountMin: 0.2,
+      bandRandCountMax: 1.0,
+      bandRandCountSeed: 0,
       bandHueStrength: 0.0,
       bandHueRadius: 0.5,
       bandOutline: false,   // 0=overlay,1=multiply,2=screen,3=soft light,4=hard light,5=dodge,6=burn,7=linear light,8=normal
@@ -872,6 +1244,16 @@
         { pos: 1.0,  r: 240, g: 200, b: 180, hex: '#f0c8b4' }
       ],
       groupsEnabled: true,
+      opPatterns: [
+        { id: 1, active: true, grid: [[0,1],[1,0]], hueShift: 0.04, hueOpacity: 0.92 },
+        { id: 2, active: true, grid: [[1],[0]], hueShift: 0.05, hueOpacity: 1.0 },
+        { id: 3, active: true, grid: [[1,0],[1,0]], hueShift: 0.17, hueOpacity: 1.0 },
+        { id: 4, active: true, grid: [[1,0,1],[0,1,0]], hueShift: 0.55, hueOpacity: 1.0 }
+      ],
+      opPatternIdCounter: 4,
+      opPatternsEnabled: true,
+      opPatternSeed: 0,
+      opPatternMode: 0,
       groups: [
         { id: 1, active: true, dx:  0.27, dy:  0.18, scale: 1.12, threshold: 0.000, seed:   1 },
         { id: 2, active: true, dx:  0.27, dy:  0.18, scale: 1.22, threshold: 0.000, seed:   1 },
@@ -934,6 +1316,67 @@
         document.documentElement.requestFullscreen().catch(() => {});
       } else {
         document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    /* ── Source switching (Voronoi / Camera) ───────────────────── */
+    let cameraStream = null;
+
+    function setSource(src) {
+      window.shaderParams.source = src;
+      document.getElementById('btn-src-voronoi').classList.toggle('active', src === 'voronoi');
+      document.getElementById('btn-src-camera').classList.toggle('active', src === 'camera');
+      document.getElementById('voronoi-sections').style.display = src === 'voronoi' ? '' : 'none';
+      document.getElementById('btn-cm-raw').style.display = src === 'camera' ? '' : 'none';
+      document.getElementById('voronoi-sections-2').style.display = src === 'voronoi' ? '' : 'none';
+      document.getElementById('camera-controls').style.display = src === 'camera' ? '' : 'none';
+
+      if (src === 'camera') {
+        startCamera();
+      } else {
+        stopCamera();
+      }
+      window.shaderDirty = true;
+    }
+
+    function startCamera() {
+      const facing = window.shaderParams.cameraFacing || 'user';
+      const constraints = {
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      };
+      navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+        cameraStream = stream;
+        const video = document.getElementById('cameraVideo');
+        video.srcObject = stream;
+        video.play();
+        window.cameraVideo = video;
+        // Wait for video to actually have frames before rendering
+        video.addEventListener('loadeddata', () => {
+          window.shaderDirty = true;
+        }, { once: true });
+        window.shaderDirty = true;
+      }).catch(err => {
+        console.error('Camera error:', err);
+        alert('Could not access camera. Check permissions.');
+        setSource('voronoi');
+      });
+    }
+
+    function stopCamera() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      window.cameraVideo = null;
+    }
+
+    function flipCamera() {
+      const p = window.shaderParams;
+      p.cameraFacing = p.cameraFacing === 'user' ? 'environment' : 'user';
+      if (p.source === 'camera') {
+        stopCamera();
+        startCamera();
       }
     }
 
@@ -1091,18 +1534,20 @@
       window.shaderParams.mode = m;
       document.getElementById('btn-chebyshev').classList.toggle('active', m === 0);
       document.getElementById('btn-manhattan').classList.toggle('active', m === 1);
+      document.getElementById('btn-circuit').classList.toggle('active', m === 2);
       window.shaderDirty = true;
     }
 
     function setColorMode(m) {
       window.shaderParams.colorMode = m;
+      document.getElementById('btn-cm-raw').classList.toggle('active', m === 2);
       document.getElementById('btn-cm-grad').classList.toggle('active', m === 0);
       document.getElementById('btn-cm-hue').classList.toggle('active', m === 1);
       document.getElementById('gradient-controls').style.display = m === 0 ? '' : 'none';
       document.getElementById('hue-controls').style.display = m === 1 ? '' : 'none';
+      document.getElementById('raw-controls').style.display = m === 2 ? '' : 'none';
       if (m === 0) {
-        renderGradientBar();
-        syncGradientToGL();
+        setTimeout(function(){ renderGradientBar(); syncGradientToGL(); }, 50);
       }
       window.shaderDirty = true;
     }
@@ -1152,8 +1597,10 @@
 
     function togglePixelate() {
       window.shaderParams.pixelate = !window.shaderParams.pixelate;
-      document.getElementById('btn-pixelate').classList.toggle('active', window.shaderParams.pixelate);
-      document.getElementById('pixelate-controls').style.display = window.shaderParams.pixelate ? '' : 'none';
+      var on = window.shaderParams.pixelate;
+      document.getElementById('btn-pixelate-toggle').classList.toggle('on', on);
+      var ctrl = document.getElementById('pixelate-controls');
+      if(ctrl) ctrl.classList.toggle('controls-disabled', !on);
       window.shaderDirty = true;
     }
 
@@ -1163,11 +1610,32 @@
       window.shaderDirty = true;
     }
 
+    function toggleQuadtree() {
+      window.shaderParams.quadEnabled = !window.shaderParams.quadEnabled;
+      document.getElementById('btn-quadtree').classList.toggle('active', window.shaderParams.quadEnabled);
+      document.getElementById('quadtree-controls').style.display = window.shaderParams.quadEnabled ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
     function setWeaveMode(m) {
       window.shaderParams.weaveMode = m;
       document.getElementById('btn-weave-none').classList.toggle('active', m === 0);
       document.getElementById('btn-weave-brick').classList.toggle('active', m === 1);
       document.getElementById('btn-weave-weave').classList.toggle('active', m === 2);
+      document.getElementById('btn-weave-hex').classList.toggle('active', m === 3);
+      document.getElementById('btn-weave-oct').classList.toggle('active', m === 4);
+      var isAutoShape = m === 3 || m === 4;
+      var ss = document.getElementById('shape-section');
+      ss.style.opacity = isAutoShape ? '0.35' : '1';
+      ss.style.pointerEvents = isAutoShape ? 'none' : '';
+      if(isAutoShape) document.getElementById('shape-controls').style.display = '';
+      document.getElementById('gen-diamond-row').style.display = m === 4 ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleGenDiamond() {
+      window.shaderParams.genDiamond = !window.shaderParams.genDiamond;
+      document.getElementById('btn-gen-diamond').classList.toggle('active', window.shaderParams.genDiamond);
       window.shaderDirty = true;
     }
 
@@ -1178,6 +1646,8 @@
       document.getElementById('btn-shape-diamond').classList.toggle('active', s === 2);
       document.getElementById('btn-shape-square').classList.toggle('active', s === 3);
       document.getElementById('btn-shape-pointed').classList.toggle('active', s === 4);
+      document.getElementById('btn-shape-hex').classList.toggle('active', s === 5);
+      document.getElementById('btn-shape-oct').classList.toggle('active', s === 6);
       document.getElementById('shape-controls').style.display = s > 0 ? '' : 'none';
       if (s > 0) { renderShapeGradBar(); renderShapeGradHandles(); }
       window.shaderDirty = true;
@@ -1187,6 +1657,8 @@
       window.shaderParams.shapeGradDir = d;
       document.getElementById('btn-sgdir-h').classList.toggle('active', d === 0);
       document.getElementById('btn-sgdir-v').classList.toggle('active', d === 1);
+      document.getElementById('btn-sgdir-r').classList.toggle('active', d === 2);
+      document.getElementById('radial-controls').style.display = d === 2 ? '' : 'none';
       window.shaderDirty = true;
     }
 
@@ -1199,8 +1671,25 @@
 
     function toggleBanding() {
       window.shaderParams.banding = !window.shaderParams.banding;
-      document.getElementById('btn-banding').classList.toggle('active', window.shaderParams.banding);
-      document.getElementById('banding-controls').style.display = window.shaderParams.banding ? '' : 'none';
+      var on = window.shaderParams.banding;
+      document.getElementById('btn-banding-toggle').classList.toggle('on', on);
+      var ctrl = document.getElementById('banding-controls');
+      if(ctrl) ctrl.classList.toggle('controls-disabled', !on);
+      window.shaderDirty = true;
+    }
+
+    function setBandAngleMode(m) {
+      window.shaderParams.bandAngleMode = m;
+      document.getElementById('btn-bandangle-all').classList.toggle('active', m === 0);
+      document.getElementById('btn-bandangle-random').classList.toggle('active', m === 1);
+      document.getElementById('bandangle-seed-row').style.display = m === 1 ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleRandBandCount() {
+      window.shaderParams.bandRandCount = !window.shaderParams.bandRandCount;
+      document.getElementById('btn-randcount').classList.toggle('active', window.shaderParams.bandRandCount);
+      document.getElementById('randcount-controls').style.display = window.shaderParams.bandRandCount ? '' : 'none';
       window.shaderDirty = true;
     }
 
@@ -1217,9 +1706,60 @@
     }
 
     function toggleAllGroups() {
-      const p = window.shaderParams;
-      p.groupsEnabled = !p.groupsEnabled;
-      document.getElementById('btn-groups-toggle').classList.toggle('on', p.groupsEnabled);
+      window.shaderParams.groupsEnabled = !(window.shaderParams.groupsEnabled !== false);
+      var on = window.shaderParams.groupsEnabled;
+      document.getElementById('btn-groups-toggle').classList.toggle('on', on);
+      var ctrl = document.getElementById('groups-controls');
+      if(ctrl) ctrl.classList.toggle('controls-disabled', !on);
+      // Disable/enable all card toggles visually but remember individual states
+      document.querySelectorAll('#groups-list .group-card').forEach(function(card) {
+        var toggle = card.querySelector('.toggle-active');
+        var body = card.querySelector('.group-body');
+        if(!on) {
+          if(body) body.classList.add('controls-disabled');
+          if(toggle) toggle.style.pointerEvents = 'none';
+        } else {
+          if(toggle) {
+            toggle.style.pointerEvents = '';
+            var isOn = toggle.classList.contains('on');
+            if(body) body.classList.toggle('controls-disabled', !isOn);
+          }
+        }
+      });
+      window.shaderDirty = true;
+    }
+
+    function toggleAllOpPatterns() {
+      window.shaderParams.opPatternsEnabled = !window.shaderParams.opPatternsEnabled;
+      var on = window.shaderParams.opPatternsEnabled;
+      document.getElementById('btn-oppattern-toggle').classList.toggle('on', on);
+      var ctrl = document.getElementById('oppattern-controls');
+      if(ctrl) ctrl.classList.toggle('controls-disabled', !on);
+      // Disable/enable all card toggles visually but remember individual states
+      document.querySelectorAll('#oppattern-list .group-card').forEach(function(card) {
+        var toggle = card.querySelector('.toggle-active');
+        var body = card.querySelector('.group-body');
+        if(!on) {
+          // Master off: disable all cards visually
+          if(body) body.classList.add('controls-disabled');
+          if(toggle) toggle.style.pointerEvents = 'none';
+        } else {
+          // Master on: restore individual states
+          if(toggle) {
+            toggle.style.pointerEvents = '';
+            var isOn = toggle.classList.contains('on');
+            if(body) body.classList.toggle('controls-disabled', !isOn);
+          }
+        }
+      });
+      uploadAllOpPatterns();
+      window.shaderDirty = true;
+    }
+
+    function setOpPatMode(m) {
+      window.shaderParams.opPatternMode = m;
+      document.getElementById('btn-oppat-color').classList.toggle('active', m === 0);
+      document.getElementById('btn-oppat-shape').classList.toggle('active', m === 1);
       window.shaderDirty = true;
     }
 
@@ -1244,32 +1784,213 @@
       window.shaderDirty = true;
     }
 
+    // Safe file download — prevents page reload on mobile
+    function downloadBlob(blob, filename) {
+      // Try navigator.share for mobile (if supported and user wants it)
+      // Otherwise use standard download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none';
+      a.href = url;
+      a.download = filename;
+      a.target = '_self';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      // Use setTimeout to break out of any event handler chain
+      setTimeout(() => {
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 500);
+      }, 0);
+    }
+
     function saveConfig() {
       const p = JSON.parse(JSON.stringify(window.shaderParams));
       delete p.animating;
       const json = JSON.stringify(p, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'voronoi-config.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
+      // Use octet-stream to force download instead of browser trying to open JSON
+      const blob = new Blob([json], { type: 'application/octet-stream' });
+      downloadBlob(blob, 'voronoi-config.json');
+      return false; // prevent any default action
     }
 
     function saveImage() {
-      // Force a render to ensure canvas has current content
       window.shaderDirty = true;
       requestAnimationFrame(() => {
         const canvas = document.getElementById('glCanvas');
         canvas.toBlob(function(blob) {
           if (!blob) return;
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = 'voronoi-' + Date.now() + '.png';
-          a.click();
-          URL.revokeObjectURL(a.href);
+          downloadBlob(blob, 'voronoi-' + Date.now() + '.png');
         }, 'image/png');
       });
+      return false;
+    }
+
+    /* ── Video Recording ──────────────────────────────────────────── */
+    let videoRecorder = null, videoChunks = [], videoRecording = false, videoCancelFlag = false;
+
+    function toggleVideoPanel() {
+      const panel = document.getElementById('video-panel');
+      const btn = document.getElementById('btn-video');
+      const visible = panel.style.display !== 'none';
+      panel.style.display = visible ? 'none' : '';
+      btn.classList.toggle('active', !visible);
+    }
+
+    // Wire video sliders
+    document.getElementById('sVideoLen').addEventListener('input', function() {
+      document.getElementById('vVideoLen').textContent = parseFloat(this.value) + ' min';
+    });
+    // FPS dropdown handled inline via onchange
+
+    function startRecording() {
+      const format = document.getElementById('selVideoFmt').value;
+      const canvas = document.getElementById('glCanvas');
+      const p = window.shaderParams;
+      const lengthMin = parseFloat(document.getElementById('sVideoLen').value);
+      const fps = p.fps || 30;
+      const totalFrames = Math.round(lengthMin * 60 * fps);
+      const wasAnimating = p.animating;
+      const savedRot = p.rot;
+
+      videoCancelFlag = false;
+      videoRecording = true;
+      p.animating = false;
+
+      // Show progress UI
+      document.getElementById('btn-record').style.display = 'none';
+      document.getElementById('btn-cancel-record').style.display = '';
+      document.getElementById('video-progress').style.display = '';
+      document.getElementById('rec-indicator').classList.add('visible');
+      const startTime = Date.now();
+
+      function updateProgress(frame) {
+        const pct = ((frame / totalFrames) * 100).toFixed(1);
+        document.getElementById('video-bar').style.width = pct + '%';
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        const estTotal = frame > 0 ? (elapsedSec / frame) * totalFrames : 0;
+        document.getElementById('video-status').textContent =
+          formatTime(elapsedSec) + ' / ~' + formatTime(estTotal) + '  (' + pct + '%)';
+        document.getElementById('rec-text').textContent = 'REC ' + formatTime(elapsedSec);
+      }
+
+      function finish() {
+        videoRecording = false;
+        resetVideoUI();
+        p.rot = savedRot;
+        if (!wasAnimating) p.animating = false;
+        window.shaderDirty = true;
+      }
+
+      if (format === 'webm-hq') {
+        // ── WebM HQ via MediaRecorder at 50 Mbps ──
+        const stream = canvas.captureStream(0);
+        const mimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+        let mime = '';
+        for (const m of mimeTypes) { if (MediaRecorder.isTypeSupported(m)) { mime = m; break; } }
+        if (!mime) { alert('WebM recording not supported. Try PNG Sequence or use Chrome.'); finish(); return; }
+
+        videoChunks = [];
+        videoRecorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 50000000 });
+        videoRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunks.push(e.data); };
+        videoRecorder.onstop = () => {
+          if (!videoCancelFlag) {
+            const blob = new Blob(videoChunks, { type: mime });
+            downloadBlob(blob, 'voronoi-' + Date.now() + '.webm');
+          }
+          finish();
+        };
+        videoRecorder.start();
+
+        let frame = 0;
+        const dt = 1.0 / fps;
+        function renderWebM() {
+          if (videoCancelFlag || frame >= totalFrames) { videoRecorder.stop(); return; }
+          p.rot = (savedRot + p.animSpeed * frame * dt) % 360;
+          window.shaderDirty = true;
+          // Double rAF: first rAF triggers the GL draw, second rAF ensures GPU finished
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              const track = stream.getVideoTracks()[0];
+              if (track.requestFrame) track.requestFrame();
+              frame++;
+              updateProgress(frame);
+              setTimeout(renderWebM, 0);
+            });
+          });
+        }
+        renderWebM();
+
+      } else if (format === 'png-zip') {
+        // ── PNG Sequence → ZIP (lossless) ──
+        if (typeof JSZip === 'undefined') {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+          script.onload = () => recordPngSequence(canvas, totalFrames, fps, savedRot, p, startTime, updateProgress, finish);
+          script.onerror = () => { alert('Failed to load JSZip library. Check network connection.'); finish(); };
+          document.head.appendChild(script);
+        } else {
+          recordPngSequence(canvas, totalFrames, fps, savedRot, p, startTime, updateProgress, finish);
+        }
+      }
+    }
+
+    function recordPngSequence(canvas, totalFrames, fps, savedRot, p, startTime, updateProgress, finish) {
+      const zip = new JSZip();
+      const folder = zip.folder('frames');
+      const padLen = totalFrames.toString().length;
+      let frame = 0;
+      const dt = 1.0 / fps;
+
+      function renderPng() {
+        if (videoCancelFlag || frame >= totalFrames) {
+          if (videoCancelFlag) { finish(); return; }
+          document.getElementById('video-status').textContent = 'Compressing ZIP...';
+          zip.generateAsync({ type: 'blob', compression: 'STORED' }).then(blob => {
+            downloadBlob(blob, 'voronoi-frames-' + Date.now() + '.zip');
+            finish();
+          });
+          return;
+        }
+
+        p.rot = (savedRot + p.animSpeed * frame * dt) % 360;
+        window.shaderDirty = true;
+
+        // Double rAF to ensure GPU fully renders before PNG capture
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            canvas.toBlob(blob => {
+              const name = 'frame_' + String(frame).padStart(padLen, '0') + '.png';
+              folder.file(name, blob);
+              frame++;
+              updateProgress(frame);
+              setTimeout(renderPng, 0);
+            }, 'image/png');
+          });
+        });
+      }
+      renderPng();
+    }
+
+    function cancelRecording() {
+      videoCancelFlag = true;
+    }
+
+    function resetVideoUI() {
+      document.getElementById('btn-record').style.display = '';
+      document.getElementById('btn-cancel-record').style.display = 'none';
+      document.getElementById('video-progress').style.display = 'none';
+      document.getElementById('video-bar').style.width = '0%';
+      document.getElementById('video-status').textContent = '';
+      document.getElementById('rec-indicator').classList.remove('visible');
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return m + ':' + s.toString().padStart(2, '0');
     }
 
     function loadConfig() {
@@ -1359,8 +2080,17 @@
       }
 
       // Mode
+      // Source
+      var src = p.source || 'voronoi';
+      setToggle('btn-src-voronoi', src === 'voronoi');
+      setToggle('btn-src-camera', src === 'camera');
+      setVis('voronoi-sections', src === 'voronoi');
+      setVis('voronoi-sections-2', src === 'voronoi');
+      setVis('camera-controls', src === 'camera');
+
       setToggle('btn-chebyshev', p.mode === 0);
       setToggle('btn-manhattan', p.mode === 1);
+      setToggle('btn-circuit', p.mode === 2);
 
       // Sliders
       setSlider('sPoints', p.points, 'vPoints', v => Math.round(v));
@@ -1394,6 +2124,9 @@
       setSlider('sGradeVal', p.gradeVal, 'vGradeVal', v => v.toFixed(2));
       setSlider('sGradeContrast', p.gradeContrast, 'vGradeContrast', v => v.toFixed(2));
       setSlider('sSpeed', p.animSpeed, 'vSpeed', v => Math.round(v));
+      var fpsSel = document.getElementById('selFps');
+      if(fpsSel) fpsSel.value = String(p.fps || 30);
+      setSlider('sOpPatSeed', p.opPatternSeed, 'vOpPatSeed', v => Math.round(v));
 
       // Toggles
       setToggle('btn-mx', p.mirrorX);
@@ -1411,30 +2144,79 @@
       var resDisp = el('vRenderRes');
       if (resSlider && p.renderRes) { resSlider.value = p.renderRes; }
       if (resDisp && p.renderRes) { resDisp.textContent = p.renderRes === 1 ? 'Full' : '1/' + p.renderRes; }
-      setToggle('btn-banding', p.banding);
-      setVis('banding-controls', p.banding);
+      var bt = el('btn-banding-toggle');
+      if(bt) bt.classList.toggle('on', p.banding);
+      var bc = el('banding-controls');
+      if(bc) bc.classList.toggle('controls-disabled', !p.banding);
+      setToggle('btn-bandangle-all', (p.bandAngleMode || 0) === 0);
+      setToggle('btn-bandangle-random', (p.bandAngleMode || 0) === 1);
+      setVis('bandangle-seed-row', (p.bandAngleMode || 0) === 1);
+      setSlider('sBandAngleSeed', p.bandAngleSeed, 'vBandAngleSeed', v => Math.round(v));
+      setToggle('btn-randcount', p.bandRandCount);
+      setVis('randcount-controls', p.bandRandCount);
+      setSlider('sRandCountMin', p.bandRandCountMin, 'vRandCountMin', v => v.toFixed(2));
+      setSlider('sRandCountMax', p.bandRandCountMax, 'vRandCountMax', v => v.toFixed(2));
+      setSlider('sRandCountSeed', p.bandRandCountSeed, 'vRandCountSeed', v => Math.round(v));
+
       setToggle('btn-band-random', p.bandRandomize);
       setToggle('btn-band-outline', p.bandOutline);
-      setToggle('btn-pixelate', p.pixelate);
-      setVis('pixelate-controls', p.pixelate);
+      var pt = el('btn-pixelate-toggle');
+      if(pt) pt.classList.toggle('on', p.pixelate);
+      var pc = el('pixelate-controls');
+      if(pc) pc.classList.toggle('controls-disabled', !p.pixelate);
       setToggle('btn-oblique', p.oblique);
+      setToggle('btn-quadtree', p.quadEnabled);
+      setVis('quadtree-controls', p.quadEnabled);
+      setToggle('btn-gen-diamond', p.genDiamond);
+      setVis('gen-diamond-row', p.weaveMode === 4);
+      setSlider('sQuadSteps', p.quadSteps, 'vQuadSteps', v => Math.round(v));
 
       // Groups master toggle
+      var gc = el('groups-controls');
+      if(gc) gc.classList.toggle('controls-disabled', !(p.groupsEnabled !== false));
       var gt = el('btn-groups-toggle');
       if (gt) gt.classList.toggle('on', p.groupsEnabled !== false);
+      var gl2 = el('groups-list');
+      if (gl2) gl2.style.display = p.groupsEnabled !== false ? '' : 'none';
+
+      // Opacity patterns master toggle
+      var oc = el('oppattern-controls');
+      if(oc) oc.classList.toggle('controls-disabled', !p.opPatternsEnabled);
+      var ot = el('btn-oppattern-toggle');
+      if (ot) ot.classList.toggle('on', p.opPatternsEnabled !== false);
+      var ol = el('oppattern-list');
+      if (ol) ol.style.display = p.opPatternsEnabled !== false ? '' : 'none';
+      var osr = el('oppattern-seed-row');
+      if (osr) osr.style.display = p.opPatternsEnabled !== false ? '' : 'none';
+      var omr = el('oppattern-mode-row');
+      if (omr) omr.style.display = p.opPatternsEnabled !== false ? '' : 'none';
+      setToggle('btn-oppat-color', (p.opPatternMode || 0) === 0);
+      setToggle('btn-oppat-shape', (p.opPatternMode || 0) === 1);
       setToggle('btn-outline', p.showOutline);
       setVis('outline-controls', p.showOutline);
 
       // Color mode
+      setToggle('btn-cm-raw', p.colorMode === 2);
       setToggle('btn-cm-grad', p.colorMode === 0);
       setToggle('btn-cm-hue', p.colorMode === 1);
       setVis('gradient-controls', p.colorMode === 0);
       setVis('hue-controls', p.colorMode === 1);
+      setVis('raw-controls', p.colorMode === 2);
+      setSlider('sCamHue', p.camHue, 'vCamHue', v => Math.round(v) + '°');
+      setSlider('sCamSat', p.camSat, 'vCamSat', v => v.toFixed(2));
+      setSlider('sCamVal', p.camVal, 'vCamVal', v => v.toFixed(2));
+      setSlider('sCamContrast', p.camContrast, 'vCamContrast', v => v.toFixed(2));
 
       // Weave
       setToggle('btn-weave-none', p.weaveMode === 0);
       setToggle('btn-weave-brick', p.weaveMode === 1);
       setToggle('btn-weave-weave', p.weaveMode === 2);
+      setToggle('btn-weave-hex', p.weaveMode === 3);
+      setToggle('btn-weave-oct', p.weaveMode === 4);
+      var isAutoShape = p.weaveMode === 3 || p.weaveMode === 4;
+      var ss = el('shape-section');
+      if(ss) { ss.style.opacity = isAutoShape ? '0.35' : '1'; ss.style.pointerEvents = isAutoShape ? 'none' : ''; }
+      if(isAutoShape) setVis('shape-controls', true);
 
       // Shape
       setToggle('btn-shape-none', p.pixelShape === 0);
@@ -1442,11 +2224,18 @@
       setToggle('btn-shape-diamond', p.pixelShape === 2);
       setToggle('btn-shape-square', p.pixelShape === 3);
       setToggle('btn-shape-pointed', p.pixelShape === 4);
+      setToggle('btn-shape-hex', p.pixelShape === 5);
+      setToggle('btn-shape-oct', p.pixelShape === 6);
       setVis('shape-controls', p.pixelShape > 0);
 
       // Shape gradient dir
       setToggle('btn-sgdir-h', p.shapeGradDir === 0);
       setToggle('btn-sgdir-v', p.shapeGradDir === 1);
+      setToggle('btn-sgdir-r', p.shapeGradDir === 2);
+      setVis('radial-controls', p.shapeGradDir === 2);
+      setSlider('sRadialX', p.radialCenterX, 'vRadialX', v => v.toFixed(2));
+      setSlider('sRadialY', p.radialCenterY, 'vRadialY', v => v.toFixed(2));
+      setSlider('sRadialScale', p.radialScale, 'vRadialScale', v => v.toFixed(2));
 
       // Dropdowns (null-safe)
       var sb = el('selBandBlend'); if (sb) sb.value = p.bandBlendMode || 0;
@@ -1468,6 +2257,10 @@
 
       // Groups
       renderGroups();
+
+      // Opacity patterns
+      renderOpPatterns();
+      setTimeout(() => uploadAllOpPatterns(), 100);
     }
 
     function wire(sliderId, displayId, paramKey, fmt) {
@@ -1505,14 +2298,27 @@
     })();
     wire('sOutline', 'vOutline', 'outlineWidth', v => v.toFixed(1));
     wire('sDotRadius','vDotRadius','dotRadius', v => v.toFixed(3));
+    wire('sOpPatSeed','vOpPatSeed','opPatternSeed', v => Math.round(v));
     wire('sPixelW',  'vPixelW',  'pixelW',       v => Math.round(v));
     wire('sPixelH',  'vPixelH',  'pixelH',       v => Math.round(v));
     wire('sShapeMargin','vShapeMargin','shapeMargin', v => Math.round(v));
     wire('sShapeBleed', 'vShapeBleed', 'shapeBleed',  v => Math.round(v));
     wire('sPixelScale', 'vPixelScale', 'pixelScale',  v => v.toFixed(2));
+    wire('sQuadSteps', 'vQuadSteps', 'quadSteps', v => Math.round(v));
     wire('sShapeGradOpacity','vShapeGradOpacity','shapeGradOpacity', v => v.toFixed(2));
+    wire('sRadialX','vRadialX','radialCenterX', v => v.toFixed(2));
+    wire('sRadialY','vRadialY','radialCenterY', v => v.toFixed(2));
+    wire('sRadialScale','vRadialScale','radialScale', v => v.toFixed(2));
     wire('sGapOpacity','vGapOpacity','gapOpacity', v => v.toFixed(2));
+    wire('sCamHue','vCamHue','camHue', v => Math.round(v) + '°');
+    wire('sCamSat','vCamSat','camSat', v => v.toFixed(2));
+    wire('sCamVal','vCamVal','camVal', v => v.toFixed(2));
+    wire('sCamContrast','vCamContrast','camContrast', v => v.toFixed(2));
     wire('sBandCount',   'vBandCount',   'bandCount',    v => Math.round(v));
+    wire('sBandAngleSeed','vBandAngleSeed','bandAngleSeed', v => Math.round(v));
+    wire('sRandCountMin','vRandCountMin','bandRandCountMin', v => v.toFixed(2));
+    wire('sRandCountMax','vRandCountMax','bandRandCountMax', v => v.toFixed(2));
+    wire('sRandCountSeed','vRandCountSeed','bandRandCountSeed', v => Math.round(v));
     wire('sBandStrength','vBandStrength','bandStrength',  v => v.toFixed(2));
     wire('sBandLumMin',  'vBandLumMin',  'bandLumMin',   v => v.toFixed(2));
     wire('sBandLumMax',  'vBandLumMax',  'bandLumMax',   v => v.toFixed(2));
@@ -1819,6 +2625,139 @@
       return { id: ++groupIdCounter, active: true, dx: 0.27, dy: 0.18, scale: 1.0, threshold: 0.0, seed: 1 };
     }
 
+    /* ── Opacity Pattern Management ──────────────────────────────── */
+    function parseGridStr(str) {
+      return str.trim().split('\n').map(row =>
+        row.split(',').map(v => parseFloat(v.trim()) || 0)
+      );
+    }
+    function gridToStr(grid) {
+      return grid.map(row => row.map(v => v.toFixed(2)).join(',')).join('\n');
+    }
+
+    function addOpPattern() {
+      const p = window.shaderParams;
+      if (p.opPatterns.length >= 4) return;
+      p.opPatternIdCounter = (p.opPatternIdCounter || 0) + 1;
+      p.opPatterns.push({
+        id: p.opPatternIdCounter,
+        active: true,
+        grid: [[0, 0.5], [0.5, 0]],
+        hueShift: 0.1,
+        hueOpacity: 0.5
+      });
+      renderOpPatterns();
+      uploadAllOpPatterns();
+    }
+
+    function removeOpPattern(id) {
+      const p = window.shaderParams;
+      p.opPatterns = p.opPatterns.filter(op => op.id !== id);
+      renderOpPatterns();
+      uploadAllOpPatterns();
+    }
+
+    function uploadAllOpPatterns() {
+      if (window.uploadOpPatterns) {
+        if (window.shaderParams.opPatternsEnabled === false) {
+          window.uploadOpPatterns([]);  // clear texture when master is off
+        } else {
+          const active = window.shaderParams.opPatterns.filter(op => op.active !== false);
+          window.uploadOpPatterns(active);
+        }
+      }
+      window.shaderDirty = true;
+    }
+
+    function renderOpPatterns() {
+      const list = document.getElementById('oppattern-list');
+      list.innerHTML = '';
+      const pats = window.shaderParams.opPatterns;
+
+      pats.forEach((pat, idx) => {
+        const card = document.createElement('div');
+        card.className = 'group-card';
+        card.innerHTML = `
+          <div class="group-header">
+            <span class="g-title">Pattern ${idx + 1}</span>
+            <button class="toggle-active ${pat.active ? 'on' : ''}" data-opid="${pat.id}"></button>
+            <div class="g-actions">
+              <button class="small danger" data-opaction="del" data-opid="${pat.id}">✕</button>
+            </div>
+          </div>
+          <div class="group-body ${pat.active ? '' : 'controls-disabled'}">
+            <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
+              <label style="width:auto;text-align:left">Grid (rows of comma-separated 0-1 values)</label>
+              <textarea data-opid="${pat.id}" data-opkey="grid"
+                style="width:100%;height:60px;background:#1a1a1a;color:#ccc;border:1px solid rgba(255,255,255,0.15);
+                border-radius:4px;font-family:monospace;font-size:11px;padding:6px;resize:vertical"
+              >${gridToStr(pat.grid)}</textarea>
+            </div>
+            <div class="row">
+              <label>Hue Shift</label>
+              <input type="range" min="0" max="1" step="0.01" value="${pat.hueShift}"
+                     data-opid="${pat.id}" data-opkey="hueShift">
+              <span class="val" id="ophs-${pat.id}">${pat.hueShift.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <label>Hue Opacity</label>
+              <input type="range" min="0" max="1" step="0.01" value="${pat.hueOpacity}"
+                     data-opid="${pat.id}" data-opkey="hueOpacity">
+              <span class="val" id="opho-${pat.id}">${pat.hueOpacity.toFixed(2)}</span>
+            </div>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+
+      // Wire toggles
+      list.querySelectorAll('.toggle-active').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = parseInt(btn.dataset.opid);
+          const pat = pats.find(p => p.id === id);
+          if (!pat) return;
+          pat.active = !pat.active;
+          btn.classList.toggle('on', pat.active);
+          const body = btn.closest('.group-card').querySelector('.group-body');
+          if(body) body.classList.toggle('controls-disabled', !pat.active);
+          uploadAllOpPatterns();
+        });
+      });
+
+      // Wire delete
+      list.querySelectorAll('[data-opaction="del"]').forEach(btn => {
+        btn.addEventListener('click', () => removeOpPattern(parseInt(btn.dataset.opid)));
+      });
+
+      // Wire sliders
+      list.querySelectorAll('input[type=range][data-opkey]').forEach(slider => {
+        slider.addEventListener('input', () => {
+          const id = parseInt(slider.dataset.opid);
+          const key = slider.dataset.opkey;
+          const pat = pats.find(p => p.id === id);
+          if (!pat) return;
+          pat[key] = parseFloat(slider.value);
+          const label = document.getElementById(key === 'hueShift' ? 'ophs-' + id : 'opho-' + id);
+          if (label) label.textContent = pat[key].toFixed(2);
+          uploadAllOpPatterns();
+        });
+      });
+
+      // Wire textareas
+      list.querySelectorAll('textarea[data-opkey="grid"]').forEach(ta => {
+        ta.addEventListener('change', () => {
+          const id = parseInt(ta.dataset.opid);
+          const pat = pats.find(p => p.id === id);
+          if (!pat) return;
+          pat.grid = parseGridStr(ta.value);
+          uploadAllOpPatterns();
+        });
+      });
+    }
+
+    window.addOpPattern = addOpPattern;
+    window.removeOpPattern = removeOpPattern;
+
     function addGroup(copyFrom) {
       if (window.shaderParams.groups.length >= 8) return;
       const base = copyFrom || defaultGroup();
@@ -1863,13 +2802,13 @@
         card.innerHTML = `
           <div class="group-header">
             <span class="g-title">Noise ${idx + 1}</span>
-            <button class="toggle-active ${grp.active ? 'on' : ''}" data-id="${grp.id}" style="height:24px;width:40px"></button>
+            <button class="toggle-active ${grp.active ? 'on' : ''}" data-id="${grp.id}"></button>
             <div class="g-actions">
               <button class="small" data-action="dup"  data-id="${grp.id}">⧉</button>
               <button class="small danger" data-action="del" data-id="${grp.id}">✕</button>
             </div>
           </div>
-          <div class="group-body">
+          <div class="group-body ${grp.active ? '' : 'controls-disabled'}">
             <div class="row">
               <label>Displace X</label>
               <input type="range" min="-1" max="1" step="0.01" value="${grp.dx}"
@@ -1913,6 +2852,8 @@
           if (!grp) return;
           grp.active = !grp.active;
           btn.classList.toggle('on', grp.active);
+          const body = btn.closest('.group-card').querySelector('.group-body');
+          if(body) body.classList.toggle('controls-disabled', !grp.active);
           window.shaderDirty = true;
         });
       });
@@ -1957,9 +2898,24 @@
     window.moveGroup   = moveGroup;
 
     renderGroups();
+    renderOpPatterns();
     document.getElementById('btn-groups-toggle').classList.toggle('on', window.shaderParams.groupsEnabled !== false);
+    
+    document.getElementById('btn-oppattern-toggle').classList.toggle('on', window.shaderParams.opPatternsEnabled !== false);
+    
+    
+    
   </script>
 
   <script src="shader.js"></script>
+  <script>
+    // Upload opacity patterns after shader.js creates the texture
+    setTimeout(() => {
+      if (window.uploadOpPatterns) {
+        const active = window.shaderParams.opPatterns.filter(op => op.active !== false);
+        window.uploadOpPatterns(active);
+      }
+    }, 300);
+  </script>
 </body>
 </html>

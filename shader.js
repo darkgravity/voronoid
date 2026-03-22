@@ -214,6 +214,11 @@ Promise.all([
   const sDotRadius      = gl.getUniformLocation(sceneProg, 'uDotRadius');
   const sSpring         = gl.getUniformLocation(sceneProg, 'uSpring');
   const sSnapGrid       = gl.getUniformLocation(sceneProg, 'uSnapGrid');
+  const sPreProcess     = gl.getUniformLocation(sceneProg, 'uPreProcess');
+  const sCamHue         = gl.getUniformLocation(sceneProg, 'uCamHue');
+  const sCamSat         = gl.getUniformLocation(sceneProg, 'uCamSat');
+  const sCamVal         = gl.getUniformLocation(sceneProg, 'uCamVal');
+  const sCamContrast    = gl.getUniformLocation(sceneProg, 'uCamContrast');
   const sColorSeed      = gl.getUniformLocation(sceneProg, 'uColorSeed');
   const sValueMin       = gl.getUniformLocation(sceneProg, 'uValueMin');
   const sValueMax       = gl.getUniformLocation(sceneProg, 'uValueMax');
@@ -221,6 +226,12 @@ Promise.all([
   const sColorMode      = gl.getUniformLocation(sceneProg, 'uColorMode');
   const sGradientTex    = gl.getUniformLocation(sceneProg, 'uGradientTex');
   const sBanding        = gl.getUniformLocation(sceneProg, 'uBanding');
+  const sBandAngleMode  = gl.getUniformLocation(sceneProg, 'uBandAngleMode');
+  const sBandAngleSeed  = gl.getUniformLocation(sceneProg, 'uBandAngleSeed');
+  const sBandRandCount  = gl.getUniformLocation(sceneProg, 'uBandRandCount');
+  const sBandRandCountMin = gl.getUniformLocation(sceneProg, 'uBandRandCountMin');
+  const sBandRandCountMax = gl.getUniformLocation(sceneProg, 'uBandRandCountMax');
+  const sBandRandCountSeed = gl.getUniformLocation(sceneProg, 'uBandRandCountSeed');
   const sBandCount      = gl.getUniformLocation(sceneProg, 'uBandCount');
   const sBandLumMin     = gl.getUniformLocation(sceneProg, 'uBandLumMin');
   const sBandLumMax     = gl.getUniformLocation(sceneProg, 'uBandLumMax');
@@ -250,9 +261,14 @@ Promise.all([
   const ePixelScale   = gl.getUniformLocation(edgeProg, 'uPixelScale');
   const eOblique      = gl.getUniformLocation(edgeProg, 'uOblique');
   const eBandOutline  = gl.getUniformLocation(edgeProg, 'uBandOutline');
+  const eQuadSteps    = gl.getUniformLocation(edgeProg, 'uQuadSteps');
+  const eQuadEnabled  = gl.getUniformLocation(edgeProg, 'uQuadEnabled');
+  const eGenDiamond   = gl.getUniformLocation(edgeProg, 'uGenDiamond');
   const eShapeGradTex = gl.getUniformLocation(edgeProg, 'uShapeGradTex');
   const eShapeGradOpacity = gl.getUniformLocation(edgeProg, 'uShapeGradOpacity');
   const eShapeGradDir = gl.getUniformLocation(edgeProg, 'uShapeGradDir');
+  const eRadialCenter = gl.getUniformLocation(edgeProg, 'uRadialCenter');
+  const eRadialScale  = gl.getUniformLocation(edgeProg, 'uRadialScale');
   const eEmbossBlendMode = gl.getUniformLocation(edgeProg, 'uEmbossBlendMode');
   const eGapColor     = gl.getUniformLocation(edgeProg, 'uGapColor');
   const eGapOpacity   = gl.getUniformLocation(edgeProg, 'uGapOpacity');
@@ -266,6 +282,38 @@ Promise.all([
   const eGradeSat     = gl.getUniformLocation(edgeProg, 'uGradeSat');
   const eGradeVal     = gl.getUniformLocation(edgeProg, 'uGradeVal');
   const eGradeContrast= gl.getUniformLocation(edgeProg, 'uGradeContrast');
+  const eOpPatternCount = gl.getUniformLocation(edgeProg, 'uOpPatternCount');
+  const eOpPatternTex = gl.getUniformLocation(edgeProg, 'uOpPatternTex');
+  const eOpPatternDims = [];
+  for (let i = 0; i < 4; i++) eOpPatternDims.push(gl.getUniformLocation(edgeProg, 'uOpPatternDims['+i+']'));
+  const eOpPatternSeed = gl.getUniformLocation(edgeProg, 'uOpPatternSeed');
+  const eOpPatternMode = gl.getUniformLocation(edgeProg, 'uOpPatternMode');
+
+  // Opacity pattern texture: 64x16, R channel only (LUMINANCE)
+  let opPatternTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, opPatternTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 64, 16, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  window.uploadOpPatterns = function(patterns) {
+    const data = new Uint8Array(64 * 16);
+    if (patterns) {
+      patterns.forEach((pat, idx) => {
+        if (idx >= 4 || !pat.grid) return;
+        const rows = pat.grid;
+        for (let r = 0; r < rows.length && r < 16; r++) {
+          for (let c = 0; c < rows[r].length && c < 16; c++) {
+            data[(r * 64) + (idx * 16) + c] = Math.round(Math.max(0, Math.min(1, rows[r][c])) * 255);
+          }
+        }
+      });
+    }
+    gl.bindTexture(gl.TEXTURE_2D, opPatternTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, data);
+  };
 
   rebuildFBO();
   createGradientTex();
@@ -405,8 +453,14 @@ Promise.all([
       window.shaderDirty = true;
     }
 
-    // animation
+    // animation — throttled to target FPS
     if (p.animating) {
+      const targetFps = p.fps || 30;
+      const frameInterval = 1000.0 / targetFps;
+      if (lastRenderTime > 0 && (now - lastRenderTime) < frameInterval) {
+        // Not time for next frame yet — skip
+        return;
+      }
       if (lastRenderTime > 0) {
         const dt = (now - lastRenderTime) / 1000.0;
         p.rot = (p.rot + p.animSpeed * dt) % 360;
@@ -417,8 +471,6 @@ Promise.all([
       }
       lastRenderTime = now;
       window.shaderDirty = true;
-      // In fast mode, skip every other frame to maintain responsiveness
-      if (isFast() && (frameCount % 2 !== 0)) return;
     } else {
       lastRenderTime = 0;
     }
@@ -429,70 +481,201 @@ Promise.all([
     const H = canvas.height;
 
     // --- pass 1: scene → FBO ---
+    const isCamera = p.source === 'camera' && window.cameraVideo && window.cameraVideo.readyState >= 2;
+
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.viewport(0, 0, W, H);
-    gl.useProgram(sceneProg);
-    bindQuad(sceneProg);
 
-    gl.uniform2f(sRes,       W, H);
-    gl.uniform1i(sMode,      p.mode);
-    gl.uniform1f(sSeed,      p.seed);
-    gl.uniform1f(sRotation,  p.rot * Math.PI / 180.0);
-    gl.uniform2f(sDisplace,  p.dx, p.dy);
-    gl.uniform2f(sScale,     p.sx, p.sy);
-    gl.uniform1i(sMirrorX,   p.mirrorX);
-    gl.uniform1i(sMirrorY,   p.mirrorY);
-    gl.uniform1i(sFlipX,     p.flipX);
-    gl.uniform1i(sFlipY,     p.flipY);
-    gl.uniform1i(sShowDots,  p.showDots ? 1 : 0);
-    gl.uniform1f(sDotRadius, p.dotRadius || 0.008);
-    gl.uniform1f(sSpring,    p.spring);
-    gl.uniform1f(sSnapGrid,  p.snapGrid ? p.gridUnit : 0);
-    gl.uniform1f(sColorSeed, p.colorSeed);
-    gl.uniform1f(sValueMin,  p.valueMin);
-    gl.uniform1f(sValueMax,  p.valueMax);
-    gl.uniform1f(sGradientSeed, p.gradientSeed);
-    gl.uniform1i(sColorMode, p.colorMode);
-
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, gradientTex);
-    gl.uniform1i(sGradientTex, 1);
-
-    // Banding uniforms (applied in fragment shader before pixelation)
-    gl.uniform1i(sBanding,      p.banding ? 1 : 0);
-    gl.uniform1f(sBandCount,    p.bandCount);
-    gl.uniform1f(sBandLumMin,   p.bandLumMin);
-    gl.uniform1f(sBandLumMax,   p.bandLumMax);
-    gl.uniform1f(sBandStrength, p.bandStrength);
-    gl.uniform1i(sBandRandomize, p.bandRandomize ? 1 : 0);
-    gl.uniform1i(sBandBlendMode, p.bandBlendMode);
-    gl.uniform1f(sBandHueStrength, p.bandHueStrength || 0);
-    gl.uniform1f(sBandHueRadius, p.bandHueRadius || 0.5);
-
-    const groups = p.groups;
-    const groupsOn = p.groupsEnabled !== false;
-    const maxGroups = groupsOn ? (isFast() ? Math.min(groups.length, 2) : groups.length) : 0;
-    const maxPoints = isFast() ? Math.min(p.points, 20) : p.points;
-    gl.uniform1i(sNumPoints, maxPoints);
-    gl.uniform1i(sGroupCount, maxGroups);
-    for (let g = 0; g < 8; g++) {
-      if (g < maxGroups) {
-        const grp = groups[g];
-        gl.uniform1i(sGroupActive[g],    grp.active ? 1 : 0);
-        gl.uniform2f(sGroupDisplace[g],  grp.dx, grp.dy);
-        gl.uniform1f(sGroupThreshold[g], grp.threshold);
-        gl.uniform1f(sGroupSeed[g],      grp.seed);
-        gl.uniform1f(sGroupScale[g],     grp.scale);
-      } else {
-        gl.uniform1i(sGroupActive[g],    0);
-        gl.uniform2f(sGroupDisplace[g],  0, 0);
-        gl.uniform1f(sGroupThreshold[g], 0);
-        gl.uniform1f(sGroupSeed[g],      1);
-        gl.uniform1f(sGroupScale[g],     1);
+    if (isCamera) {
+      // Upload video to a separate camera texture
+      if (!window._camTex) {
+        window._camTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, window._camTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       }
-    }
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.bindTexture(gl.TEXTURE_2D, window._camTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, window.cameraVideo);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+      // Compile camera shader on first use
+      if (!window._camProg) {
+        const camVS = `attribute vec2 a_pos;varying vec2 vUV;void main(){vUV=a_pos*0.5+0.5;gl_Position=vec4(a_pos,0,1);}`;
+        const camFS = `precision highp float;
+          uniform sampler2D uCamTex;
+          uniform sampler2D uGradTex;
+          uniform vec2 uCanvasSize;
+          uniform vec2 uVideoSize;
+          uniform int uColorMode;
+          uniform float uCamHue;
+          uniform float uCamSat;
+          uniform float uCamVal;
+          uniform float uCamContrast;
+          uniform int uPreProcess;
+          varying vec2 vUV;
+          vec3 rgb2hsv(vec3 c){float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),d=mx-mn,h=0.0;
+            if(d>1e-4){if(mx==c.r)h=(c.g-c.b)/d+(c.g<c.b?6.0:0.0);else if(mx==c.g)h=(c.b-c.r)/d+2.0;else h=(c.r-c.g)/d+4.0;h/=6.0;}
+            return vec3(clamp(h,0.0,1.0),mx>1e-4?d/mx:0.0,mx);}
+          vec3 hsv2rgb(vec3 c){float h=fract(c.x)*6.0,s=c.y,v=c.z,f=fract(h),p=v*(1.0-s),q=v*(1.0-s*f),t=v*(1.0-s*(1.0-f));
+            int hi=int(floor(h));if(hi>=6)hi=0;
+            if(hi==0)return vec3(v,t,p);if(hi==1)return vec3(q,v,p);if(hi==2)return vec3(p,v,t);
+            if(hi==3)return vec3(p,q,v);if(hi==4)return vec3(t,p,v);return vec3(v,p,q);}
+          void main(){
+            float canvasAR=uCanvasSize.x/uCanvasSize.y;
+            float videoAR=uVideoSize.x/uVideoSize.y;
+            vec2 uv=vUV;
+            if(videoAR>canvasAR){
+              float scale=canvasAR/videoAR;
+              uv.x=uv.x*scale+(1.0-scale)*0.5;
+            } else {
+              float scale=videoAR/canvasAR;
+              uv.y=uv.y*scale+(1.0-scale)*0.5;
+            }
+            vec4 cam=texture2D(uCamTex,uv);
+            vec3 col=cam.rgb;
+            // Pre-process: apply before any color mapping
+            if(uPreProcess==1){
+              vec3 hsv=rgb2hsv(col);
+              hsv.x=fract(hsv.x+uCamHue/360.0);
+              hsv.y=clamp(hsv.y*uCamSat,0.0,1.0);
+              hsv.z=clamp(hsv.z*uCamVal,0.0,1.0);
+              col=hsv2rgb(hsv);
+              col=clamp((col-0.5)*uCamContrast+0.5,0.0,1.0);
+            }
+            // Color mapping (gradient or hue)
+            if(uColorMode==0 || uColorMode==1){
+              float lum=dot(col,vec3(0.299,0.587,0.114));
+              vec3 mapped=texture2D(uGradTex,vec2(lum,0.5)).rgb;
+              col=mapped;
+            }
+            gl_FragColor=vec4(col,1.0);
+          }`;
+        const vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, camVS); gl.compileShader(vs);
+        const fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, camFS); gl.compileShader(fs);
+        window._camProg = gl.createProgram();
+        gl.attachShader(window._camProg, vs);
+        gl.attachShader(window._camProg, fs);
+        gl.linkProgram(window._camProg);
+        window._camLocs = {
+          camTex: gl.getUniformLocation(window._camProg, 'uCamTex'),
+          gradTex: gl.getUniformLocation(window._camProg, 'uGradTex'),
+          canvasSize: gl.getUniformLocation(window._camProg, 'uCanvasSize'),
+          videoSize: gl.getUniformLocation(window._camProg, 'uVideoSize'),
+          colorMode: gl.getUniformLocation(window._camProg, 'uColorMode'),
+          preProcess: gl.getUniformLocation(window._camProg, 'uPreProcess'),
+          camHue: gl.getUniformLocation(window._camProg, 'uCamHue'),
+          camSat: gl.getUniformLocation(window._camProg, 'uCamSat'),
+          camVal: gl.getUniformLocation(window._camProg, 'uCamVal'),
+          camContrast: gl.getUniformLocation(window._camProg, 'uCamContrast')
+        };
+      }
+
+      gl.useProgram(window._camProg);
+      bindQuad(window._camProg);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, window._camTex);
+      gl.uniform1i(window._camLocs.camTex, 0);
+
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, gradientTex);
+      gl.uniform1i(window._camLocs.gradTex, 1);
+
+      const vid = window.cameraVideo;
+      gl.uniform2f(window._camLocs.canvasSize, W, H);
+      gl.uniform2f(window._camLocs.videoSize, vid.videoWidth || W, vid.videoHeight || H);
+      gl.uniform1i(window._camLocs.colorMode, p.colorMode);
+      gl.uniform1i(window._camLocs.preProcess, p.preProcess ? 1 : 0);
+      gl.uniform1f(window._camLocs.camHue, p.camHue || 0);
+      gl.uniform1f(window._camLocs.camSat, p.camSat != null ? p.camSat : 1);
+      gl.uniform1f(window._camLocs.camVal, p.camVal != null ? p.camVal : 1);
+      gl.uniform1f(window._camLocs.camContrast, p.camContrast != null ? p.camContrast : 1);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // Keep rendering continuously for live video
+      window.shaderDirty = true;
+    } else {
+      // Voronoi mode: render scene shader to FBO
+      gl.useProgram(sceneProg);
+      bindQuad(sceneProg);
+
+      gl.uniform2f(sRes,       W, H);
+      gl.uniform1i(sMode,      p.mode);
+      gl.uniform1f(sSeed,      p.seed);
+      gl.uniform1f(sRotation,  p.rot * Math.PI / 180.0);
+      gl.uniform2f(sDisplace,  p.dx, p.dy);
+      gl.uniform2f(sScale,     p.sx, p.sy);
+      gl.uniform1i(sMirrorX,   p.mirrorX);
+      gl.uniform1i(sMirrorY,   p.mirrorY);
+      gl.uniform1i(sFlipX,     p.flipX);
+      gl.uniform1i(sFlipY,     p.flipY);
+      gl.uniform1i(sShowDots,  p.showDots ? 1 : 0);
+      gl.uniform1f(sDotRadius, p.dotRadius || 0.008);
+      gl.uniform1f(sSpring,    p.spring);
+      gl.uniform1f(sSnapGrid,  p.snapGrid ? p.gridUnit : 0);
+      gl.uniform1i(sPreProcess, p.preProcess ? 1 : 0);
+      gl.uniform1f(sCamHue, p.camHue || 0);
+      gl.uniform1f(sCamSat, p.camSat != null ? p.camSat : 1);
+      gl.uniform1f(sCamVal, p.camVal != null ? p.camVal : 1);
+      gl.uniform1f(sCamContrast, p.camContrast != null ? p.camContrast : 1);
+      gl.uniform1f(sColorSeed, p.colorSeed);
+      gl.uniform1f(sValueMin,  p.valueMin);
+      gl.uniform1f(sValueMax,  p.valueMax);
+      gl.uniform1f(sGradientSeed, p.gradientSeed);
+      gl.uniform1i(sColorMode, p.colorMode);
+
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, gradientTex);
+      gl.uniform1i(sGradientTex, 1);
+
+      // Banding uniforms
+      gl.uniform1i(sBanding,      p.banding ? 1 : 0);
+      gl.uniform1i(sBandAngleMode, p.bandAngleMode || 0);
+      gl.uniform1f(sBandAngleSeed, p.bandAngleSeed || 0);
+      gl.uniform1i(sBandRandCount, p.bandRandCount ? 1 : 0);
+      gl.uniform1f(sBandRandCountMin, p.bandRandCountMin != null ? p.bandRandCountMin : 0.2);
+      gl.uniform1f(sBandRandCountMax, p.bandRandCountMax != null ? p.bandRandCountMax : 1.0);
+      gl.uniform1f(sBandRandCountSeed, p.bandRandCountSeed || 0);
+      gl.uniform1f(sBandCount,    p.bandCount);
+      gl.uniform1f(sBandLumMin,   p.bandLumMin);
+      gl.uniform1f(sBandLumMax,   p.bandLumMax);
+      gl.uniform1f(sBandStrength, p.bandStrength);
+      gl.uniform1i(sBandRandomize, p.bandRandomize ? 1 : 0);
+      gl.uniform1i(sBandBlendMode, p.bandBlendMode);
+      gl.uniform1f(sBandHueStrength, p.bandHueStrength || 0);
+      gl.uniform1f(sBandHueRadius, p.bandHueRadius || 0.5);
+
+      const groups = p.groups;
+      const groupsOn = p.groupsEnabled !== false;
+      const maxGroups = groupsOn ? (isFast() ? Math.min(groups.length, 2) : groups.length) : 0;
+      const maxPoints = isFast() ? Math.min(p.points, 20) : p.points;
+      gl.uniform1i(sNumPoints, maxPoints);
+      gl.uniform1i(sGroupCount, maxGroups);
+      for (let g = 0; g < 8; g++) {
+        if (g < maxGroups) {
+          const grp = groups[g];
+          gl.uniform1i(sGroupActive[g],    grp.active ? 1 : 0);
+          gl.uniform2f(sGroupDisplace[g],  grp.dx, grp.dy);
+          gl.uniform1f(sGroupThreshold[g], grp.threshold);
+          gl.uniform1f(sGroupSeed[g],      grp.seed);
+          gl.uniform1f(sGroupScale[g],     grp.scale);
+        } else {
+          gl.uniform1i(sGroupActive[g],    0);
+          gl.uniform2f(sGroupDisplace[g],  0, 0);
+          gl.uniform1f(sGroupThreshold[g], 0);
+          gl.uniform1f(sGroupSeed[g],      1);
+          gl.uniform1f(sGroupScale[g],     1);
+        }
+      }
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
 
     // --- pass 2: edge detect → screen ---
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -518,6 +701,9 @@ Promise.all([
     gl.uniform1f(ePixelScale,   p.pixelScale);
     gl.uniform1i(eOblique,      p.oblique ? 1 : 0);
     gl.uniform1i(eBandOutline,  p.bandOutline ? 1 : 0);
+    gl.uniform1i(eQuadSteps,    p.quadEnabled ? (p.quadSteps || 1) : 1);
+    gl.uniform1i(eQuadEnabled,  p.quadEnabled ? 1 : 0);
+    gl.uniform1i(eGenDiamond,  p.genDiamond ? 1 : 0);
     const gc = hexToRgb01(p.gapColor);
     gl.uniform3f(eGapColor,     gc[0], gc[1], gc[2]);
     gl.uniform1f(eGapOpacity,   p.gapOpacity);
@@ -528,6 +714,8 @@ Promise.all([
     gl.uniform1i(eShapeGradTex, 2);
     gl.uniform1f(eShapeGradOpacity, p.shapeGradOpacity);
     gl.uniform1i(eShapeGradDir, p.shapeGradDir);
+    gl.uniform2f(eRadialCenter, p.radialCenterX || 0, p.radialCenterY || 0);
+    gl.uniform1f(eRadialScale, p.radialScale != null ? p.radialScale : 1.0);
     gl.uniform1i(eEmbossBlendMode, p.embossBlendMode);
     gl.uniform1i(eBanding,      p.banding ? 1 : 0);
     gl.uniform1f(eBandCount,    p.bandCount);
@@ -539,6 +727,30 @@ Promise.all([
     gl.uniform1f(eGradeSat,     p.gradeSat);
     gl.uniform1f(eGradeVal,     p.gradeVal);
     gl.uniform1f(eGradeContrast,p.gradeContrast);
+
+    // Opacity patterns on texture unit 3
+    const opPatsEnabled = p.opPatternsEnabled !== false;
+    const opPats = p.opPatterns || [];
+    const opCount = opPatsEnabled ? opPats.filter(op => op.active !== false).length : 0;
+    gl.uniform1i(eOpPatternCount, opCount);
+    gl.uniform1f(eOpPatternSeed, p.opPatternSeed || 0);
+    gl.uniform1i(eOpPatternMode, p.opPatternMode || 0);
+    // Always zero out all dims first
+    for (let i = 0; i < 4; i++) gl.uniform4f(eOpPatternDims[i], 0, 0, 0, 0);
+    if (opCount > 0) {
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, opPatternTex);
+      gl.uniform1i(eOpPatternTex, 3);
+      let activeIdx = 0;
+      for (let i = 0; i < opPats.length && activeIdx < 4; i++) {
+        if (opPats[i].active === false) continue;
+        const pat = opPats[i];
+        const rows = pat.grid || [];
+        const cols = rows.length > 0 ? rows[0].length : 0;
+        gl.uniform4f(eOpPatternDims[activeIdx], cols, rows.length, pat.hueShift || 0, pat.hueOpacity || 0);
+        activeIdx++;
+      }
+    }
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }

@@ -1,12 +1,10 @@
 {
-  "source": "voronoi",
-  "cameraFacing": "user",
   "mode": 0,
-  "points": 14,
-  "seed": 0,
-  "rot": 49.17167999963838,
-  "dx": -0.07437335195059405,
-  "dy": 0.21328625793625852,
+  "points": 9,
+  "seed": 37,
+  "rot": 88.95467999999566,
+  "dx": -0.1443949888975462,
+  "dy": -0.6338558118459039,
   "sx": 1,
   "sy": 1,
   "mirrorX": 1,
@@ -20,30 +18,28 @@
   "renderRes": 2,
   "showDots": false,
   "dotRadius": 0.008,
-  "colorSeed": 35,
+  "colorSeed": 0,
   "colorMode": 0,
-  "gradientSeed": 0,
+  "gradientSeed": 40,
   "valueMin": 0.75,
   "valueMax": 1,
   "animSpeed": 10,
-  "fps": 30,
+  "fps": 15,
   "outlineWidth": 0,
   "outlineColor": "#000000",
   "showOutline": false,
   "pixelate": true,
   "pixelW": 23,
-  "pixelH": 13,
-  "weaveMode": 2,
-  "pixelShape": 3,
-  "shapeMargin": 1,
-  "shapeBleed": 6,
-  "pixelScale": 1.42,
-  "oblique": true,
-  "quadSteps": 4,
-  "quadEnabled": false,
-  "shapeGradOpacity": 0.29,
+  "pixelH": 23,
+  "weaveMode": 0,
+  "pixelShape": 1,
+  "shapeMargin": 2,
+  "shapeBleed": 0,
+  "pixelScale": 0.72,
+  "oblique": false,
+  "shapeGradOpacity": 0,
   "shapeGradDir": 0,
-  "embossBlendMode": 1,
+  "embossBlendMode": 8,
   "shapeGradStops": [
     {
       "pos": 0,
@@ -53,7 +49,7 @@
       "hex": "#000000"
     },
     {
-      "pos": 0.5,
+      "pos": 0.49293305655233366,
       "r": 255,
       "g": 255,
       "b": 255,
@@ -71,21 +67,21 @@
   "gapOpacity": 1,
   "banding": true,
   "bandCount": 20,
-  "bandLumMin": 0.31,
-  "bandLumMax": 0.76,
-  "bandStrength": 0.11,
+  "bandLumMin": 0,
+  "bandLumMax": 1,
+  "bandStrength": 1,
   "bandRandomize": true,
   "bandBlendMode": 5,
-  "bandHueStrength": 0,
-  "bandHueRadius": 0.5,
+  "bandHueStrength": 0.51,
+  "bandHueRadius": 1,
   "bandOutline": false,
-  "gradeHue": 14,
+  "gradeHue": 165,
   "gradeSat": 1.27,
-  "gradeVal": 1.05,
-  "gradeContrast": 1.68,
+  "gradeVal": 0.81,
+  "gradeContrast": 1.56,
   "gradientStops": [
     {
-      "pos": 0.36633324184560817,
+      "pos": 0.5,
       "r": 160,
       "g": 60,
       "b": 180,
@@ -106,11 +102,18 @@
       "hex": "#f0c8b4"
     },
     {
+      "pos": 0.2536275458534571,
+      "r": 131,
+      "g": 70,
+      "b": 50,
+      "hex": "#834632"
+    },
+    {
       "pos": 0,
-      "r": 34,
-      "g": 52,
-      "b": 188,
-      "hex": "#2234bc"
+      "r": 223,
+      "g": 54,
+      "b": 2,
+      "hex": "#df3602"
     }
   ],
   "groupsEnabled": true,
@@ -128,12 +131,12 @@
           0
         ]
       ],
-      "hueShift": 0.22,
-      "hueOpacity": 1
+      "hueShift": 0.13,
+      "hueOpacity": 0.92
     },
     {
       "id": 2,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1
@@ -142,12 +145,12 @@
           0
         ]
       ],
-      "hueShift": 0.42,
+      "hueShift": 0.05,
       "hueOpacity": 1
     },
     {
       "id": 3,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1,
@@ -163,7 +166,7 @@
     },
     {
       "id": 4,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1,
@@ -176,14 +179,14 @@
           0
         ]
       ],
-      "hueShift": 0.55,
+      "hueShift": 0.29,
       "hueOpacity": 1
     }
   ],
   "opPatternIdCounter": 4,
   "opPatternsEnabled": true,
   "opPatternSeed": 623,
-  "opPatternMode": 0,
+  "opPatternMode": 1,
   "groups": [
     {
       "id": 1,

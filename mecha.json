@@ -2,11 +2,11 @@
   "source": "voronoi",
   "cameraFacing": "user",
   "mode": 0,
-  "points": 14,
-  "seed": 0,
-  "rot": 49.17167999963838,
-  "dx": -0.07437335195059405,
-  "dy": 0.21328625793625852,
+  "points": 2,
+  "seed": 280,
+  "rot": 116.77368000023799,
+  "dx": -0.44701380558037845,
+  "dy": -0.17750275655977385,
   "sx": 1,
   "sy": 1,
   "mirrorX": 1,
@@ -20,40 +20,44 @@
   "renderRes": 2,
   "showDots": false,
   "dotRadius": 0.008,
-  "colorSeed": 35,
+  "colorSeed": 407,
   "colorMode": 0,
-  "gradientSeed": 0,
-  "valueMin": 0.75,
+  "gradientSeed": 438,
+  "valueMin": 0.86,
   "valueMax": 1,
   "animSpeed": 10,
   "fps": 30,
-  "outlineWidth": 0,
-  "outlineColor": "#000000",
+  "outlineWidth": 0.5,
+  "outlineColor": "#0022d8",
   "showOutline": false,
-  "pixelate": true,
+  "pixelate": false,
   "pixelW": 23,
-  "pixelH": 13,
-  "weaveMode": 2,
-  "pixelShape": 3,
-  "shapeMargin": 1,
-  "shapeBleed": 6,
-  "pixelScale": 1.42,
-  "oblique": true,
+  "pixelH": 23,
+  "weaveMode": 0,
+  "pixelShape": 1,
+  "shapeMargin": 2,
+  "shapeBleed": 0,
+  "pixelScale": 0.72,
+  "oblique": false,
   "quadSteps": 4,
   "quadEnabled": false,
-  "shapeGradOpacity": 0.29,
-  "shapeGradDir": 0,
-  "embossBlendMode": 1,
+  "genDiamond": false,
+  "shapeGradOpacity": 0.56,
+  "shapeGradDir": 2,
+  "radialCenterX": 0,
+  "radialCenterY": 0.37,
+  "radialScale": 2,
+  "embossBlendMode": 2,
   "shapeGradStops": [
     {
-      "pos": 0,
+      "pos": 0.5726127639350774,
       "r": 0,
       "g": 0,
       "b": 0,
       "hex": "#000000"
     },
     {
-      "pos": 0.5,
+      "pos": 0,
       "r": 255,
       "g": 255,
       "b": 255,
@@ -61,56 +65,55 @@
     },
     {
       "pos": 1,
-      "r": 0,
-      "g": 0,
-      "b": 0,
-      "hex": "#000000"
+      "r": 67,
+      "g": 67,
+      "b": 67,
+      "hex": "#434343"
     }
   ],
   "gapColor": "#000000",
   "gapOpacity": 1,
   "banding": true,
-  "bandCount": 20,
-  "bandLumMin": 0.31,
-  "bandLumMax": 0.76,
-  "bandStrength": 0.11,
-  "bandRandomize": true,
+  "bandCount": 30,
+  "bandLumMin": 0,
+  "bandLumMax": 1,
+  "bandStrength": 0.44,
+  "bandRandomize": false,
   "bandBlendMode": 5,
-  "bandHueStrength": 0,
-  "bandHueRadius": 0.5,
+  "bandAngleMode": 1,
+  "bandAngleSeed": 839,
+  "bandRandCount": true,
+  "bandRandCountMin": 0.22,
+  "bandRandCountMax": 1,
+  "bandRandCountSeed": 261,
+  "bandHueStrength": 0.34,
+  "bandHueRadius": 1,
   "bandOutline": false,
-  "gradeHue": 14,
+  "gradeHue": 297,
   "gradeSat": 1.27,
-  "gradeVal": 1.05,
-  "gradeContrast": 1.68,
+  "gradeVal": 0.74,
+  "gradeContrast": 2,
   "gradientStops": [
     {
-      "pos": 0.36633324184560817,
+      "pos": 0.5,
       "r": 160,
       "g": 60,
       "b": 180,
       "hex": "#a03cb4"
     },
     {
-      "pos": 0.75,
-      "r": 200,
-      "g": 50,
-      "b": 100,
-      "hex": "#c83264"
-    },
-    {
-      "pos": 1,
-      "r": 240,
-      "g": 200,
-      "b": 180,
-      "hex": "#f0c8b4"
-    },
-    {
       "pos": 0,
-      "r": 34,
-      "g": 52,
-      "b": 188,
-      "hex": "#2234bc"
+      "r": 99,
+      "g": 0,
+      "b": 194,
+      "hex": "#6300c2"
+    },
+    {
+      "pos": 0.9993979820512209,
+      "r": 239,
+      "g": 177,
+      "b": 110,
+      "hex": "#efb16e"
     }
   ],
   "groupsEnabled": true,
@@ -128,12 +131,12 @@
           0
         ]
       ],
-      "hueShift": 0.22,
-      "hueOpacity": 1
+      "hueShift": 0.25,
+      "hueOpacity": 0.92
     },
     {
       "id": 2,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1
@@ -142,12 +145,12 @@
           0
         ]
       ],
-      "hueShift": 0.42,
+      "hueShift": 0.33,
       "hueOpacity": 1
     },
     {
       "id": 3,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1,
@@ -158,7 +161,7 @@
           0
         ]
       ],
-      "hueShift": 0.17,
+      "hueShift": 0.27,
       "hueOpacity": 1
     },
     {
@@ -176,7 +179,7 @@
           0
         ]
       ],
-      "hueShift": 0.55,
+      "hueShift": 0.29,
       "hueOpacity": 1
     }
   ],

@@ -27,6 +27,12 @@ uniform float uSnapGrid;  // 0=off, >0 = grid cell size in pixels
 
 // Banding (applied here, before pixelation)
 uniform int   uBanding;
+uniform int   uBandAngleMode;   // 0=all sides, 1=random directional
+uniform float uBandAngleSeed;  // seed for random angle assignment
+uniform int   uBandRandCount;  // 0=fixed count, 1=random per cell
+uniform float uBandRandCountMin; // min fraction of bandCount
+uniform float uBandRandCountMax; // max fraction of bandCount
+uniform float uBandRandCountSeed;
 uniform float uBandCount;
 uniform float uBandLumMin;
 uniform float uBandLumMax;
@@ -45,8 +51,36 @@ uniform float uGroupScale[8];
 
 float manhattan(vec2 a, vec2 b) { return abs(a.x-b.x)+abs(a.y-b.y); }
 float chebyshev(vec2 a, vec2 b) { return max(abs(a.x-b.x),abs(a.y-b.y)); }
-float dist(vec2 a, vec2 b) { return uMode==0 ? chebyshev(a,b) : manhattan(a,b); }
 float hash(float n) { return fract(sin(n)*43758.5453); }
+
+// Circuit distance — triangle wave distortion creates maze/circuit-like boundaries
+vec2 triWave(vec2 a, float scale, vec2 c1) {
+    return abs(fract((a + c1) * scale) - 0.5);
+}
+float circuit(vec2 a, vec2 b) {
+    vec2 d = a - b;
+    // Use seed to vary the pattern constants
+    vec2 c1 = vec2(2.0 + hash(uSeed * 1.13) * 5.0, 2.5 + hash(uSeed * 2.17) * 6.5);
+    float cz = 1.3 + hash(uSeed * 3.31) * 0.2;
+    float scale = cz;
+    float scale2 = 1.05;
+    float offset = 0.16;
+    vec2 uv = d * 4.0;
+    for(int i = 0; i < 6; i++) {
+        uv = triWave(uv + offset, scale, c1) + triWave(uv.yx, scale, c1);
+        uv = triWave(uv, scale, c1);
+        scale /= scale2;
+        offset /= scale2;
+        uv.y /= -1.0;
+    }
+    return abs(uv.x - uv.y) * 0.5;
+}
+
+float dist(vec2 a, vec2 b) {
+    if(uMode==0) return chebyshev(a,b);
+    if(uMode==1) return manhattan(a,b);
+    return circuit(a,b);
+}
 
 vec2 randomPoint(int i) {
     float fi=float(i);
@@ -64,7 +98,8 @@ vec2 rotatePoint(vec2 p, vec2 piv, float a) {
 
 vec4 hsvToRgb(float h,float s,float v) {
     float h6=fract(h)*6.0,f=fract(h6),p=v*(1.0-s),q=v*(1.0-s*f),t=v*(1.0-s*(1.0-f));
-    int hi=int(mod(h6,6.0));
+    int hi=int(floor(h6));
+    if(hi>=6) hi=0;
     if(hi==0)return vec4(v,t,p,1);if(hi==1)return vec4(q,v,p,1);if(hi==2)return vec4(p,v,t,1);
     if(hi==3)return vec4(p,q,v,1);if(hi==4)return vec4(t,p,v,1);return vec4(v,p,q,1);
 }
@@ -85,12 +120,18 @@ vec4 dotColor(int ci) {
 /* ── HSV conversion for hue shift ─────────────────────────────── */
 vec3 rgb2hsv(vec3 c) {
     float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),d=mx-mn,h=0.0;
-    if(d>1e-4){if(mx==c.r)h=mod((c.g-c.b)/d,6.0);else if(mx==c.g)h=(c.b-c.r)/d+2.0;else h=(c.r-c.g)/d+4.0;h/=6.0;if(h<0.0)h+=1.0;}
-    return vec3(h,mx>1e-4?d/mx:0.0,mx);
+    if(d>1e-4){
+        if(mx==c.r) h=(c.g-c.b)/d+(c.g<c.b?6.0:0.0);
+        else if(mx==c.g) h=(c.b-c.r)/d+2.0;
+        else h=(c.r-c.g)/d+4.0;
+        h/=6.0;
+    }
+    return vec3(clamp(h,0.0,1.0), mx>1e-4?d/mx:0.0, mx);
 }
 vec3 hsv2rgb(vec3 c) {
     float h=fract(c.x)*6.0,s=c.y,v=c.z,f=fract(h),p=v*(1.0-s),q=v*(1.0-s*f),t=v*(1.0-s*(1.0-f));
-    int hi=int(mod(h,6.0));
+    int hi=int(floor(h));
+    if(hi>=6) hi=0;
     if(hi==0)return vec3(v,t,p);if(hi==1)return vec3(q,v,p);if(hi==2)return vec3(p,v,t);
     if(hi==3)return vec3(p,q,v);if(hi==4)return vec3(t,p,v);return vec3(v,p,q);
 }
@@ -140,11 +181,11 @@ vec2 applySpring(vec2 p,vec2 fL,vec2 fH,float s) {
     return s<=0.0 ? p : vec2(springAxis(p.x,fL.x,fH.x,s),springAxis(p.y,fL.y,fH.y,s));
 }
 
-struct Hit { float d; float d2; int ci; vec4 dotCol; };
+struct Hit { float d; float d2; int ci; vec4 dotCol; vec2 nearPt; };
 
 void testPoint(vec2 uv, vec2 p, int ci, inout Hit h) {
     float d=dist(uv,p);
-    if(d<h.d){h.d2=h.d;h.d=d;h.ci=ci;h.dotCol=dotColor(ci);}
+    if(d<h.d){h.d2=h.d;h.d=d;h.ci=ci;h.dotCol=dotColor(ci);h.nearPt=p;}
     else if(d<h.d2){h.d2=d;}
 }
 
@@ -198,7 +239,7 @@ void main() {
     vec2 piv=vec2(0.5); if(asp>=1.0)piv.x=0.5*asp; else piv.y=0.5/asp;
     vec2 fL=vec2(0),fH=vec2(1); if(asp>=1.0)fH.x=asp; else fH.y=1.0/asp;
 
-    Hit hit; hit.d=1e9; hit.d2=1e9; hit.ci=0; hit.dotCol=vec4(0);
+    Hit hit; hit.d=1e9; hit.d2=1e9; hit.ci=0; hit.dotCol=vec4(0); hit.nearPt=vec2(0);
     queryScene(uvW,piv,fL,fH,hit);
 
     vec4 col = hit.ci==9999 ? vec4(0,0,0,1) : cellColor(hit.ci);
@@ -209,16 +250,65 @@ void main() {
 
     // ── Banding (before pixelation — mirrors already applied) ──
     if(uBanding==1 && uBandCount>0.0 && hit.ci!=9999) {
+        float bandDist = borderDist; // default: all sides
+
+        if(uBandAngleMode==1) {
+            // Compute mirrored UV so band lines mirror with the geometry
+            vec2 bandUV = uvW;
+            if(uMirrorX==1 && bandUV.x > piv.x) bandUV.x = 2.0*piv.x - bandUV.x;
+            if(uMirrorY==1 && bandUV.y > piv.y) bandUV.y = 2.0*piv.y - bandUV.y;
+            if(uFlipX==1 && uvW.x > piv.x) bandUV.x = 2.0*piv.x - bandUV.x;
+            if(uFlipY==1 && uvW.y > piv.y) bandUV.y = 2.0*piv.y - bandUV.y;
+            
+            float cellRand = hash(float(hit.ci) * 73.17 + uBandAngleSeed * 31.7 + 19.3);
+            
+            if(cellRand < 0.66) {
+                int angleIdx;
+                bool twoAngles = cellRand >= 0.33;
+                
+                if(twoAngles) {
+                    angleIdx = int(floor(hash(float(hit.ci)*251.3 + uBandAngleSeed*17.3 + 41.7) * 8.0));
+                } else {
+                    angleIdx = int(floor(hash(float(hit.ci)*137.9 + uBandAngleSeed*23.1 + 7.1) * 8.0));
+                }
+                if(angleIdx >= 8) angleIdx = 7;
+                
+                float a1 = float(angleIdx) * 0.7853981633974483;
+                vec2 dir1 = vec2(cos(a1), sin(a1));
+                
+                float proj1 = dot(bandUV, dir1);
+                float span = 0.3;
+                float dirDist1 = fract(proj1 / span);
+                
+                if(twoAngles) {
+                    float a2 = float(angleIdx + 1) * 0.7853981633974483;
+                    vec2 dir2 = vec2(cos(a2), sin(a2));
+                    float proj2 = dot(bandUV, dir2);
+                    float dirDist2 = fract(proj2 / span);
+                    bandDist = min(dirDist1, dirDist2);
+                } else {
+                    bandDist = dirDist1;
+                }
+            }
+            // else: all sides (borderDist)
+        }
+
         float lum = dot(col.rgb, vec3(0.299,0.587,0.114));
         if(lum >= uBandLumMin && lum <= uBandLumMax) {
-            float bi = floor(borderDist * uBandCount);
-            bi = min(bi, uBandCount-1.0);
-            float bv = (uBandRandomize==1) ? hash(bi*127.1+311.7) : bi/max(uBandCount-1.0,1.0);
+            // Compute effective band count — random per cell or fixed
+            float effectiveCount = uBandCount;
+            if(uBandRandCount==1) {
+                float countRand = hash(float(hit.ci) * 197.3 + uBandRandCountSeed * 53.1 + 11.7);
+                float t = mix(uBandRandCountMin, uBandRandCountMax, countRand);
+                effectiveCount = max(floor(uBandCount * t), 1.0);
+            }
+            
+            float bi = floor(bandDist * effectiveCount);
+            bi = min(bi, effectiveCount-1.0);
+            float bv = (uBandRandomize==1) ? hash(bi*127.1+311.7) : bi/max(effectiveCount-1.0,1.0);
             vec3 blended = applyBlend(col.rgb, vec3(bv), uBandBlendMode);
             col.rgb = mix(col.rgb, blended, uBandStrength);
 
-            // Hue shift: bv * hueStrength = shift amount
-            // bandHueRadius is now blend opacity: mix(bandedColor, hueShiftedColor, opacity)
             if(uBandHueStrength > 0.0 && uBandHueRadius > 0.0) {
                 float hueShift = bv * uBandHueStrength;
                 vec3 hsv = rgb2hsv(col.rgb);
@@ -229,5 +319,7 @@ void main() {
         }
     }
 
-    gl_FragColor = vec4(col.rgb, borderDist);
+    // Encode cell identity in alpha: ci / 64.0 gives a stable 0-1 value per cell
+    float cellIdNorm = float(hit.ci) / 64.0;
+    gl_FragColor = vec4(col.rgb, cellIdNorm);
 }

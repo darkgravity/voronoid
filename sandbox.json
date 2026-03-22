@@ -2,11 +2,11 @@
   "source": "voronoi",
   "cameraFacing": "user",
   "mode": 0,
-  "points": 14,
+  "points": 4,
   "seed": 0,
-  "rot": 49.17167999963838,
-  "dx": -0.07437335195059405,
-  "dy": 0.21328625793625852,
+  "rot": 70.69299999998461,
+  "dx": 0,
+  "dy": 0,
   "sx": 1,
   "sy": 1,
   "mirrorX": 1,
@@ -20,8 +20,8 @@
   "renderRes": 2,
   "showDots": false,
   "dotRadius": 0.008,
-  "colorSeed": 35,
-  "colorMode": 0,
+  "colorSeed": 0,
+  "colorMode": 1,
   "gradientSeed": 0,
   "valueMin": 0.75,
   "valueMax": 1,
@@ -31,72 +31,67 @@
   "outlineColor": "#000000",
   "showOutline": false,
   "pixelate": true,
-  "pixelW": 23,
-  "pixelH": 13,
-  "weaveMode": 2,
+  "pixelW": 10,
+  "pixelH": 10,
+  "weaveMode": 4,
   "pixelShape": 3,
-  "shapeMargin": 1,
-  "shapeBleed": 6,
-  "pixelScale": 1.42,
-  "oblique": true,
-  "quadSteps": 4,
-  "quadEnabled": false,
-  "shapeGradOpacity": 0.29,
-  "shapeGradDir": 0,
-  "embossBlendMode": 1,
+  "shapeMargin": 2,
+  "shapeBleed": 0,
+  "pixelScale": 10,
+  "oblique": false,
+  "quadSteps": 3,
+  "quadEnabled": true,
+  "shapeGradOpacity": 0,
+  "shapeGradDir": 2,
+  "radialCenterX": 0,
+  "radialCenterY": 0,
+  "radialScale": 1,
+  "embossBlendMode": 0,
   "shapeGradStops": [
-    {
-      "pos": 0,
-      "r": 0,
-      "g": 0,
-      "b": 0,
-      "hex": "#000000"
-    },
-    {
-      "pos": 0.5,
-      "r": 255,
-      "g": 255,
-      "b": 255,
-      "hex": "#ffffff"
-    },
     {
       "pos": 1,
       "r": 0,
       "g": 0,
       "b": 0,
       "hex": "#000000"
+    },
+    {
+      "pos": 0,
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "hex": "#ffffff"
     }
   ],
   "gapColor": "#000000",
   "gapOpacity": 1,
   "banding": true,
-  "bandCount": 20,
-  "bandLumMin": 0.31,
-  "bandLumMax": 0.76,
-  "bandStrength": 0.11,
-  "bandRandomize": true,
-  "bandBlendMode": 5,
+  "bandCount": 12,
+  "bandLumMin": 0.69,
+  "bandLumMax": 1,
+  "bandStrength": 1,
+  "bandRandomize": false,
+  "bandBlendMode": 0,
+  "bandAngleMode": 0,
+  "bandAngleSeed": 0,
+  "bandRandCount": false,
+  "bandRandCountMin": 0.2,
+  "bandRandCountMax": 1,
+  "bandRandCountSeed": 0,
   "bandHueStrength": 0,
   "bandHueRadius": 0.5,
   "bandOutline": false,
-  "gradeHue": 14,
+  "gradeHue": 0,
   "gradeSat": 1.27,
   "gradeVal": 1.05,
   "gradeContrast": 1.68,
   "gradientStops": [
     {
-      "pos": 0.36633324184560817,
-      "r": 160,
-      "g": 60,
-      "b": 180,
-      "hex": "#a03cb4"
-    },
-    {
-      "pos": 0.75,
-      "r": 200,
-      "g": 50,
-      "b": 100,
-      "hex": "#c83264"
+      "pos": 0,
+      "r": 3,
+      "g": 1,
+      "b": 99,
+      "hex": "#030163"
     },
     {
       "pos": 1,
@@ -104,13 +99,6 @@
       "g": 200,
       "b": 180,
       "hex": "#f0c8b4"
-    },
-    {
-      "pos": 0,
-      "r": 34,
-      "g": 52,
-      "b": 188,
-      "hex": "#2234bc"
     }
   ],
   "groupsEnabled": true,
@@ -128,12 +116,12 @@
           0
         ]
       ],
-      "hueShift": 0.22,
+      "hueShift": 0.06,
       "hueOpacity": 1
     },
     {
       "id": 2,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1
@@ -142,12 +130,12 @@
           0
         ]
       ],
-      "hueShift": 0.42,
+      "hueShift": 0.12,
       "hueOpacity": 1
     },
     {
       "id": 3,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1,
@@ -158,12 +146,12 @@
           0
         ]
       ],
-      "hueShift": 0.17,
+      "hueShift": 0.15,
       "hueOpacity": 1
     },
     {
       "id": 4,
-      "active": false,
+      "active": true,
       "grid": [
         [
           1,
@@ -176,7 +164,7 @@
           0
         ]
       ],
-      "hueShift": 0.55,
+      "hueShift": 0.14,
       "hueOpacity": 1
     }
   ],
