@@ -7,7 +7,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #000; overflow: hidden; font-family: sans-serif; }
-    canvas#glCanvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+    canvas#glCanvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: all; }
 
     #ui {
       position: fixed; top: 0; left: 0; height: 100vh;
@@ -473,10 +473,71 @@
     #cp-rgb-inputs span { font-size: 10px; color: #888; }
     #cp-actions { display: flex; gap: 8px; justify-content: flex-end; }
     #cp-actions button { min-height: 32px; }
+
+    /* ── Pixelate instance tabs ─────────────────────── */
+    .pix-instance-bar {
+      display: flex; align-items: center; gap: 6px; margin: 6px 0 4px;
+    }
+    .pix-add-btn {
+      width: 26px; height: 26px; min-width: 26px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.55); font-size: 20px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; padding: 0; padding-bottom: 2px;
+    }
+    .pix-add-btn:hover { background: rgba(255,255,255,0.13); color: #fff; border-color: rgba(255,255,255,0.3); }
+    .pix-tabs { display: flex; gap: 3px; flex: 1; overflow-x: auto; min-width: 0; }
+    .pix-tabs::-webkit-scrollbar { display: none; }
+    .pix-tab {
+      padding: 4px 8px 4px 10px; border-radius: 5px; font-size: 10px; font-weight: 500;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.4); cursor: pointer; white-space: nowrap;
+      display: flex; align-items: center; gap: 4px; letter-spacing: 0.02em;
+    }
+    .pix-tab:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.18); }
+    .pix-tab.active { background: rgba(255,255,255,0.11); color: #fff; border-color: rgba(255,255,255,0.28); }
+    .pix-tab-close {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: transparent; border: none;
+      color: rgba(255,255,255,0.3); font-size: 9px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;
+    }
+    .pix-tab-close:hover { color: rgba(255,100,100,0.9); background: rgba(255,50,50,0.18); }
+
+    /* ── Editable numeric value inputs ──────────────── */
+    input[type=number].val {
+      background: transparent; border: none; outline: none;
+      color: #fff; font-size: 11px; width: 38px; text-align: right;
+      flex-shrink: 0; padding: 0; margin: 0; font-family: inherit;
+      border-bottom: 1px solid transparent;
+      -moz-appearance: textfield;
+      cursor: text;
+      transition: border-color 0.12s;
+    }
+    input[type=number].val::-webkit-outer-spin-button,
+    input[type=number].val::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number].val:focus { border-bottom-color: rgba(74,158,255,0.55); }
+    input[type=number].val:hover:not(:focus) { border-bottom-color: rgba(255,255,255,0.2); }
+
+    /* ── Canvas size (custom mode) ───────────────────── */
+    #canvas-container {
+      position: fixed; inset: 0; display: flex;
+      align-items: center; justify-content: center;
+      pointer-events: none; z-index: 0;
+      background: #000;
+    }
+    #canvas-container.custom { background: #0a0a0a; }
+    canvas#glCanvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: all; }
+    canvas#glCanvas.custom-size {
+      position: relative; inset: auto; pointer-events: all;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 8px 40px rgba(0,0,0,0.7);
+    }
   </style>
 </head>
 <body>
-  <canvas id="glCanvas"></canvas>
+  <div id="canvas-container">
+    <canvas id="glCanvas"></canvas>
+  </div>
   <video id="cameraVideo" playsinline autoplay muted style="display:none"></video>
 
   <!-- Custom color picker overlay -->
@@ -586,7 +647,7 @@
           <svg id="panel-stop-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
         </button>
         <input type="range" id="sSpeed" min="1" max="120" step="1" value="10">
-        <span class="val" id="vSpeed">10</span>
+        <input type="number" class="val" id="vSpeed" value="10">
         <select id="selFps" onchange="window.shaderParams.fps=parseInt(this.value);window.shaderDirty=true" style="width:60px;flex-shrink:0">
           <option value="12">12 fps</option>
           <option value="25">25 fps</option>
@@ -614,12 +675,6 @@
         </button>
         <button class="tab-btn" onclick="switchTab('pixelate')" id="tab-pixelate">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="6" height="6"/><rect x="9" y="2" width="6" height="6"/><rect x="16" y="2" width="6" height="6"/><rect x="2" y="9" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/><rect x="16" y="9" width="6" height="6"/><rect x="2" y="16" width="6" height="6"/><rect x="9" y="16" width="6" height="6"/><rect x="16" y="16" width="6" height="6"/></svg>
-        </button>
-        <button class="tab-btn" onclick="switchTab('opacity')" id="tab-opacity">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7" opacity="0.5"/><rect x="3" y="14" width="7" height="7" opacity="0.5"/><rect x="14" y="14" width="7" height="7"/></svg>
-        </button>
-        <button class="tab-btn" onclick="switchTab('noise')" id="tab-noise">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="16" r="4"/><circle cx="19" cy="18" r="2.5"/></svg>
         </button>
         <button class="tab-btn" onclick="switchTab('grading')" id="tab-grading">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="8" cy="14" r="2"/><circle cx="16" cy="14" r="2"/></svg>
@@ -657,12 +712,12 @@
       <div class="row">
         <label>Count</label>
         <input type="range" id="sPoints" min="2" max="64" step="1" value="14">
-        <span class="val" id="vPoints">14</span>
+        <input type="number" class="val" id="vPoints" value="14">
       </div>
       <div class="row">
         <label>Seed</label>
         <input type="range" id="sSeed" min="0" max="1000" step="1" value="0">
-        <span class="val" id="vSeed">0</span>
+        <input type="number" class="val" id="vSeed" value="0">
       </div>
 
       <div class="divider"></div>
@@ -671,32 +726,32 @@
       <div class="row">
         <label>Rotation</label>
         <input type="range" id="sRot" min="0" max="360" step="1" value="117">
-        <span class="val" id="vRot">117°</span>
+        <input type="number" class="val" id="vRot" value="117">
       </div>
       <div class="row">
         <label>Displace X</label>
         <input type="range" id="sDx" min="-1" max="1" step="0.01" value="0">
-        <span class="val" id="vDx">0.00</span>
+        <input type="number" class="val" id="vDx" value="0.00">
       </div>
       <div class="row">
         <label>Displace Y</label>
         <input type="range" id="sDy" min="-1" max="1" step="0.01" value="0">
-        <span class="val" id="vDy">0.00</span>
+        <input type="number" class="val" id="vDy" value="0.00">
       </div>
       <div class="row">
         <label>Scale X</label>
         <input type="range" id="sSx" min="0" max="2" step="0.01" value="1">
-        <span class="val" id="vSx">1.00</span>
+        <input type="number" class="val" id="vSx" value="1.00">
       </div>
       <div class="row">
         <label>Scale Y</label>
         <input type="range" id="sSy" min="0" max="2" step="0.01" value="1">
-        <span class="val" id="vSy">1.00</span>
+        <input type="number" class="val" id="vSy" value="1.00">
       </div>
       <div class="row">
         <label>Spring</label>
         <input type="range" id="sSpring" min="0" max="10" step="0.1" value="0">
-        <span class="val" id="vSpring">0.0</span>
+        <input type="number" class="val" id="vSpring" value="0.0">
       </div>
 
       <div class="divider"></div>
@@ -719,12 +774,15 @@
         <button id="btn-fast" onclick="toggleFastMode()" title="Fast Mode">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>
         </button>
+        <button id="btn-precompute" onclick="togglePrecompute()" title="Pre-compute Frames">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
       </div>
       <div id="snapgrid-controls" style="display:none">
         <div class="row">
           <label>Grid Unit</label>
           <input type="range" id="sGridUnit" min="10" max="500" step="1" value="50">
-          <span class="val" id="vGridUnit">50</span>
+          <input type="number" class="val" id="vGridUnit" value="50">
         </div>
       </div>
       <div id="fast-controls" style="display:none">
@@ -732,6 +790,13 @@
           <label>Resolution</label>
           <input type="range" id="sRenderRes" min="1" max="16" step="1" value="2">
           <span class="val" id="vRenderRes">1/2</span>
+        </div>
+      </div>
+      <div id="precompute-controls" style="display:none">
+        <div class="row">
+          <label>Frames</label>
+          <input type="range" id="sPrecomputeFrames" min="1" max="10" step="1" value="3">
+          <input type="number" class="val" id="vPrecomputeFrames" value="3">
         </div>
       </div>
 
@@ -746,7 +811,7 @@
         <div class="row">
           <label>Outline Px</label>
           <input type="range" id="sOutline" min="0" max="20" step="0.5" value="0">
-          <span class="val" id="vOutline">0.0</span>
+          <input type="number" class="val" id="vOutline" value="0.0">
           <div class="color-swatch" id="outlineSwatch" style="background:#000000;">
           </div>
         </div>
@@ -755,43 +820,108 @@
         <div class="row">
           <label>Dot Radius</label>
           <input type="range" id="sDotRadius" min="0.001" max="0.02" step="0.001" value="0.008">
-          <span class="val" id="vDotRadius">0.008</span>
+          <input type="number" class="val" id="vDotRadius" value="0.008">
         </div>
       </div>
 
+      <!-- Secondary Noise section -->
+      <div class="divider"></div>
+      <div class="toggle-header">
+        <span class="toggle-label">Secondary Noise</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="small" onclick="addGroup()">+ Add</button>
+          <button class="toggle-active" id="btn-groups-toggle" onclick="toggleAllGroups()"></button>
+        </div>
+      </div>
+      <div id="groups-controls">
+      <div id="groups-list"></div>
+      </div><!-- end groups-controls -->
+
       </div><!-- end voronoi-sections -->
-      </div><!-- end panel-general -->
 
-      <div class="tab-panel" id="panel-color">
-
-      <div class="seg-bar" style="margin-bottom:8px">
-        <button id="btn-cm-raw" style="display:none" onclick="setColorMode(2)">Raw</button>
-        <button id="btn-cm-grad" class="active" onclick="setColorMode(0)">Gradient</button>
-        <button id="btn-cm-hue" onclick="setColorMode(1)">Hue</button>
+      <!-- Pre Process section (always visible, works for both voronoi and camera) -->
+      <div class="divider"></div>
+      <div class="section-title">Canvas Size</div>
+      <div class="seg-bar" id="canvas-mode-bar">
+        <button id="btn-canvas-fullscreen" class="active" onclick="setCanvasMode('fullscreen')">Fullscreen</button>
+        <button id="btn-canvas-custom" onclick="setCanvasMode('custom')">Custom</button>
+      </div>
+      <div id="canvas-custom-controls" style="display:none">
+        <div class="row">
+          <label>Width</label>
+          <input type="range" id="sCanvasW" min="64" max="3840" step="1" value="1920">
+          <input type="number" class="val" id="vCanvasW" value="1920" min="64" max="3840" step="1">
+        </div>
+        <div class="row">
+          <label>Height</label>
+          <input type="range" id="sCanvasH" min="64" max="2160" step="1" value="1080">
+          <input type="number" class="val" id="vCanvasH" value="1080" min="64" max="2160" step="1">
+        </div>
       </div>
 
-      <!-- Raw camera preprocessing controls -->
-      <div id="raw-controls" style="display:none">
+      <!-- Canvas Background Color -->
+      <div class="divider"></div>
+      <div class="section-title">Background Color</div>
+      <div class="seg-bar" id="bg-mode-bar">
+        <button id="btn-bg-custom" class="active" onclick="setBgMode('custom')">Custom</button>
+        <button id="btn-bg-random" onclick="setBgMode('random')">Random</button>
+      </div>
+      <div id="bg-custom-controls">
+        <button id="bg-color-swatch" onclick="openColorPicker(window.shaderParams.bgColor||'#000000', function(hex){ window.shaderParams.bgColor=hex; applyBgColor(); var sw=document.getElementById('bg-color-swatch'); if(sw)sw.style.background=hex; })"
+          style="display:block;width:100%;height:30px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;margin-top:4px;background:#000000;transition:border-color 0.15s"></button>
+      </div>
+      <div id="bg-random-controls" style="display:none">
+        <div id="bg-random-preview"
+          style="width:100%;height:30px;border-radius:4px;margin:4px 0;cursor:pointer;background:#000000;border:1px solid rgba(255,255,255,0.12)"
+          onclick="openColorPicker(computeRandomBgColor(), function(hex){ window.shaderParams.bgColor=hex; window.shaderParams.bgMode='custom'; setBgMode('custom'); })"></div>
+        <div class="row">
+          <label>Seed</label>
+          <input type="range" id="sBgSeed" min="0" max="1000" step="1" value="0">
+          <input type="number" class="val" id="vBgSeed" value="0" min="0" max="1000" step="1">
+        </div>
+      </div>
+
+      <!-- Pre Process section (always visible, works for both voronoi and camera) -->
+      <div class="divider"></div>
+      <div class="toggle-header">
+        <span class="toggle-label">Pre Process</span>
+        <button class="toggle-active" id="btn-preprocess-toggle" onclick="togglePreProcess()"></button>
+      </div>
+      <div id="preprocess-controls" class="controls-disabled">
         <div class="row">
           <label>Hue</label>
           <input type="range" id="sCamHue" min="0" max="360" step="1" value="0">
-          <span class="val" id="vCamHue">0°</span>
+          <input type="number" class="val" id="vCamHue" value="0">
         </div>
         <div class="row">
           <label>Saturation</label>
           <input type="range" id="sCamSat" min="0" max="2" step="0.01" value="1.00">
-          <span class="val" id="vCamSat">1.00</span>
+          <input type="number" class="val" id="vCamSat" value="1.00">
         </div>
         <div class="row">
           <label>Value</label>
           <input type="range" id="sCamVal" min="0" max="2" step="0.01" value="1.00">
-          <span class="val" id="vCamVal">1.00</span>
+          <input type="number" class="val" id="vCamVal" value="1.00">
         </div>
         <div class="row">
           <label>Contrast</label>
           <input type="range" id="sCamContrast" min="0" max="2" step="0.01" value="1.00">
-          <span class="val" id="vCamContrast">1.00</span>
+          <input type="number" class="val" id="vCamContrast" value="1.00">
         </div>
+      </div>
+
+      </div><!-- end panel-general -->
+
+      <div class="tab-panel" id="panel-color">
+
+      <div class="toggle-header">
+        <span class="toggle-label">Colorize</span>
+        <button class="toggle-active on" id="btn-colorize-toggle" onclick="toggleColorize()"></button>
+      </div>
+      <div id="colorize-wrapper">
+      <div class="seg-bar" style="margin-bottom:8px">
+        <button id="btn-cm-grad" class="active" onclick="setColorMode(0)">Gradient</button>
+        <button id="btn-cm-hue" onclick="setColorMode(1)">Hue</button>
       </div>
 
       <!-- Hue mode controls -->
@@ -799,17 +929,47 @@
         <div class="row">
           <label>Hue Seed</label>
           <input type="range" id="sColorSeed" min="0" max="1000" step="1" value="0">
-          <span class="val" id="vColorSeed">0</span>
+          <input type="number" class="val" id="vColorSeed" value="0">
+        </div>
+        <div class="row">
+          <label>Hue Offset</label>
+          <input type="range" id="sHueOffset" min="0" max="1" step="0.01" value="0">
+          <input type="number" class="val" id="vHueOffset" value="0.00">
+        </div>
+        <div class="row">
+          <label>Hue Radius</label>
+          <input type="range" id="sHueRadius" min="0" max="1" step="0.01" value="1">
+          <input type="number" class="val" id="vHueRadius" value="1.00">
+        </div>
+        <div class="row">
+          <label>Sat Seed</label>
+          <input type="range" id="sSatSeed" min="0" max="1000" step="1" value="0">
+          <input type="number" class="val" id="vSatSeed" value="0">
+        </div>
+        <div class="row">
+          <label>Sat Min</label>
+          <input type="range" id="sSatMin" min="0" max="2" step="0.01" value="0.00">
+          <input type="number" class="val" id="vSatMin" value="0.00">
+        </div>
+        <div class="row">
+          <label>Sat Max</label>
+          <input type="range" id="sSatMax" min="0" max="2" step="0.01" value="1.00">
+          <input type="number" class="val" id="vSatMax" value="1.00">
+        </div>
+        <div class="row">
+          <label>Bright Seed</label>
+          <input type="range" id="sBrightSeed" min="0" max="1000" step="1" value="0">
+          <input type="number" class="val" id="vBrightSeed" value="0">
         </div>
         <div class="row">
           <label>Bright Min</label>
           <input type="range" id="sValueMin" min="0" max="2" step="0.01" value="0.75">
-          <span class="val" id="vValueMin">0.75</span>
+          <input type="number" class="val" id="vValueMin" value="0.75">
         </div>
         <div class="row">
           <label>Bright Max</label>
           <input type="range" id="sValueMax" min="0" max="2" step="0.01" value="1.00">
-          <span class="val" id="vValueMax">1.00</span>
+          <input type="number" class="val" id="vValueMax" value="1.00">
         </div>
       </div>
 
@@ -818,7 +978,7 @@
         <div class="row">
           <label>Seed</label>
           <input type="range" id="sGradientSeed" min="0" max="1000" step="1" value="0">
-          <span class="val" id="vGradientSeed">0</span>
+          <input type="number" class="val" id="vGradientSeed" value="0">
         </div>
         <div class="grad-editor" id="gradEditor">
           <canvas class="grad-bar" id="gradBar" height="24"></canvas>
@@ -827,6 +987,7 @@
         </div>
       </div>
 
+      </div><!-- end colorize-wrapper -->
       </div><!-- end panel-color -->
 
       <div class="tab-panel" id="panel-banding">
@@ -843,12 +1004,12 @@
         <div id="bandangle-seed-row" class="row" style="display:none">
           <label>Angle Seed</label>
           <input type="range" id="sBandAngleSeed" min="0" max="1000" step="1" value="0">
-          <span class="val" id="vBandAngleSeed">0</span>
+          <input type="number" class="val" id="vBandAngleSeed" value="0">
         </div>
         <div class="row">
           <label>Bands</label>
           <input type="range" id="sBandCount" min="1" max="100" step="1" value="12">
-          <span class="val" id="vBandCount">12</span>
+          <input type="number" class="val" id="vBandCount" value="12">
         </div>
         <div class="btn-row">
           <button id="btn-randcount" onclick="toggleRandBandCount()">Random Count</button>
@@ -857,33 +1018,33 @@
           <div class="row">
             <label>Count Min</label>
             <input type="range" id="sRandCountMin" min="0" max="1" step="0.01" value="0.2">
-            <span class="val" id="vRandCountMin">0.20</span>
+            <input type="number" class="val" id="vRandCountMin" value="0.20">
           </div>
           <div class="row">
             <label>Count Max</label>
             <input type="range" id="sRandCountMax" min="0" max="1" step="0.01" value="1.0">
-            <span class="val" id="vRandCountMax">1.00</span>
+            <input type="number" class="val" id="vRandCountMax" value="1.00">
           </div>
           <div class="row">
             <label>Count Seed</label>
             <input type="range" id="sRandCountSeed" min="0" max="1000" step="1" value="0">
-            <span class="val" id="vRandCountSeed">0</span>
+            <input type="number" class="val" id="vRandCountSeed" value="0">
           </div>
         </div>
         <div class="row">
           <label>Strength</label>
           <input type="range" id="sBandStrength" min="0" max="1" step="0.01" value="1.00">
-          <span class="val" id="vBandStrength">1.00</span>
+          <input type="number" class="val" id="vBandStrength" value="1.00">
         </div>
         <div class="row">
           <label>V min</label>
           <input type="range" id="sBandLumMin" min="0" max="1" step="0.01" value="0.69">
-          <span class="val" id="vBandLumMin">0.69</span>
+          <input type="number" class="val" id="vBandLumMin" value="0.69">
         </div>
         <div class="row">
           <label>V Max</label>
           <input type="range" id="sBandLumMax" min="0" max="1" step="0.01" value="1.00">
-          <span class="val" id="vBandLumMax">1.00</span>
+          <input type="number" class="val" id="vBandLumMax" value="1.00">
         </div>
         <div class="btn-row">
           <button id="btn-band-random" onclick="toggleBandRandomize()">Randomize Band</button>
@@ -905,12 +1066,12 @@
         <div class="row">
           <label>Hue Strength</label>
           <input type="range" id="sBandHueStrength" min="0" max="1" step="0.01" value="0.00">
-          <span class="val" id="vBandHueStrength">0.00</span>
+          <input type="number" class="val" id="vBandHueStrength" value="0.00">
         </div>
         <div class="row">
           <label>Hue Opacity</label>
           <input type="range" id="sBandHueRadius" min="0" max="1" step="0.01" value="0.50">
-          <span class="val" id="vBandHueRadius">0.50</span>
+          <input type="number" class="val" id="vBandHueRadius" value="0.50">
         </div>
         <div class="btn-row">
           <button id="btn-band-outline" onclick="toggleBandOutline()">Outline Banding</button>
@@ -925,212 +1086,46 @@
         <span class="toggle-label">Pixelate</span>
         <button class="toggle-active" id="btn-pixelate-toggle" onclick="togglePixelate()"></button>
       </div>
-      <div id="pixelate-controls">
-        <div class="row">
-          <label>Pixel Width</label>
-          <input type="range" id="sPixelW" min="1" max="50" step="1" value="23">
-          <span class="val" id="vPixelW">23</span>
+      <div id="pixelate-master-wrap">
+        <!-- Instance tab bar -->
+        <div class="pix-instance-bar">
+          <button class="pix-add-btn" onclick="addPixelateInstance()" title="Add pixelation stage">+</button>
+          <div class="pix-tabs" id="pix-tabs"></div>
         </div>
-        <div class="row">
-          <label>Pixel Height</label>
-          <input type="range" id="sPixelH" min="1" max="50" step="1" value="11">
-          <span class="val" id="vPixelH">11</span>
-        </div>
-        <div class="row">
-          <label>Scale</label>
-          <input type="range" id="sPixelScale" min="0.1" max="10" step="0.01" value="1.00">
-          <span class="val" id="vPixelScale">1.00</span>
-        </div>
-        <div class="btn-row">
-          <button id="btn-oblique" onclick="toggleOblique()">Oblique</button>
-        </div>
-
-        <div class="section-title" style="margin-top:6px">Quadtree</div>
-        <div class="btn-row">
-          <button id="btn-quadtree" onclick="toggleQuadtree()">Quadtree</button>
-        </div>
-        <div id="quadtree-controls" style="display:none">
-          <div class="row">
-            <label>Steps</label>
-            <input type="range" id="sQuadSteps" min="2" max="5" step="1" value="4">
-            <span class="val" id="vQuadSteps">4</span>
-          </div>
-        </div>
-
-        <div class="section-title" style="margin-top:6px">Weave</div>
-        <div class="seg-bar">
-          <button id="btn-weave-none" class="active" onclick="setWeaveMode(0)">None</button>
-          <button id="btn-weave-brick" onclick="setWeaveMode(1)">Brick</button>
-          <button id="btn-weave-weave" onclick="setWeaveMode(2)">Weave</button>
-          <button id="btn-weave-hex" onclick="setWeaveMode(3)">Hex</button>
-          <button id="btn-weave-oct" onclick="setWeaveMode(4)">Oct</button>
-        </div>
-        <div id="gen-diamond-row" class="btn-row" style="display:none;margin-top:4px">
-          <button id="btn-gen-diamond" onclick="toggleGenDiamond()">Generate Diamond</button>
-        </div>
-
-        <div id="shape-section">
-        <div class="section-title" style="margin-top:6px">Shape</div>
-        <div class="seg-bar">
-          <button id="btn-shape-none" class="shape-icon active" onclick="setPixelShape(0)" title="None">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-          <button id="btn-shape-pill" class="shape-icon" onclick="setPixelShape(1)" title="Pill">
-            <svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="5" fill="currentColor"/></svg>
-          </button>
-          <button id="btn-shape-diamond" class="shape-icon" onclick="setPixelShape(2)" title="Diamond">
-            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12" fill="currentColor"/></svg>
-          </button>
-          <button id="btn-shape-square" class="shape-icon" onclick="setPixelShape(3)" title="Square">
-            <svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1" fill="currentColor"/></svg>
-          </button>
-          <button id="btn-shape-pointed" class="shape-icon" onclick="setPixelShape(4)" title="Chevron">
-            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="5,4 19,4 22,12 19,20 5,20 2,12" fill="currentColor"/></svg>
-          </button>
-          <button id="btn-shape-hex" class="shape-icon" onclick="setPixelShape(5)" title="Hexagon">
-            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="6,2 18,2 23,12 18,22 6,22 1,12" fill="currentColor"/></svg>
-          </button>
-          <button id="btn-shape-oct" class="shape-icon" onclick="setPixelShape(6)" title="Octagon">
-            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8" fill="currentColor"/></svg>
-          </button>
-        </div>
-        </div>
-        <div id="shape-controls" style="display:none">
-          <div class="row">
-            <label>Margin</label>
-            <input type="range" id="sShapeMargin" min="0" max="10" step="1" value="3">
-            <span class="val" id="vShapeMargin">3</span>
-          </div>
-          <div class="row">
-            <label>Bleed</label>
-            <input type="range" id="sShapeBleed" min="0" max="20" step="1" value="0">
-            <span class="val" id="vShapeBleed">0</span>
-          </div>
-          <div class="row">
-            <label>Gap Color</label>
-            <input type="range" id="sGapOpacity" min="0" max="1" step="0.01" value="1.00">
-            <span class="val" id="vGapOpacity">1.00</span>
-            <div class="color-swatch" id="gapSwatch" style="background:#000000;">
-            </div>
-          </div>
-
-          <div class="section-title" style="margin-top:8px">Tile Gradient</div>
-          <div class="grad-editor" id="shapeGradEditor">
-            <canvas class="grad-bar" id="shapeGradBar" height="24"></canvas>
-            <div class="grad-track" id="shapeGradTrack"></div>
-            <div class="grad-hint">tap bar to add · tap handle to pick color · double-tap to delete</div>
-          </div>
-          <div class="row">
-            <label>Opacity</label>
-            <input type="range" id="sShapeGradOpacity" min="0" max="1" step="0.01" value="0.20">
-            <span class="val" id="vShapeGradOpacity">0.20</span>
-          </div>
-          <div class="seg-bar">
-            <button id="btn-sgdir-h" class="active" onclick="setShapeGradDir(0)">Horizontal</button>
-            <button id="btn-sgdir-v" onclick="setShapeGradDir(1)">Vertical</button>
-            <button id="btn-sgdir-r" onclick="setShapeGradDir(2)">Radial</button>
-          </div>
-          <div id="radial-controls" style="display:none">
-            <div class="row">
-              <label>Center X</label>
-              <input type="range" id="sRadialX" min="-1" max="1" step="0.01" value="0">
-              <span class="val" id="vRadialX">0.00</span>
-            </div>
-            <div class="row">
-              <label>Center Y</label>
-              <input type="range" id="sRadialY" min="-1" max="1" step="0.01" value="0">
-              <span class="val" id="vRadialY">0.00</span>
-            </div>
-            <div class="row">
-              <label>Scale</label>
-              <input type="range" id="sRadialScale" min="0" max="2" step="0.01" value="1">
-              <span class="val" id="vRadialScale">1.00</span>
-            </div>
-          </div>
-          <div class="row">
-            <label>Blend</label>
-            <select id="selEmbossBlend" onchange="window.shaderParams.embossBlendMode=parseInt(this.value);window.shaderDirty=true">
-              <option value="0">Overlay</option>
-              <option value="1">Multiply</option>
-              <option value="2">Screen</option>
-              <option value="3">Soft Light</option>
-              <option value="4">Hard Light</option>
-              <option value="5">Color Dodge</option>
-              <option value="6">Color Burn</option>
-              <option value="7">Linear Light</option>
-              <option value="8" selected>Normal</option>
-            </select>
-          </div>
-        </div>
+        <!-- Active instance panel (dynamically populated) -->
+        <div id="pix-instance-panel"></div>
       </div>
-
       </div><!-- end panel-pixelate -->
 
       <div class="tab-panel" id="panel-grading">
+      <div class="toggle-header">
+        <span class="toggle-label">Post-Process</span>
+        <button class="toggle-active on" id="btn-postprocess-toggle" onclick="togglePostProcess()"></button>
+      </div>
+      <div id="postprocess-controls">
       <div class="row">
         <label>Hue</label>
         <input type="range" id="sGradeHue" min="0" max="360" step="1" value="0">
-        <span class="val" id="vGradeHue">0°</span>
+        <input type="number" class="val" id="vGradeHue" value="0">
       </div>
       <div class="row">
         <label>Saturation</label>
         <input type="range" id="sGradeSat" min="0" max="2" step="0.01" value="1.27">
-        <span class="val" id="vGradeSat">1.27</span>
+        <input type="number" class="val" id="vGradeSat" value="1.27">
       </div>
       <div class="row">
         <label>Value</label>
         <input type="range" id="sGradeVal" min="0" max="2" step="0.01" value="1.05">
-        <span class="val" id="vGradeVal">1.05</span>
+        <input type="number" class="val" id="vGradeVal" value="1.05">
       </div>
       <div class="row">
         <label>Contrast</label>
         <input type="range" id="sGradeContrast" min="0" max="2" step="0.01" value="1.68">
-        <span class="val" id="vGradeContrast">1.68</span>
+        <input type="number" class="val" id="vGradeContrast" value="1.68">
+      </div>
       </div>
 
       </div><!-- end panel-grading -->
-
-      <div class="tab-panel" id="panel-opacity">
-      <div class="toggle-header">
-        <span class="toggle-label">Opacity Pattern</span>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button class="small" onclick="addOpPattern()">+ Add</button>
-          <button class="toggle-active" id="btn-oppattern-toggle" onclick="toggleAllOpPatterns()"></button>
-        </div>
-      </div>
-      <div id="oppattern-controls">
-      <div id="oppattern-seed-row" class="row">
-        <label>Seed</label>
-        <input type="range" id="sOpPatSeed" min="0" max="1000" step="1" value="0">
-        <span class="val" id="vOpPatSeed">0</span>
-      </div>
-      <div id="oppattern-mode-row">
-        <div class="row">
-          <label>Group By</label>
-          <div class="seg-bar">
-            <button id="btn-oppat-color" class="active" onclick="setOpPatMode(0)">Color</button>
-            <button id="btn-oppat-shape" onclick="setOpPatMode(1)">Shape</button>
-          </div>
-        </div>
-      </div>
-      <div id="oppattern-list"></div>
-      </div><!-- end oppattern-controls -->
-
-      </div><!-- end panel-opacity -->
-
-      <div class="tab-panel" id="panel-noise">
-      <div class="toggle-header">
-        <span class="toggle-label">Secondary Noise</span>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button class="small" onclick="addGroup()">+ Add</button>
-          <button class="toggle-active" id="btn-groups-toggle" onclick="toggleAllGroups()"></button>
-        </div>
-      </div>
-
-      <div id="groups-controls">
-      <div id="groups-list"></div>
-      </div><!-- end groups-controls -->
-      </div><!-- end panel-noise -->
 
     </div>
   </div>
@@ -1155,10 +1150,11 @@
         }, 50);
       }
       if(name === 'pixelate') {
-        setTimeout(function() {
-          if(typeof renderShapeGradBar === 'function') renderShapeGradBar();
-          if(typeof renderShapeGradHandles === 'function') renderShapeGradHandles();
-        }, 50);
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            if(typeof initPixShapeGrad === 'function') initPixShapeGrad(activePixelateTab);
+          });
+        });
       }
     }
 
@@ -1177,12 +1173,36 @@
       gridUnit: 50,
       fastMode: false,
       renderRes: 2,
+      precompute: false,
+      precomputeFrames: 3,
       showDots: false,
       dotRadius: 0.008,
       colorSeed: 0,
+      hueOffset: 0,
+      hueRadius: 1,
+      satSeed: 0,
+      satMin: 0,
+      satMax: 1,
+      brightSeed: 0,
       colorMode: 0,
+      colorize: true,
+      preProcess: false,
       camHue: 0, camSat: 1, camVal: 1, camContrast: 1,  // 0=gradient, 1=hue
       gradientSeed: 0,
+      imgPixelEnabled: false,
+      imgPixelCols: 5,
+      imgPixelRows: 5,
+      imgPixelBlend: 8,
+      imgPixelOpacity: 1.0,
+      imgPixelAffectScale: false,
+      imgPixelMinScale: -4.0,
+      imgPixelMaxScale: 4.0,
+      imgPixelAffectRotate: false,
+      imgPixelMinRotate: -90.0,
+      imgPixelMaxRotate: 90.0,
+      imgPixelAffectOffset: false,
+      imgPixelMinOffset: -0.5,
+      imgPixelMaxOffset: 0.5,
       valueMin: 0.75,
       valueMax: 1.0,
       animating: false,
@@ -1205,6 +1225,7 @@
       genDiamond: false,
       shapeGradOpacity: 0.2,
       shapeGradDir: 0,
+      tileGradEnabled: true,
       radialCenterX: 0,
       radialCenterY: 0,
       radialScale: 1,
@@ -1216,6 +1237,15 @@
       ],
       gapColor: '#000000',
       gapOpacity: 1.0,
+      // ── Canvas size ──────────────────────────────────────
+      canvasMode: 'fullscreen',
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      bgMode: 'custom',
+      bgColor: '#000000',
+      bgSeed: 0,
+      // ── Multi-instance pixelate ──────────────────────────
+      pixelateInstances: null, // populated by initPixelateInstances()
       banding: true,
       bandCount: 12,
       bandLumMin: 0.69,
@@ -1236,6 +1266,7 @@
       gradeSat: 1.27,
       gradeVal: 1.05,
       gradeContrast: 1.68,
+      postProcessEnabled: true,
       gradientStops: [
         { pos: 0.0,  r: 40,  g: 40,  b: 80,  hex: '#282850' },
         { pos: 0.25, r: 80,  g: 120, b: 200, hex: '#5078c8' },
@@ -1327,7 +1358,6 @@
       document.getElementById('btn-src-voronoi').classList.toggle('active', src === 'voronoi');
       document.getElementById('btn-src-camera').classList.toggle('active', src === 'camera');
       document.getElementById('voronoi-sections').style.display = src === 'voronoi' ? '' : 'none';
-      document.getElementById('btn-cm-raw').style.display = src === 'camera' ? '' : 'none';
       document.getElementById('voronoi-sections-2').style.display = src === 'voronoi' ? '' : 'none';
       document.getElementById('camera-controls').style.display = src === 'camera' ? '' : 'none';
 
@@ -1540,17 +1570,115 @@
 
     function setColorMode(m) {
       window.shaderParams.colorMode = m;
-      document.getElementById('btn-cm-raw').classList.toggle('active', m === 2);
       document.getElementById('btn-cm-grad').classList.toggle('active', m === 0);
       document.getElementById('btn-cm-hue').classList.toggle('active', m === 1);
       document.getElementById('gradient-controls').style.display = m === 0 ? '' : 'none';
       document.getElementById('hue-controls').style.display = m === 1 ? '' : 'none';
-      document.getElementById('raw-controls').style.display = m === 2 ? '' : 'none';
       if (m === 0) {
         setTimeout(function(){ renderGradientBar(); syncGradientToGL(); }, 50);
       }
       window.shaderDirty = true;
+      if (window.shaderParams.bgMode === 'random' && typeof updateBgRandomPreview === 'function') updateBgRandomPreview();
     }
+
+    function togglePreProcess() {
+      var p = window.shaderParams;
+      p.preProcess = !p.preProcess;
+      document.getElementById('btn-preprocess-toggle').classList.toggle('on', p.preProcess);
+      document.getElementById('preprocess-controls').classList.toggle('controls-disabled', !p.preProcess);
+      window.shaderDirty = true;
+    }
+
+    function toggleColorize() {
+      var p = window.shaderParams;
+      p.colorize = !p.colorize;
+      document.getElementById('btn-colorize-toggle').classList.toggle('on', p.colorize);
+      document.getElementById('colorize-wrapper').classList.toggle('controls-disabled', !p.colorize);
+      window.shaderDirty = true;
+    }
+
+    function togglePostProcess() {
+      var p = window.shaderParams;
+      p.postProcessEnabled = !p.postProcessEnabled;
+      document.getElementById('btn-postprocess-toggle').classList.toggle('on', p.postProcessEnabled);
+      document.getElementById('postprocess-controls').classList.toggle('controls-disabled', !p.postProcessEnabled);
+      window.shaderDirty = true;
+    }
+
+    function toggleImgPixel() {
+      if (typeof activePixelateTab !== 'undefined') { togglePixImgPixel(activePixelateTab); return; }
+      var p = window.shaderParams;
+      p.imgPixelEnabled = !p.imgPixelEnabled;
+      var b = document.getElementById('btn-imgpixel-toggle'); if (b) b.classList.toggle('on', p.imgPixelEnabled);
+      var c = document.getElementById('imgpixel-controls'); if (c) c.classList.toggle('controls-disabled', !p.imgPixelEnabled);
+      window.shaderDirty = true;
+    }
+
+    function toggleImgPixelAffectScale() {
+      if (typeof activePixelateTab !== 'undefined') { togglePixImgPixelAffect(activePixelateTab, 'scale'); return; }
+      var p = window.shaderParams; p.imgPixelAffectScale = !p.imgPixelAffectScale;
+      var b = document.getElementById('btn-imgpixel-scale'); if (b) b.classList.toggle('active', p.imgPixelAffectScale);
+      var c = document.getElementById('imgpixel-scale-controls'); if (c) c.style.display = p.imgPixelAffectScale ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleImgPixelAffectRotate() {
+      if (typeof activePixelateTab !== 'undefined') { togglePixImgPixelAffect(activePixelateTab, 'rotate'); return; }
+      var p = window.shaderParams; p.imgPixelAffectRotate = !p.imgPixelAffectRotate;
+      var b = document.getElementById('btn-imgpixel-rotate'); if (b) b.classList.toggle('active', p.imgPixelAffectRotate);
+      var c = document.getElementById('imgpixel-rotate-controls'); if (c) c.style.display = p.imgPixelAffectRotate ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleImgPixelAffectOffset() {
+      if (typeof activePixelateTab !== 'undefined') { togglePixImgPixelAffect(activePixelateTab, 'offset'); return; }
+      var p = window.shaderParams; p.imgPixelAffectOffset = !p.imgPixelAffectOffset;
+      var b = document.getElementById('btn-imgpixel-offset'); if (b) b.classList.toggle('active', p.imgPixelAffectOffset);
+      var c = document.getElementById('imgpixel-offset-controls'); if (c) c.style.display = p.imgPixelAffectOffset ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleTileGrad() {
+      if (typeof activePixelateTab !== 'undefined') { setPixTileGrad(activePixelateTab); return; }
+      var p = window.shaderParams; p.tileGradEnabled = !p.tileGradEnabled;
+      var b = document.getElementById('btn-tilegrad-toggle'); if (b) b.classList.toggle('on', p.tileGradEnabled);
+      var c = document.getElementById('tilegrad-controls'); if (c) c.classList.toggle('controls-disabled', !p.tileGradEnabled);
+      window.shaderDirty = true;
+    }
+
+    function handleImgPixelUpload(event) {
+      var file = event.target.files[0];
+      if (!file) return;
+      // Try per-instance element first, fall back to static
+      var i = typeof activePixelateTab !== 'undefined' ? activePixelateTab : 0;
+      var nm = document.getElementById('imgPixelName_' + i) || document.getElementById('imgPixelName');
+      if (nm) nm.textContent = file.name;
+      var img = new Image();
+      img.onload = function() {
+        window._imgPixelImage = img;
+        if (window.uploadImgPixelTex) window.uploadImgPixelTex(img);
+        window.shaderDirty = true;
+      };
+      img.src = URL.createObjectURL(file);
+    }
+
+    // Auto-load tile.png on initialization
+    function loadDefaultTileImage() {
+      var img = new Image();
+      img.onload = function() {
+        window._imgPixelImage = img;
+        if (window.uploadImgPixelTex) window.uploadImgPixelTex(img);
+        window.shaderDirty = true;
+      };
+      img.onerror = function() {
+        // If tile.png doesn't exist, silently ignore
+        console.log('tile.png not found, skipping auto-load');
+      };
+      img.src = 'tile.png';
+    }
+
+    // Call on page load
+    setTimeout(loadDefaultTileImage, 100);
 
     function toggleMirror(axis) {
       if (axis === 'x') {
@@ -1595,72 +1723,1312 @@
       window.shaderDirty = true;
     }
 
+    function togglePrecompute() {
+      window.shaderParams.precompute = !window.shaderParams.precompute;
+      document.getElementById('btn-precompute').classList.toggle('active', window.shaderParams.precompute);
+      document.getElementById('precompute-controls').style.display = window.shaderParams.precompute ? '' : 'none';
+      // Signal shader.js to rebuild/flush the frame buffer
+      if (window.resetPrecomputeBuffer) window.resetPrecomputeBuffer();
+      window.shaderDirty = true;
+    }
+
     function togglePixelate() {
-      window.shaderParams.pixelate = !window.shaderParams.pixelate;
-      var on = window.shaderParams.pixelate;
+      var p = window.shaderParams;
+      p.pixelate = !p.pixelate;
+      var on = p.pixelate;
       document.getElementById('btn-pixelate-toggle').classList.toggle('on', on);
-      var ctrl = document.getElementById('pixelate-controls');
-      if(ctrl) ctrl.classList.toggle('controls-disabled', !on);
+      var wrap = document.getElementById('pixelate-master-wrap');
+      if (wrap) wrap.classList.toggle('controls-disabled', !on);
       window.shaderDirty = true;
     }
 
-    function toggleOblique() {
-      window.shaderParams.oblique = !window.shaderParams.oblique;
-      document.getElementById('btn-oblique').classList.toggle('active', window.shaderParams.oblique);
+    // ══════════════════════════════════════════════════
+    //  PIXELATE INSTANCE MANAGEMENT
+    // ══════════════════════════════════════════════════
+
+    var activePixelateTab = 0;
+    var pixelateInstanceIdCounter = 1;
+
+    function defaultPixInstance(overrides) {
+      var p = window.shaderParams;
+      return Object.assign({
+        id: ++pixelateInstanceIdCounter,
+        enabled: true,
+        resolution: 1,
+        pixelW: 23, pixelH: 11, pixelScale: 1.0,
+        weaveMode: 0, pixelShape: 0,
+        shapeMargin: 3, shapeBleed: 0, shapeScale: 1.0,
+        forceSquare: false, maintainThickness: false,
+        oblique: false,
+        quadSteps: 4, quadEnabled: false, genDiamond: false,
+        shapeGradOpacity: 0.2, shapeGradDir: 0,
+        tileGradEnabled: true,
+        radialCenterX: 0, radialCenterY: 0, radialScale: 1,
+        embossBlendMode: 8,
+        shapeGradStops: [
+          { pos: 0.0, r: 0,   g: 0,   b: 0,   hex: '#000000' },
+          { pos: 0.5, r: 255, g: 255, b: 255, hex: '#ffffff' },
+          { pos: 1.0, r: 0,   g: 0,   b: 0,   hex: '#000000' }
+        ],
+        gapColor: '#000000', gapOpacity: 1.0,
+        opPatterns: [
+          { id: 1, active: true, grid: [[0,1],[1,0]], hueShift: 0.04, hueOpacity: 0.92 },
+          { id: 2, active: true, grid: [[1],[0]],     hueShift: 0.05, hueOpacity: 1.0  },
+          { id: 3, active: true, grid: [[1,0],[1,0]], hueShift: 0.17, hueOpacity: 1.0  },
+          { id: 4, active: true, grid: [[1,0,1],[0,1,0]], hueShift: 0.55, hueOpacity: 1.0 }
+        ],
+        opPatternIdCounter: 4,
+        opPatternsEnabled: true,
+        opPatternSeed: 0,
+        opPatternMode: 0,
+        imgPixelEnabled: false,
+        imgPixelCols: 5, imgPixelRows: 5,
+        imgPixelBlend: 8, imgPixelOpacity: 1.0,
+        imgPixelAffectScale: false, imgPixelMinScale: -4.0, imgPixelMaxScale: 4.0,
+        imgPixelAffectRotate: false, imgPixelMinRotate: -90.0, imgPixelMaxRotate: 90.0,
+        imgPixelAffectOffset: false, imgPixelMinOffset: -0.5, imgPixelMaxOffset: 0.5,
+        imgPixelMask: false,
+        imgPixelName: 'tile.png',
+        imgDataURL: null,
+        // Oct diamond layer 2 image pixel
+        imgPixel2Enabled: false,
+        imgPixel2Cols: 5, imgPixel2Rows: 5,
+        imgPixel2Blend: 8, imgPixel2Opacity: 1.0,
+        imgPixel2AffectScale: false, imgPixel2MinScale: -4.0, imgPixel2MaxScale: 4.0,
+        imgPixel2AffectRotate: false, imgPixel2MinRotate: -90.0, imgPixel2MaxRotate: 90.0,
+        imgPixel2AffectOffset: false, imgPixel2MinOffset: -0.5, imgPixel2MaxOffset: 0.5,
+        imgPixel2Mask: false,
+        imgPixel2Name: 'tile2.png',
+        imgData2URL: null,
+      }, overrides || {});
+    }
+
+    function initPixelateInstances() {
+      var p = window.shaderParams;
+      if (!p.pixelateInstances || !p.pixelateInstances.length) {
+        // Migrate flat params to first instance
+        var inst0 = defaultPixInstance({
+          id: 1,
+          pixelW: p.pixelW || 23, pixelH: p.pixelH || 11, pixelScale: p.pixelScale || 1,
+          weaveMode: p.weaveMode || 0, pixelShape: p.pixelShape || 0,
+          shapeMargin: p.shapeMargin || 3, shapeBleed: p.shapeBleed || 0, shapeScale: p.shapeScale != null ? p.shapeScale : 1.0,
+          forceSquare: false, maintainThickness: false,
+          oblique: !!p.oblique,
+          quadSteps: p.quadSteps || 4, quadEnabled: !!p.quadEnabled, genDiamond: !!p.genDiamond,
+          shapeGradOpacity: p.shapeGradOpacity != null ? p.shapeGradOpacity : 0.2,
+          shapeGradDir: p.shapeGradDir || 0,
+          tileGradEnabled: p.tileGradEnabled !== false,
+          radialCenterX: p.radialCenterX || 0, radialCenterY: p.radialCenterY || 0, radialScale: p.radialScale || 1,
+          embossBlendMode: p.embossBlendMode != null ? p.embossBlendMode : 8,
+          shapeGradStops: p.shapeGradStops ? JSON.parse(JSON.stringify(p.shapeGradStops)) : undefined,
+          gapColor: p.gapColor || '#000000', gapOpacity: p.gapOpacity != null ? p.gapOpacity : 1.0,
+          opPatterns: p.opPatterns ? JSON.parse(JSON.stringify(p.opPatterns)) : undefined,
+          opPatternIdCounter: p.opPatternIdCounter || 4,
+          opPatternsEnabled: p.opPatternsEnabled !== false,
+          opPatternSeed: p.opPatternSeed || 0, opPatternMode: p.opPatternMode || 0,
+          imgPixelEnabled: !!p.imgPixelEnabled,
+          imgPixelCols: p.imgPixelCols || 5, imgPixelRows: p.imgPixelRows || 5,
+          imgPixelBlend: p.imgPixelBlend != null ? p.imgPixelBlend : 8,
+          imgPixelOpacity: p.imgPixelOpacity != null ? p.imgPixelOpacity : 1.0,
+          imgPixelAffectScale: !!p.imgPixelAffectScale,
+          imgPixelMinScale: p.imgPixelMinScale != null ? p.imgPixelMinScale : -4,
+          imgPixelMaxScale: p.imgPixelMaxScale != null ? p.imgPixelMaxScale : 4,
+          imgPixelAffectRotate: !!p.imgPixelAffectRotate,
+          imgPixelMinRotate: p.imgPixelMinRotate != null ? p.imgPixelMinRotate : -90,
+          imgPixelMaxRotate: p.imgPixelMaxRotate != null ? p.imgPixelMaxRotate : 90,
+          imgPixelAffectOffset: !!p.imgPixelAffectOffset,
+          imgPixelMinOffset: p.imgPixelMinOffset != null ? p.imgPixelMinOffset : -0.5,
+          imgPixelMaxOffset: p.imgPixelMaxOffset != null ? p.imgPixelMaxOffset : 0.5,
+        });
+        p.pixelateInstances = [inst0];
+        pixelateInstanceIdCounter = 1;
+      } else {
+        // Restore id counter
+        pixelateInstanceIdCounter = p.pixelateInstances.reduce(function(mx,inst){ return Math.max(mx,inst.id||0); }, 0);
+      }
+    }
+
+    function addPixelateInstance() {
+      var p = window.shaderParams;
+      if (p.pixelateInstances.length >= 8) return;
+      var newInst = defaultPixInstance();
+      newInst.opPatterns = JSON.parse(JSON.stringify([]));  // start blank
+      newInst.opPatternsEnabled = false;
+      p.pixelateInstances.push(newInst);
+      activePixelateTab = p.pixelateInstances.length - 1;
+      // Copy default tile image to new instance's GL texture slot
+      var newIdx = activePixelateTab;
+      if (window._defaultImgPixelImage && window.uploadInstanceImgPixelTex) {
+        window.uploadInstanceImgPixelTex(newIdx, window._defaultImgPixelImage);
+      }
+      if (window._defaultImgPixel2Image && window.uploadInstanceImgPixel2Tex) {
+        window.uploadInstanceImgPixel2Tex(newIdx, window._defaultImgPixel2Image);
+      }
+      if (window.rebuildInstanceFBOs) window.rebuildInstanceFBOs();
+      renderPixelateTabs();
+      renderPixelateInstancePanel(activePixelateTab);
       window.shaderDirty = true;
     }
 
-    function toggleQuadtree() {
-      window.shaderParams.quadEnabled = !window.shaderParams.quadEnabled;
-      document.getElementById('btn-quadtree').classList.toggle('active', window.shaderParams.quadEnabled);
-      document.getElementById('quadtree-controls').style.display = window.shaderParams.quadEnabled ? '' : 'none';
+    function removePixelateInstance(idx) {
+      var p = window.shaderParams;
+      if (p.pixelateInstances.length <= 1) return;
+      p.pixelateInstances.splice(idx, 1);
+      if (activePixelateTab >= p.pixelateInstances.length) activePixelateTab = p.pixelateInstances.length - 1;
+      renderPixelateTabs();
+      renderPixelateInstancePanel(activePixelateTab);
       window.shaderDirty = true;
     }
 
-    function setWeaveMode(m) {
-      window.shaderParams.weaveMode = m;
-      document.getElementById('btn-weave-none').classList.toggle('active', m === 0);
-      document.getElementById('btn-weave-brick').classList.toggle('active', m === 1);
-      document.getElementById('btn-weave-weave').classList.toggle('active', m === 2);
-      document.getElementById('btn-weave-hex').classList.toggle('active', m === 3);
-      document.getElementById('btn-weave-oct').classList.toggle('active', m === 4);
-      var isAutoShape = m === 3 || m === 4;
-      var ss = document.getElementById('shape-section');
-      ss.style.opacity = isAutoShape ? '0.35' : '1';
-      ss.style.pointerEvents = isAutoShape ? 'none' : '';
-      if(isAutoShape) document.getElementById('shape-controls').style.display = '';
-      document.getElementById('gen-diamond-row').style.display = m === 4 ? '' : 'none';
+    function switchPixelateTab(idx) {
+      activePixelateTab = idx;
+      renderPixelateTabs();
+      renderPixelateInstancePanel(idx);
+    }
+
+    function renderPixelateTabs() {
+      var p = window.shaderParams;
+      var tabsEl = document.getElementById('pix-tabs');
+      if (!tabsEl) return;
+      tabsEl.innerHTML = '';
+      p.pixelateInstances.forEach(function(inst, i) {
+        var tab = document.createElement('button');
+        tab.className = 'pix-tab' + (i === activePixelateTab ? ' active' : '');
+        var label = document.createElement('span');
+        label.textContent = 'Pixelate ' + (i + 1);
+        tab.appendChild(label);
+        if (p.pixelateInstances.length > 1) {
+          var cls = document.createElement('button');
+          cls.className = 'pix-tab-close';
+          cls.textContent = '×';
+          cls.title = 'Remove stage';
+          cls.onclick = function(e) { e.stopPropagation(); removePixelateInstance(i); };
+          tab.appendChild(cls);
+        }
+        tab.addEventListener('click', function(e) {
+          if (e.target.classList.contains('pix-tab-close')) return;
+          switchPixelateTab(i);
+        });
+        tabsEl.appendChild(tab);
+      });
+    }
+
+    /* ── Per-instance HTML builder ─── */
+    function buildInstanceHTML(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      function s(k) { return k + '_' + i; }
+      var rc = inst.resolution || 1;
+      var wm = inst.weaveMode || 0;
+      var ps = inst.pixelShape || 0;
+      var isAutoShape = wm === 3 || wm === 4;
+
+      var resHTML = [1,2,4,8].map(function(r){
+        var lbl = r===1?'Full':'1/'+r;
+        return '<button id="'+s('btn-pix-res-'+r)+'" class="'+(rc===r?'active':'')+'" onclick="setPixRes('+i+','+r+')">'+lbl+'</button>';
+      }).join('');
+
+      var weaveNames = ['None','Brick','Weave','Hex','Oct'];
+      var weaveIds = ['none','brick','weave','hex','oct'];
+      var weaveHTML = weaveNames.map(function(t,m){
+        return '<button id="'+s('btn-weave-'+weaveIds[m])+'" class="'+(wm===m?'active':'')+'" onclick="setPixWeave('+i+','+m+')">'+t+'</button>';
+      }).join('');
+
+      var shapeData = [
+        ['none','None','<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'],
+        ['pill','Pill','<rect x="3" y="7" width="18" height="10" rx="5" fill="currentColor"/>'],
+        ['diamond','Diamond','<polygon points="12,2 22,12 12,22 2,12" fill="currentColor"/>'],
+        ['square','Square','<rect x="3" y="3" width="18" height="18" rx="1" fill="currentColor"/>'],
+        ['pointed','Chevron','<polygon points="5,4 19,4 22,12 19,20 5,20 2,12" fill="currentColor"/>'],
+        ['hex','Hexagon','<polygon points="6,2 18,2 23,12 18,22 6,22 1,12" fill="currentColor"/>'],
+        ['oct','Octagon','<polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8" fill="currentColor"/>'],
+        ['cross','Cross +','<rect x="10" y="3" width="4" height="18" rx="2" fill="currentColor"/><rect x="3" y="10" width="18" height="4" rx="2" fill="currentColor"/>'],
+        ['xshape','Cross ×','<rect x="10" y="3" width="4" height="18" rx="2" fill="currentColor" transform="rotate(45 12 12)"/><rect x="3" y="10" width="18" height="4" rx="2" fill="currentColor" transform="rotate(45 12 12)"/>'],
+      ];
+      var shapeHTML = shapeData.map(function(d,m){
+        return '<button id="'+s('btn-shape-'+d[0])+'" class="shape-icon'+(ps===m?' active':'')+'" onclick="setPixShape('+i+','+m+')" title="'+d[1]+'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+d[2]+'</svg></button>';
+      }).join('');
+
+      var embossOpts = ['Overlay','Multiply','Screen','Soft Light','Hard Light','Color Dodge','Color Burn','Linear Light','Normal'];
+      var embossHTML = embossOpts.map(function(n,v){
+        return '<option value="'+v+'"'+(inst.embossBlendMode===v?' selected':'')+'>'+n+'</option>';
+      }).join('');
+
+      var opOn = inst.opPatternsEnabled !== false;
+      var imgBlendOpts = [['Normal',8],['Overlay',0],['Multiply',1],['Screen',2],['Soft Light',3],['Hard Light',4],['Color Dodge',5],['Color Burn',6],['Linear Light',7]];
+      var imgBlendHTML = imgBlendOpts.map(function(x){
+        return '<option value="'+x[1]+'"'+(inst.imgPixelBlend===x[1]?' selected':'')+'>'+x[0]+'</option>';
+      }).join('');
+
+      return [
+// ── Per-instance header ──────────────────────────────────────
+'<div class="toggle-header" style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.08)">',
+'  <span class="toggle-label" style="font-size:12px;font-weight:600;letter-spacing:0.04em">Pixelate '+(i+1)+'</span>',
+'  <button class="toggle-active'+(inst.enabled!==false?' on':'')+'" id="'+s('btn-pix-enabled')+'" onclick="setPixEnabled('+i+')"></button>',
+'</div>',
+'<div id="'+s('pix-body')+'" class="'+(inst.enabled===false?'controls-disabled':'')+'" >',
+'<div class="row" style="margin-top:4px">',
+'  <label style="width:70px;font-size:10px">Resolution</label>',
+'  <div class="seg-bar" style="flex:1;margin-bottom:0">'+resHTML+'</div>',
+'</div>',
+'<div class="row"><label>Pixel Width</label>',
+'  <input type="range" id="'+s('sPixelW')+'" min="1" max="50" step="1" value="'+inst.pixelW+'">',
+'  <input type="number" class="val" id="'+s('vPixelW')+'" value="'+inst.pixelW+'" min="1" max="50" step="1">',
+'</div>',
+'<div class="row"><label>Pixel Height</label>',
+'  <input type="range" id="'+s('sPixelH')+'" min="1" max="50" step="1" value="'+inst.pixelH+'">',
+'  <input type="number" class="val" id="'+s('vPixelH')+'" value="'+inst.pixelH+'" min="1" max="50" step="1">',
+'</div>',
+'<div class="row"><label>Scale</label>',
+'  <input type="range" id="'+s('sPixelScale')+'" min="0.1" max="10" step="0.01" value="'+inst.pixelScale+'">',
+'  <input type="number" class="val" id="'+s('vPixelScale')+'" value="'+inst.pixelScale.toFixed(2)+'" min="0.1" max="10" step="0.01">',
+'</div>',
+'<div class="btn-row"><button id="'+s('btn-oblique')+'" class="'+(inst.oblique?'active':'')+'" onclick="setPixOblique('+i+')">Oblique</button></div>',
+'<div class="section-title" style="margin-top:6px">Quadtree</div>',
+'<div class="btn-row"><button id="'+s('btn-quadtree')+'" class="'+(inst.quadEnabled?'active':'')+'" onclick="setPixQuad('+i+')">Quadtree</button></div>',
+'<div id="'+s('quadtree-controls')+'" style="display:'+(inst.quadEnabled?'':'none')+'">',
+'  <div class="row"><label>Steps</label>',
+'    <input type="range" id="'+s('sQuadSteps')+'" min="2" max="5" step="1" value="'+inst.quadSteps+'">',
+'    <input type="number" class="val" id="'+s('vQuadSteps')+'" value="'+inst.quadSteps+'" min="2" max="5" step="1">',
+'  </div>',
+'  <div class="toggle-header" style="margin-top:4px">',
+'    <span class="toggle-label" style="font-size:11px">Maintain Thickness</span>',
+'    <button class="toggle-active'+(inst.maintainThickness?' on':'')+'" id="'+s('btn-maintain-thickness')+'" onclick="setPixMaintainThickness('+i+')"></button>',
+'  </div>',
+'</div>',
+'<div class="section-title" style="margin-top:6px">Weave</div>',
+'<div class="seg-bar">'+weaveHTML+'</div>',
+'<div id="'+s('gen-diamond-row')+'" class="btn-row" style="display:'+(wm===4?'':'none')+';margin-top:4px">',
+'  <button id="'+s('btn-gen-diamond')+'" class="'+(inst.genDiamond?'active':'')+'" onclick="setPixGenDiamond('+i+')">Generate Diamond</button>',
+'</div>',
+'<div id="'+s('shape-section')+'" style="opacity:'+(isAutoShape?'0.35':'1')+';pointer-events:'+(isAutoShape?'none':'')+'">',
+'  <div class="section-title" style="margin-top:6px">Shape</div>',
+'  <div class="seg-bar">'+shapeHTML+'</div>',
+'</div>',
+'<div id="'+s('shape-controls')+'" style="display:'+(ps>0||isAutoShape?'':'none')+'">',
+'  <div class="toggle-header" style="margin-top:4px;margin-bottom:4px">',
+'    <span class="toggle-label" style="font-size:11px">Force Square Frame</span>',
+'    <button class="toggle-active'+(inst.forceSquare?' on':'')+'" id="'+s('btn-force-square')+'" onclick="setPixForceSquare('+i+')"></button>',
+'  </div>',
+'  <div class="row"><label>Margin</label>',
+'    <input type="range" id="'+s('sShapeMargin')+'" min="0" max="10" step="1" value="'+inst.shapeMargin+'">',
+'    <input type="number" class="val" id="'+s('vShapeMargin')+'" value="'+inst.shapeMargin+'" min="0" max="10" step="1">',
+'  </div>',
+'  <div class="row"><label>Bleed</label>',
+'    <input type="range" id="'+s('sShapeBleed')+'" min="0" max="20" step="1" value="'+inst.shapeBleed+'">',
+'    <input type="number" class="val" id="'+s('vShapeBleed')+'" value="'+inst.shapeBleed+'" min="0" max="20" step="1">',
+'  </div>',
+'  <div class="row"><label>Shape Scale</label>',
+'    <input type="range" id="'+s('sShapeScale')+'" min="0" max="2" step="0.01" value="'+(inst.shapeScale!=null?inst.shapeScale:1.0)+'">',
+'    <input type="number" class="val" id="'+s('vShapeScale')+'" value="'+(inst.shapeScale!=null?inst.shapeScale.toFixed(2):'1.00')+'" min="0" max="2" step="0.01">',
+'  </div>',
+'  <div class="row"><label>Gap Color</label>',
+'    <input type="range" id="'+s('sGapOpacity')+'" min="0" max="1" step="0.01" value="'+inst.gapOpacity+'">',
+'    <input type="number" class="val" id="'+s('vGapOpacity')+'" value="'+inst.gapOpacity.toFixed(2)+'" min="0" max="1" step="0.01">',
+'    <div class="color-swatch" id="'+s('gapSwatch')+'" style="background:'+inst.gapColor+';cursor:pointer"></div>',
+'  </div>',
+'</div>',
+// Tile Gradient — always visible, outside shape-controls
+'<div class="toggle-header" style="margin-top:8px">',
+'  <span class="toggle-label">Tile Gradient</span>',
+'  <button class="toggle-active'+(inst.tileGradEnabled!==false?' on':'')+'" id="'+s('btn-tilegrad-toggle')+'" onclick="setPixTileGrad('+i+')"></button>',
+'</div>',
+'<div id="'+s('tilegrad-controls')+'" class="'+(inst.tileGradEnabled===false?'controls-disabled':'')+'">',
+'  <div class="grad-editor" id="'+s('shapeGradEditor')+'">',
+'    <canvas class="grad-bar" id="'+s('shapeGradBar')+'" height="24"></canvas>',
+'    <div class="grad-track" id="'+s('shapeGradTrack')+'"></div>',
+'    <div class="grad-hint">tap bar to add · tap handle to pick color · double-tap to delete</div>',
+'  </div>',
+'  <div class="row"><label>Opacity</label>',
+'    <input type="range" id="'+s('sShapeGradOpacity')+'" min="0" max="1" step="0.01" value="'+inst.shapeGradOpacity+'">',
+'    <input type="number" class="val" id="'+s('vShapeGradOpacity')+'" value="'+inst.shapeGradOpacity.toFixed(2)+'" min="0" max="1" step="0.01">',
+'  </div>',
+'  <div class="seg-bar">',
+'    <button id="'+s('btn-sgdir-h')+'" class="'+(inst.shapeGradDir===0?'active':'')+'" onclick="setPixSGDir('+i+',0)">Horizontal</button>',
+'    <button id="'+s('btn-sgdir-v')+'" class="'+(inst.shapeGradDir===1?'active':'')+'" onclick="setPixSGDir('+i+',1)">Vertical</button>',
+'    <button id="'+s('btn-sgdir-r')+'" class="'+(inst.shapeGradDir===2?'active':'')+'" onclick="setPixSGDir('+i+',2)">Radial</button>',
+'  </div>',
+'  <div id="'+s('radial-controls')+'" style="display:'+(inst.shapeGradDir===2?'':'none')+'">',
+'    <div class="row"><label>Center X</label>',
+'      <input type="range" id="'+s('sRadialX')+'" min="-1" max="1" step="0.01" value="'+inst.radialCenterX+'">',
+'      <input type="number" class="val" id="'+s('vRadialX')+'" value="'+inst.radialCenterX.toFixed(2)+'" min="-1" max="1" step="0.01">',
+'    </div>',
+'    <div class="row"><label>Center Y</label>',
+'      <input type="range" id="'+s('sRadialY')+'" min="-1" max="1" step="0.01" value="'+inst.radialCenterY+'">',
+'      <input type="number" class="val" id="'+s('vRadialY')+'" value="'+inst.radialCenterY.toFixed(2)+'" min="-1" max="1" step="0.01">',
+'    </div>',
+'    <div class="row"><label>Scale</label>',
+'      <input type="range" id="'+s('sRadialScale')+'" min="0" max="2" step="0.01" value="'+(inst.radialScale||1)+'">',
+'      <input type="number" class="val" id="'+s('vRadialScale')+'" value="'+(inst.radialScale||1).toFixed(2)+'" min="0" max="2" step="0.01">',
+'    </div>',
+'  </div>',
+'  <div class="row"><label>Blend</label><select id="'+s('selEmbossBlend')+'">'+embossHTML+'</select></div>',
+'</div>',
+// Opacity Pattern
+'<div class="divider"></div>',
+'<div class="toggle-header">',
+'  <span class="toggle-label">Opacity Pattern</span>',
+'  <div style="display:flex;gap:4px;align-items:center">',
+'    <button class="small" onclick="addPixOpPattern('+i+')">+ Add</button>',
+'    <button class="toggle-active'+(opOn?' on':'')+'" id="'+s('btn-oppattern-toggle')+'" onclick="togglePixOpPatterns('+i+')"></button>',
+'  </div>',
+'</div>',
+'<div id="'+s('oppattern-controls')+'" class="'+(opOn?'':'controls-disabled')+'">',
+'  <div class="row" id="'+s('oppattern-seed-row')+'"><label>Seed</label>',
+'    <input type="range" id="'+s('sOpPatSeed')+'" min="0" max="1000" step="1" value="'+inst.opPatternSeed+'">',
+'    <input type="number" class="val" id="'+s('vOpPatSeed')+'" value="'+inst.opPatternSeed+'" min="0" max="1000" step="1">',
+'  </div>',
+'  <div id="'+s('oppattern-mode-row')+'" class="row"><label>Group By</label>',
+'    <div class="seg-bar">',
+'      <button id="'+s('btn-oppat-color')+'" class="'+((inst.opPatternMode||0)===0?'active':'')+'" onclick="setPixOpPatMode('+i+',0)">Color</button>',
+'      <button id="'+s('btn-oppat-shape')+'" class="'+((inst.opPatternMode||0)===1?'active':'')+'" onclick="setPixOpPatMode('+i+',1)">Shape</button>',
+'    </div>',
+'  </div>',
+'  <div id="'+s('oppattern-list')+'"></div>',
+'</div>',
+// Image Pixel
+'<div class="divider"></div>',
+'<div class="toggle-header">',
+'  <span class="toggle-label">Image Pixel</span>',
+'  <button class="toggle-active'+(inst.imgPixelEnabled?' on':'')+'" id="'+s('btn-imgpixel-toggle')+'" onclick="togglePixImgPixel('+i+')"></button>',
+'</div>',
+'<div id="'+s('imgpixel-controls')+'" class="'+(inst.imgPixelEnabled?'':'controls-disabled')+'">',
+'  <div class="btn-row" style="margin-bottom:8px">',
+'    <button onclick="document.getElementById(\''+s('imgPixelInput')+'\').click()">Upload Image</button>',
+'    <span id="'+s('imgPixelName')+'" style="color:rgba(255,255,255,0.35);font-size:10px;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">'+(inst.imgPixelName||'tile.png')+'</span>',
+'  </div>',
+'  <input type="file" id="'+s('imgPixelInput')+'" accept="image/*" style="display:none" onchange="handlePixImgPixelUpload(event,'+i+')">',
+'  <div class="row"><label>Columns</label>',
+'    <input type="range" id="'+s('sImgPixelCols')+'" min="1" max="10" step="1" value="'+inst.imgPixelCols+'">',
+'    <input type="number" class="val" id="'+s('vImgPixelCols')+'" value="'+inst.imgPixelCols+'" min="1" max="10" step="1">',
+'  </div>',
+'  <div class="row"><label>Rows</label>',
+'    <input type="range" id="'+s('sImgPixelRows')+'" min="1" max="10" step="1" value="'+inst.imgPixelRows+'">',
+'    <input type="number" class="val" id="'+s('vImgPixelRows')+'" value="'+inst.imgPixelRows+'" min="1" max="10" step="1">',
+'  </div>',
+'  <div class="seg-bar" style="margin-bottom:8px">',
+'    <button id="'+s('btn-imgpixel-scale')+'" class="'+(inst.imgPixelAffectScale?'active':'')+'" onclick="togglePixImgPixelAffect('+i+',\'scale\')">',
+'      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>SCALE</button>',
+'    <button id="'+s('btn-imgpixel-rotate')+'" class="'+(inst.imgPixelAffectRotate?'active':'')+'" onclick="togglePixImgPixelAffect('+i+',\'rotate\')">',
+'      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/></svg>ROTATE</button>',
+'    <button id="'+s('btn-imgpixel-offset')+'" class="'+(inst.imgPixelAffectOffset?'active':'')+'" onclick="togglePixImgPixelAffect('+i+',\'offset\')">',
+'      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3"/></svg>OFFSET</button>',
+'  </div>',
+'  <div id="'+s('imgpixel-scale-controls')+'" style="display:'+(inst.imgPixelAffectScale?'':'none')+'">',
+'    <div class="row"><label>Min Scale</label>',
+'      <input type="range" id="'+s('sImgPixelMinScale')+'" min="-4" max="4" step="0.01" value="'+inst.imgPixelMinScale+'">',
+'      <input type="number" class="val" id="'+s('vImgPixelMinScale')+'" value="'+inst.imgPixelMinScale.toFixed(2)+'" min="-4" max="4" step="0.01">',
+'    </div>',
+'    <div class="row"><label>Max Scale</label>',
+'      <input type="range" id="'+s('sImgPixelMaxScale')+'" min="-4" max="4" step="0.01" value="'+inst.imgPixelMaxScale+'">',
+'      <input type="number" class="val" id="'+s('vImgPixelMaxScale')+'" value="'+inst.imgPixelMaxScale.toFixed(2)+'" min="-4" max="4" step="0.01">',
+'    </div>',
+'  </div>',
+'  <div id="'+s('imgpixel-rotate-controls')+'" style="display:'+(inst.imgPixelAffectRotate?'':'none')+'">',
+'    <div class="row"><label>Min Rotate</label>',
+'      <input type="range" id="'+s('sImgPixelMinRotate')+'" min="-180" max="180" step="1" value="'+inst.imgPixelMinRotate+'">',
+'      <input type="number" class="val" id="'+s('vImgPixelMinRotate')+'" value="'+inst.imgPixelMinRotate+'" min="-180" max="180" step="1">',
+'    </div>',
+'    <div class="row"><label>Max Rotate</label>',
+'      <input type="range" id="'+s('sImgPixelMaxRotate')+'" min="-180" max="180" step="1" value="'+inst.imgPixelMaxRotate+'">',
+'      <input type="number" class="val" id="'+s('vImgPixelMaxRotate')+'" value="'+inst.imgPixelMaxRotate+'" min="-180" max="180" step="1">',
+'    </div>',
+'  </div>',
+'  <div id="'+s('imgpixel-offset-controls')+'" style="display:'+(inst.imgPixelAffectOffset?'':'none')+'">',
+'    <div class="row"><label>Min Offset</label>',
+'      <input type="range" id="'+s('sImgPixelMinOffset')+'" min="-1" max="1" step="0.01" value="'+inst.imgPixelMinOffset+'">',
+'      <input type="number" class="val" id="'+s('vImgPixelMinOffset')+'" value="'+inst.imgPixelMinOffset.toFixed(2)+'" min="-1" max="1" step="0.01">',
+'    </div>',
+'    <div class="row"><label>Max Offset</label>',
+'      <input type="range" id="'+s('sImgPixelMaxOffset')+'" min="-1" max="1" step="0.01" value="'+inst.imgPixelMaxOffset+'">',
+'      <input type="number" class="val" id="'+s('vImgPixelMaxOffset')+'" value="'+inst.imgPixelMaxOffset.toFixed(2)+'" min="-1" max="1" step="0.01">',
+'    </div>',
+'  </div>',
+'  <div class="row"><label>Opacity</label>',
+'    <input type="range" id="'+s('sImgPixelOpacity')+'" min="0" max="1" step="0.01" value="'+inst.imgPixelOpacity+'">',
+'    <input type="number" class="val" id="'+s('vImgPixelOpacity')+'" value="'+inst.imgPixelOpacity.toFixed(2)+'" min="0" max="1" step="0.01">',
+'  </div>',
+'  <div class="row"><label>Blend</label><select id="'+s('selImgPixelBlend')+'">'+imgBlendHTML+'</select></div>',
+'  <div class="row"><label>Mask</label>',
+'    <button class="toggle-active'+(inst.imgPixelMask?' on':'')+'" id="'+s('btn-imgpixel-mask')+'" onclick="togglePixImgPixelMask('+i+',1)" style="width:42px;height:20px;min-width:42px"></button>',
+'  </div>',
+'</div>',
+// ── Oct Diamond Image Pixel ──────────────────────────────
+'<div id="'+s('oct-diamond-imgpixel')+'" style="display:'+(wm===4?'':'none')+'">',
+'<div class="divider"></div>',
+'<div class="toggle-header">',
+'  <span class="toggle-label">Diamond Image Pixel</span>',
+'  <button class="toggle-active'+(inst.imgPixel2Enabled?' on':'')+'" id="'+s('btn-imgpixel2-toggle')+'" onclick="togglePixImgPixel2('+i+')"></button>',
+'</div>',
+'<div id="'+s('imgpixel2-controls')+'" class="'+(inst.imgPixel2Enabled?'':'controls-disabled')+'">',
+'  <div class="btn-row" style="margin-bottom:8px">',
+'    <button onclick="document.getElementById(\''+s('imgPixel2Input')+'\').click()">Upload Image</button>',
+'    <span id="'+s('imgPixel2Name')+'" style="color:rgba(255,255,255,0.35);font-size:10px;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">'+(inst.imgPixel2Name||'tile2.png')+'</span>',
+'  </div>',
+'  <input type="file" id="'+s('imgPixel2Input')+'" accept="image/*" style="display:none" onchange="handlePixImgPixel2Upload(event,'+i+')">',
+'  <div class="row"><label>Columns</label>',
+'    <input type="range" id="'+s('sImgPixel2Cols')+'" min="1" max="10" step="1" value="'+(inst.imgPixel2Cols||5)+'">',
+'    <input type="number" class="val" id="'+s('vImgPixel2Cols')+'" value="'+(inst.imgPixel2Cols||5)+'" min="1" max="10" step="1">',
+'  </div>',
+'  <div class="row"><label>Rows</label>',
+'    <input type="range" id="'+s('sImgPixel2Rows')+'" min="1" max="10" step="1" value="'+(inst.imgPixel2Rows||5)+'">',
+'    <input type="number" class="val" id="'+s('vImgPixel2Rows')+'" value="'+(inst.imgPixel2Rows||5)+'" min="1" max="10" step="1">',
+'  </div>',
+'  <div class="seg-bar" style="margin-bottom:8px">',
+'    <button id="'+s('btn-imgpixel2-scale')+'" class="'+(inst.imgPixel2AffectScale?'active':'')+'" onclick="togglePixImgPixel2Affect('+i+',\'scale\')">SCALE</button>',
+'    <button id="'+s('btn-imgpixel2-rotate')+'" class="'+(inst.imgPixel2AffectRotate?'active':'')+'" onclick="togglePixImgPixel2Affect('+i+',\'rotate\')">ROTATE</button>',
+'    <button id="'+s('btn-imgpixel2-offset')+'" class="'+(inst.imgPixel2AffectOffset?'active':'')+'" onclick="togglePixImgPixel2Affect('+i+',\'offset\')">OFFSET</button>',
+'  </div>',
+'  <div id="'+s('imgpixel2-scale-controls')+'" style="display:'+(inst.imgPixel2AffectScale?'':'none')+'">',
+'    <div class="row"><label>Min Scale</label>',
+'      <input type="range" id="'+s('sImgPixel2MinScale')+'" min="-4" max="4" step="0.01" value="'+(inst.imgPixel2MinScale != null ? inst.imgPixel2MinScale : -4)+'">',
+'      <input type="number" class="val" id="'+s('vImgPixel2MinScale')+'" value="'+((inst.imgPixel2MinScale != null ? inst.imgPixel2MinScale : -4).toFixed(2))+'" min="-4" max="4" step="0.01">',
+'    </div>',
+'    <div class="row"><label>Max Scale</label>',
+'      <input type="range" id="'+s('sImgPixel2MaxScale')+'" min="-4" max="4" step="0.01" value="'+(inst.imgPixel2MaxScale != null ? inst.imgPixel2MaxScale : 4)+'">',
+'      <input type="number" class="val" id="'+s('vImgPixel2MaxScale')+'" value="'+((inst.imgPixel2MaxScale != null ? inst.imgPixel2MaxScale : 4).toFixed(2))+'" min="-4" max="4" step="0.01">',
+'    </div>',
+'  </div>',
+'  <div id="'+s('imgpixel2-rotate-controls')+'" style="display:'+(inst.imgPixel2AffectRotate?'':'none')+'">',
+'    <div class="row"><label>Min Rotate</label>',
+'      <input type="range" id="'+s('sImgPixel2MinRotate')+'" min="-180" max="180" step="1" value="'+(inst.imgPixel2MinRotate != null ? inst.imgPixel2MinRotate : -90)+'">',
+'      <input type="number" class="val" id="'+s('vImgPixel2MinRotate')+'" value="'+(inst.imgPixel2MinRotate != null ? inst.imgPixel2MinRotate : -90)+'" min="-180" max="180" step="1">',
+'    </div>',
+'    <div class="row"><label>Max Rotate</label>',
+'      <input type="range" id="'+s('sImgPixel2MaxRotate')+'" min="-180" max="180" step="1" value="'+(inst.imgPixel2MaxRotate != null ? inst.imgPixel2MaxRotate : 90)+'">',
+'      <input type="number" class="val" id="'+s('vImgPixel2MaxRotate')+'" value="'+(inst.imgPixel2MaxRotate != null ? inst.imgPixel2MaxRotate : 90)+'" min="-180" max="180" step="1">',
+'    </div>',
+'  </div>',
+'  <div id="'+s('imgpixel2-offset-controls')+'" style="display:'+(inst.imgPixel2AffectOffset?'':'none')+'">',
+'    <div class="row"><label>Min Offset</label>',
+'      <input type="range" id="'+s('sImgPixel2MinOffset')+'" min="-1" max="1" step="0.01" value="'+(inst.imgPixel2MinOffset != null ? inst.imgPixel2MinOffset : -0.5)+'">',
+'      <input type="number" class="val" id="'+s('vImgPixel2MinOffset')+'" value="'+((inst.imgPixel2MinOffset != null ? inst.imgPixel2MinOffset : -0.5).toFixed(2))+'" min="-1" max="1" step="0.01">',
+'    </div>',
+'    <div class="row"><label>Max Offset</label>',
+'      <input type="range" id="'+s('sImgPixel2MaxOffset')+'" min="-1" max="1" step="0.01" value="'+(inst.imgPixel2MaxOffset != null ? inst.imgPixel2MaxOffset : 0.5)+'">',
+'      <input type="number" class="val" id="'+s('vImgPixel2MaxOffset')+'" value="'+((inst.imgPixel2MaxOffset != null ? inst.imgPixel2MaxOffset : 0.5).toFixed(2))+'" min="-1" max="1" step="0.01">',
+'    </div>',
+'  </div>',
+'  <div class="row"><label>Opacity</label>',
+'    <input type="range" id="'+s('sImgPixel2Opacity')+'" min="0" max="1" step="0.01" value="'+(inst.imgPixel2Opacity != null ? inst.imgPixel2Opacity : 1)+'">',
+'    <input type="number" class="val" id="'+s('vImgPixel2Opacity')+'" value="'+((inst.imgPixel2Opacity != null ? inst.imgPixel2Opacity : 1).toFixed(2))+'" min="0" max="1" step="0.01">',
+'  </div>',
+'  <div class="row"><label>Blend</label><select id="'+s('selImgPixel2Blend')+'">'+imgBlendHTML+'</select></div>',
+'  <div class="row"><label>Mask</label>',
+'    <button class="toggle-active'+(inst.imgPixel2Mask?' on':'')+'" id="'+s('btn-imgpixel2-mask')+'" onclick="togglePixImgPixelMask('+i+',2)" style="width:42px;height:20px;min-width:42px"></button>',
+'  </div>',
+'</div>',
+'</div>',
+'</div>', // close pix-body
+      ].join('\n');
+    }
+
+    /* ── Render the active instance into the panel ─── */
+    function renderPixelateInstancePanel(idx) {
+      var panel = document.getElementById('pix-instance-panel');
+      if (!panel) return;
+      panel.innerHTML = buildInstanceHTML(idx);
+      wirePixelateInstance(idx);
+      // Initialize shape gradient — wait two animation frames so the canvas has
+      // been laid out and clientWidth is non-zero before we paint the bar.
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { initPixShapeGrad(idx); });
+      });
+      // Render op patterns
+      renderPixOpPatterns(idx);
+      // Wire gap swatch
+      var swatch = document.getElementById('gapSwatch_' + idx);
+      if (swatch) {
+        swatch.onclick = function() {
+          var inst = window.shaderParams.pixelateInstances[idx];
+          openColorPicker(inst.gapColor || '#000000', function(hex) {
+            inst.gapColor = hex;
+            swatch.style.background = hex;
+            window.shaderDirty = true;
+          });
+        };
+      }
+    }
+
+    /* ── Wire all inputs for an instance ──────────────── */
+    function wirePixelateInstance(i) {
+      function s(k) { return k + '_' + i; }
+      var inst = window.shaderParams.pixelateInstances[i];
+
+      function wireInst(slId, valId, key, fmt) {
+        var sl = document.getElementById(slId);
+        var va = document.getElementById(valId);
+        if (!sl || !va) return;
+        sl.addEventListener('input', function() {
+          var v = parseFloat(sl.value);
+          inst[key] = v;
+          va.value = fmt(v);
+          window.shaderDirty = true;
+        });
+        va.addEventListener('change', function() {
+          var v = parseFloat(va.value);
+          if (isNaN(v)) return;
+          v = Math.max(parseFloat(sl.min), Math.min(parseFloat(sl.max), v));
+          sl.value = v;
+          inst[key] = v;
+          va.value = fmt(v);
+          window.shaderDirty = true;
+        });
+      }
+      wireInst(s('sPixelW'),  s('vPixelW'),  'pixelW',  function(v){return Math.round(v);});
+      wireInst(s('sPixelH'),  s('vPixelH'),  'pixelH',  function(v){return Math.round(v);});
+      wireInst(s('sPixelScale'), s('vPixelScale'), 'pixelScale', function(v){return v.toFixed(2);});
+      wireInst(s('sQuadSteps'), s('vQuadSteps'), 'quadSteps', function(v){return Math.round(v);});
+      wireInst(s('sShapeMargin'), s('vShapeMargin'), 'shapeMargin', function(v){return Math.round(v);});
+      wireInst(s('sShapeBleed'), s('vShapeBleed'), 'shapeBleed', function(v){return Math.round(v);});
+      wireInst(s('sShapeScale'), s('vShapeScale'), 'shapeScale', function(v){return v.toFixed(2);});
+      wireInst(s('sGapOpacity'), s('vGapOpacity'), 'gapOpacity', function(v){return v.toFixed(2);});
+      wireInst(s('sShapeGradOpacity'), s('vShapeGradOpacity'), 'shapeGradOpacity', function(v){return v.toFixed(2);});
+      wireInst(s('sRadialX'), s('vRadialX'), 'radialCenterX', function(v){return v.toFixed(2);});
+      wireInst(s('sRadialY'), s('vRadialY'), 'radialCenterY', function(v){return v.toFixed(2);});
+      wireInst(s('sRadialScale'), s('vRadialScale'), 'radialScale', function(v){return v.toFixed(2);});
+      wireInst(s('sOpPatSeed'), s('vOpPatSeed'), 'opPatternSeed', function(v){return Math.round(v);});
+      wireInst(s('sImgPixelCols'), s('vImgPixelCols'), 'imgPixelCols', function(v){return Math.round(v);});
+      wireInst(s('sImgPixelRows'), s('vImgPixelRows'), 'imgPixelRows', function(v){return Math.round(v);});
+      wireInst(s('sImgPixelOpacity'), s('vImgPixelOpacity'), 'imgPixelOpacity', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixelMinScale'), s('vImgPixelMinScale'), 'imgPixelMinScale', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixelMaxScale'), s('vImgPixelMaxScale'), 'imgPixelMaxScale', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixelMinRotate'), s('vImgPixelMinRotate'), 'imgPixelMinRotate', function(v){return Math.round(v);});
+      wireInst(s('sImgPixelMaxRotate'), s('vImgPixelMaxRotate'), 'imgPixelMaxRotate', function(v){return Math.round(v);});
+      wireInst(s('sImgPixelMinOffset'), s('vImgPixelMinOffset'), 'imgPixelMinOffset', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixelMaxOffset'), s('vImgPixelMaxOffset'), 'imgPixelMaxOffset', function(v){return v.toFixed(2);});
+
+      // Layer 2 image pixel sliders
+      wireInst(s('sImgPixel2Cols'), s('vImgPixel2Cols'), 'imgPixel2Cols', function(v){return Math.round(v);});
+      wireInst(s('sImgPixel2Rows'), s('vImgPixel2Rows'), 'imgPixel2Rows', function(v){return Math.round(v);});
+      wireInst(s('sImgPixel2Opacity'), s('vImgPixel2Opacity'), 'imgPixel2Opacity', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixel2MinScale'), s('vImgPixel2MinScale'), 'imgPixel2MinScale', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixel2MaxScale'), s('vImgPixel2MaxScale'), 'imgPixel2MaxScale', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixel2MinRotate'), s('vImgPixel2MinRotate'), 'imgPixel2MinRotate', function(v){return Math.round(v);});
+      wireInst(s('sImgPixel2MaxRotate'), s('vImgPixel2MaxRotate'), 'imgPixel2MaxRotate', function(v){return Math.round(v);});
+      wireInst(s('sImgPixel2MinOffset'), s('vImgPixel2MinOffset'), 'imgPixel2MinOffset', function(v){return v.toFixed(2);});
+      wireInst(s('sImgPixel2MaxOffset'), s('vImgPixel2MaxOffset'), 'imgPixel2MaxOffset', function(v){return v.toFixed(2);});
+
+      // Selects
+      var emSel = document.getElementById(s('selEmbossBlend'));
+      if (emSel) emSel.onchange = function(){ inst.embossBlendMode = parseInt(this.value); window.shaderDirty = true; };
+      var ibSel = document.getElementById(s('selImgPixelBlend'));
+      if (ibSel) ibSel.onchange = function(){ inst.imgPixelBlend = parseInt(this.value); window.shaderDirty = true; };
+      var ib2Sel = document.getElementById(s('selImgPixel2Blend'));
+      if (ib2Sel) ib2Sel.onchange = function(){ inst.imgPixel2Blend = parseInt(this.value); window.shaderDirty = true; };
+    }
+
+    /* ── Per-instance toggle/set functions ──────────── */
+    function setPixForceSquare(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.forceSquare = !inst.forceSquare;
+      var btn = document.getElementById('btn-force-square_'+i);
+      if (btn) btn.classList.toggle('on', !!inst.forceSquare);
       window.shaderDirty = true;
     }
 
-    function toggleGenDiamond() {
-      window.shaderParams.genDiamond = !window.shaderParams.genDiamond;
-      document.getElementById('btn-gen-diamond').classList.toggle('active', window.shaderParams.genDiamond);
+    function setPixMaintainThickness(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.maintainThickness = !inst.maintainThickness;
+      var btn = document.getElementById('btn-maintain-thickness_'+i);
+      if (btn) btn.classList.toggle('on', !!inst.maintainThickness);
       window.shaderDirty = true;
     }
 
-    function setPixelShape(s) {
-      window.shaderParams.pixelShape = s;
-      document.getElementById('btn-shape-none').classList.toggle('active', s === 0);
-      document.getElementById('btn-shape-pill').classList.toggle('active', s === 1);
-      document.getElementById('btn-shape-diamond').classList.toggle('active', s === 2);
-      document.getElementById('btn-shape-square').classList.toggle('active', s === 3);
-      document.getElementById('btn-shape-pointed').classList.toggle('active', s === 4);
-      document.getElementById('btn-shape-hex').classList.toggle('active', s === 5);
-      document.getElementById('btn-shape-oct').classList.toggle('active', s === 6);
-      document.getElementById('shape-controls').style.display = s > 0 ? '' : 'none';
-      if (s > 0) { renderShapeGradBar(); renderShapeGradHandles(); }
+    function setPixEnabled(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.enabled = !(inst.enabled !== false);
+      var btn = document.getElementById('btn-pix-enabled_' + i);
+      if (btn) btn.classList.toggle('on', inst.enabled !== false);
+      var body = document.getElementById('pix-body_' + i);
+      if (body) body.classList.toggle('controls-disabled', !inst.enabled);
       window.shaderDirty = true;
     }
 
-    function setShapeGradDir(d) {
-      window.shaderParams.shapeGradDir = d;
-      document.getElementById('btn-sgdir-h').classList.toggle('active', d === 0);
-      document.getElementById('btn-sgdir-v').classList.toggle('active', d === 1);
-      document.getElementById('btn-sgdir-r').classList.toggle('active', d === 2);
-      document.getElementById('radial-controls').style.display = d === 2 ? '' : 'none';
+    function setPixRes(i, r) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      if (!inst) return;
+      inst.resolution = r;
+      [1,2,4,8].forEach(function(rv) {
+        var btn = document.getElementById('btn-pix-res-'+rv+'_'+i);
+        if (btn) btn.classList.toggle('active', rv === r);
+      });
       window.shaderDirty = true;
     }
+
+    function setPixOblique(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.oblique = !inst.oblique;
+      var btn = document.getElementById('btn-oblique_'+i);
+      if (btn) btn.classList.toggle('active', inst.oblique);
+      window.shaderDirty = true;
+    }
+
+    function setPixQuad(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.quadEnabled = !inst.quadEnabled;
+      var btn = document.getElementById('btn-quadtree_'+i);
+      if (btn) btn.classList.toggle('active', inst.quadEnabled);
+      var ctrl = document.getElementById('quadtree-controls_'+i);
+      if (ctrl) ctrl.style.display = inst.quadEnabled ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function setPixWeave(i, m) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.weaveMode = m;
+      ['none','brick','weave','hex','oct'].forEach(function(id,idx) {
+        var btn = document.getElementById('btn-weave-'+id+'_'+i);
+        if (btn) btn.classList.toggle('active', idx === m);
+      });
+      var isAuto = m === 3 || m === 4;
+      var ss = document.getElementById('shape-section_'+i);
+      if (ss) { ss.style.opacity = isAuto ? '0.35' : '1'; ss.style.pointerEvents = isAuto ? 'none' : ''; }
+      if (isAuto) { var sc = document.getElementById('shape-controls_'+i); if(sc) sc.style.display = ''; }
+      var dr = document.getElementById('gen-diamond-row_'+i);
+      if (dr) dr.style.display = m === 4 ? '' : 'none';
+      // Show/hide Diamond Image Pixel panel (Oct weave only)
+      var ar = document.getElementById('oct-diamond-imgpixel_'+i);
+      if (ar) ar.style.display = m === 4 ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function setPixGenDiamond(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.genDiamond = !inst.genDiamond;
+      var btn = document.getElementById('btn-gen-diamond_'+i);
+      if (btn) btn.classList.toggle('active', inst.genDiamond);
+      window.shaderDirty = true;
+    }
+
+    function setPixShape(i, s) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.pixelShape = s;
+      ['none','pill','diamond','square','pointed','hex','oct','cross','xshape'].forEach(function(id,idx) {
+        var btn = document.getElementById('btn-shape-'+id+'_'+i);
+        if (btn) btn.classList.toggle('active', idx === s);
+      });
+      var ctrl = document.getElementById('shape-controls_'+i);
+      if (ctrl) ctrl.style.display = s > 0 ? '' : 'none';
+      if (s > 0) { setTimeout(function(){ initPixShapeGrad(i); }, 30); }
+      window.shaderDirty = true;
+    }
+
+    // Square sync removed — cross shapes use max(w,h) internally in the shader
+
+    function setPixTileGrad(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.tileGradEnabled = !(inst.tileGradEnabled !== false);
+      var btn = document.getElementById('btn-tilegrad-toggle_'+i);
+      if (btn) btn.classList.toggle('on', inst.tileGradEnabled !== false);
+      var ctrl = document.getElementById('tilegrad-controls_'+i);
+      if (ctrl) ctrl.classList.toggle('controls-disabled', !inst.tileGradEnabled);
+      window.shaderDirty = true;
+    }
+
+    function setPixSGDir(i, d) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.shapeGradDir = d;
+      ['h','v','r'].forEach(function(dir,idx) {
+        var btn = document.getElementById('btn-sgdir-'+dir+'_'+i);
+        if (btn) btn.classList.toggle('active', idx === d);
+      });
+      var rc = document.getElementById('radial-controls_'+i);
+      if (rc) rc.style.display = d === 2 ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function togglePixOpPatterns(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.opPatternsEnabled = !(inst.opPatternsEnabled !== false);
+      var btn = document.getElementById('btn-oppattern-toggle_'+i);
+      if (btn) btn.classList.toggle('on', inst.opPatternsEnabled !== false);
+      var ctrl = document.getElementById('oppattern-controls_'+i);
+      if (ctrl) ctrl.classList.toggle('controls-disabled', !inst.opPatternsEnabled);
+      uploadAllOpPatterns();
+      window.shaderDirty = true;
+    }
+
+    function setPixOpPatMode(i, m) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.opPatternMode = m;
+      var cb = document.getElementById('btn-oppat-color_'+i);
+      var sb = document.getElementById('btn-oppat-shape_'+i);
+      if (cb) cb.classList.toggle('active', m === 0);
+      if (sb) sb.classList.toggle('active', m === 1);
+      window.shaderDirty = true;
+    }
+
+    function togglePixImgPixel(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.imgPixelEnabled = !inst.imgPixelEnabled;
+      var btn = document.getElementById('btn-imgpixel-toggle_'+i);
+      if (btn) btn.classList.toggle('on', inst.imgPixelEnabled);
+      var ctrl = document.getElementById('imgpixel-controls_'+i);
+      if (ctrl) ctrl.classList.toggle('controls-disabled', !inst.imgPixelEnabled);
+      window.shaderDirty = true;
+    }
+
+    function togglePixImgPixelAffect(i, type) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      var key = 'imgPixelAffect' + type.charAt(0).toUpperCase() + type.slice(1);
+      inst[key] = !inst[key];
+      var btn = document.getElementById('btn-imgpixel-'+type+'_'+i);
+      if (btn) btn.classList.toggle('active', inst[key]);
+      var ctrl = document.getElementById('imgpixel-'+type+'-controls_'+i);
+      if (ctrl) ctrl.style.display = inst[key] ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function handlePixImgPixelUpload(event, i) {
+      var file = event.target.files[0];
+      if (!file) return;
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.imgPixelName = file.name;
+      var nm = document.getElementById('imgPixelName_'+i);
+      if (nm) nm.textContent = file.name;
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        inst.imgDataURL = e.target.result;
+        var img = new Image();
+        img.onload = function() {
+          if (window.uploadInstanceImgPixelTex) window.uploadInstanceImgPixelTex(i, img);
+          window.shaderDirty = true;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function togglePixImgPixelMask(i, layer) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      var key = layer === 2 ? 'imgPixel2Mask' : 'imgPixelMask';
+      var btnId = layer === 2 ? 'btn-imgpixel2-mask_'+i : 'btn-imgpixel-mask_'+i;
+      inst[key] = !inst[key];
+      var btn = document.getElementById(btnId);
+      if (btn) btn.classList.toggle('on', inst[key]);
+      window.shaderDirty = true;
+    }
+
+    function togglePixImgPixel2(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.imgPixel2Enabled = !inst.imgPixel2Enabled;
+      var btn = document.getElementById('btn-imgpixel2-toggle_'+i);
+      if (btn) btn.classList.toggle('on', inst.imgPixel2Enabled);
+      var ctrl = document.getElementById('imgpixel2-controls_'+i);
+      if (ctrl) ctrl.classList.toggle('controls-disabled', !inst.imgPixel2Enabled);
+      window.shaderDirty = true;
+    }
+
+    function togglePixImgPixel2Affect(i, type) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      var key = 'imgPixel2Affect' + type.charAt(0).toUpperCase() + type.slice(1);
+      inst[key] = !inst[key];
+      var btn = document.getElementById('btn-imgpixel2-'+type+'_'+i);
+      if (btn) btn.classList.toggle('active', inst[key]);
+      var ctrl = document.getElementById('imgpixel2-'+type+'-controls_'+i);
+      if (ctrl) ctrl.style.display = inst[key] ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function handlePixImgPixel2Upload(event, i) {
+      var file = event.target.files[0];
+      if (!file) return;
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.imgPixel2Name = file.name;
+      var nm = document.getElementById('imgPixel2Name_'+i);
+      if (nm) nm.textContent = file.name;
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        inst.imgData2URL = e.target.result;
+        var img = new Image();
+        img.onload = function() {
+          if (window.uploadInstanceImgPixel2Tex) window.uploadInstanceImgPixel2Tex(i, img);
+          window.shaderDirty = true;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    /* ── Per-instance opacity pattern rendering ──────── */
+    function addPixOpPattern(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      if (!inst.opPatterns) inst.opPatterns = [];
+      if (inst.opPatterns.length >= 4) return;
+      inst.opPatternIdCounter = (inst.opPatternIdCounter || 0) + 1;
+      inst.opPatterns.push({ id: inst.opPatternIdCounter, active: true, grid: [[1,0],[0,1]], hueShift: 0.1, hueOpacity: 1.0 });
+      renderPixOpPatterns(i);
+      uploadAllOpPatterns();
+    }
+
+    function removePixOpPattern(i, patId) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      inst.opPatterns = inst.opPatterns.filter(function(p){ return p.id !== patId; });
+      renderPixOpPatterns(i);
+      uploadAllOpPatterns();
+    }
+
+    function parseGridStr(str) {
+      return str.trim().split('\n').map(function(row){
+        return row.split(',').map(function(v){ return parseFloat(v.trim()) || 0; });
+      });
+    }
+
+    function renderPixOpPatterns(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      var listEl = document.getElementById('oppattern-list_'+i);
+      if (!listEl) return;
+      var pats = inst.opPatterns || [];
+      listEl.innerHTML = '';
+
+      pats.forEach(function(pat) {
+        var card = document.createElement('div');
+        card.className = 'group-card';
+        var gridStr = (pat.grid||[]).map(function(r){ return r.join(','); }).join('\n');
+        card.innerHTML = '<div class="group-header"><span class="g-title">Pattern</span>' +
+          '<button class="toggle-active'+(pat.active!==false?' on':'')+'" data-opaction="toggle" data-opid="'+pat.id+'"></button>' +
+          '<div class="g-actions"><button class="small danger" data-opaction="del" data-opid="'+pat.id+'">✕</button></div></div>' +
+          '<div class="group-body'+(pat.active!==false?'':' controls-disabled')+'">' +
+          '<div class="row"><label>Hue Shift</label>' +
+          '<input type="range" min="-1" max="1" step="0.01" value="'+pat.hueShift+'" data-opkey="hueShift" data-opid="'+pat.id+'">' +
+          '<input type="number" class="val" id="ophs-'+pat.id+'_'+i+'" value="'+pat.hueShift.toFixed(2)+'"></div>' +
+          '<div class="row"><label>Hue Opacity</label>' +
+          '<input type="range" min="0" max="1" step="0.01" value="'+pat.hueOpacity+'" data-opkey="hueOpacity" data-opid="'+pat.id+'">' +
+          '<input type="number" class="val" id="opho-'+pat.id+'_'+i+'" value="'+pat.hueOpacity.toFixed(2)+'"></div>' +
+          '<div class="row" style="align-items:flex-start"><label style="margin-top:2px">Grid</label>' +
+          '<textarea data-opkey="grid" data-opid="'+pat.id+'" rows="3" style="flex:1;background:#111;color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:3px;padding:4px;font-size:11px;resize:vertical">'+gridStr+'</textarea></div>' +
+          '</div>';
+        listEl.appendChild(card);
+      });
+
+      // Wire toggle
+      listEl.querySelectorAll('[data-opaction="toggle"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var patId = parseInt(btn.dataset.opid);
+          var pat = pats.find(function(p){ return p.id===patId; });
+          if (!pat) return;
+          pat.active = !pat.active;
+          btn.classList.toggle('on', pat.active);
+          var body = btn.closest('.group-card').querySelector('.group-body');
+          if(body) body.classList.toggle('controls-disabled', !pat.active);
+          uploadAllOpPatterns();
+        });
+      });
+      listEl.querySelectorAll('[data-opaction="del"]').forEach(function(btn) {
+        btn.addEventListener('click', function(){ removePixOpPattern(i, parseInt(btn.dataset.opid)); });
+      });
+      listEl.querySelectorAll('input[type=range][data-opkey]').forEach(function(slider) {
+        slider.addEventListener('input', function() {
+          var patId = parseInt(slider.dataset.opid);
+          var key = slider.dataset.opkey;
+          var pat = pats.find(function(p){ return p.id===patId; });
+          if (!pat) return;
+          pat[key] = parseFloat(slider.value);
+          var lbl = document.getElementById((key==='hueShift'?'ophs-':'opho-')+patId+'_'+i);
+          if (lbl) { if (lbl.tagName==='INPUT') lbl.value=pat[key].toFixed(2); else lbl.textContent=pat[key].toFixed(2); }
+          uploadAllOpPatterns();
+        });
+      });
+      // Two-way: number val inputs update slider + param
+      listEl.querySelectorAll('input[type=number].val').forEach(function(inp) {
+        var range = inp.previousElementSibling;
+        if (!range || range.type !== 'range') return;
+        inp.addEventListener('change', function() {
+          var v = parseFloat(inp.value);
+          if (isNaN(v)) return;
+          v = Math.max(parseFloat(range.min), Math.min(parseFloat(range.max), v));
+          var patId = parseInt(range.dataset.opid);
+          var key = range.dataset.opkey;
+          var pat = pats.find(function(p){ return p.id===patId; });
+          if (!pat) return;
+          pat[key] = v; range.value = v; inp.value = v.toFixed(2);
+          uploadAllOpPatterns();
+        });
+      });
+      listEl.querySelectorAll('textarea[data-opkey="grid"]').forEach(function(ta) {
+        ta.addEventListener('change', function() {
+          var patId = parseInt(ta.dataset.opid);
+          var pat = pats.find(function(p){ return p.id===patId; });
+          if (!pat) return;
+          pat.grid = parseGridStr(ta.value);
+          uploadAllOpPatterns();
+        });
+      });
+    }
+
+    // Override uploadAllOpPatterns to use active instance
+    function uploadAllOpPatterns() {
+      var p = window.shaderParams;
+      var instances = p.pixelateInstances;
+      if (!instances || !instances.length) return;
+      // Upload active instance's patterns (single opPatternTex is shared)
+      var inst = instances[activePixelateTab] || instances[0];
+      if (!inst) return;
+      var opOn = inst.opPatternsEnabled !== false;
+      var active = opOn ? (inst.opPatterns || []).filter(function(op){ return op.active !== false; }) : [];
+      if (window.uploadOpPatterns) window.uploadOpPatterns(active);
+      window.shaderDirty = true;
+    }
+
+    /* ── Per-instance shape gradient ──────────────────── */
+    function initPixShapeGrad(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      var barId = 'shapeGradBar_'+i;
+      var trackId = 'shapeGradTrack_'+i;
+      var bar = document.getElementById(barId);
+      var track = document.getElementById(trackId);
+      if (!bar || !track) return;
+
+      function sortedStops() {
+        return (inst.shapeGradStops||[]).slice().sort(function(a,b){ return a.pos-b.pos; });
+      }
+      function renderBar() {
+        var w = bar.clientWidth || bar.parentElement && bar.parentElement.clientWidth || 200;
+        if (w < 2) {
+          // Layout not ready — retry after a frame
+          requestAnimationFrame(renderBar);
+          return;
+        }
+        bar.width = w;
+        var ctx = bar.getContext('2d');
+        var h = bar.height;
+        var stops = sortedStops();
+        var grad = ctx.createLinearGradient(0,0,w,0);
+        stops.forEach(function(s){ grad.addColorStop(s.pos, s.hex); });
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,w,h);
+      }
+      function syncToGL() {
+        if (window.uploadShapeGradient) window.uploadShapeGradient(sortedStops());
+      }
+      function renderHandles() {
+        track.innerHTML = '';
+        var stops = inst.shapeGradStops || [];
+        stops.forEach(function(stop, idx) {
+          var handle = document.createElement('div');
+          handle.className = 'grad-handle';
+          handle.style.left = (stop.pos * 100) + '%';
+          handle.style.background = stop.hex;
+          handle.style.touchAction = 'none';
+          var dragging = false, hasMoved = false, tapTimer = null, tapCount = 0;
+          function startDrag(cx){ dragging=true; hasMoved=false; handle.classList.add('dragging'); }
+          function moveDrag(cx) {
+            if(!dragging) return; hasMoved=true;
+            var tr = track.getBoundingClientRect();
+            stop.pos = Math.max(0,Math.min(1,(cx-tr.left)/tr.width));
+            handle.style.left = (stop.pos*100)+'%';
+            renderBar(); syncToGL();
+          }
+          function endDrag() {
+            var wasDrag = hasMoved; dragging=false; hasMoved=false; handle.classList.remove('dragging');
+            if(!wasDrag){
+              tapCount++;
+              if(tapCount===1){
+                tapTimer=setTimeout(function(){
+                  tapCount=0;
+                  openColorPicker(stop.hex,function(hex,r,g,b){
+                    stop.r=r;stop.g=g;stop.b=b;stop.hex=hex;
+                    handle.style.background=hex;
+                    renderBar();syncToGL();
+                  });
+                },250);
+              } else if(tapCount>=2){
+                clearTimeout(tapTimer);tapCount=0;
+                if(stops.length>2){ stops.splice(stops.indexOf(stop),1); renderHandles();renderBar();syncToGL(); }
+              }
+            } else { tapCount=0; }
+          }
+          handle.addEventListener('mousedown',function(e){
+            e.preventDefault();e.stopPropagation();startDrag(e.clientX);
+            var onM=function(ev){moveDrag(ev.clientX)};
+            var onU=function(){endDrag();window.removeEventListener('mousemove',onM);window.removeEventListener('mouseup',onU)};
+            window.addEventListener('mousemove',onM);window.addEventListener('mouseup',onU);
+          });
+          handle.addEventListener('touchstart',function(e){if(e.touches.length!==1)return;e.preventDefault();e.stopPropagation();startDrag(e.touches[0].clientX);},{passive:false});
+          handle.addEventListener('touchmove',function(e){e.preventDefault();if(e.touches.length===1)moveDrag(e.touches[0].clientX);},{passive:false});
+          handle.addEventListener('touchend',function(e){e.preventDefault();endDrag();},{passive:false});
+          track.appendChild(handle);
+        });
+      }
+
+      // Bar click: add stop
+      bar.onclick = function(e) {
+        var rect = e.target.getBoundingClientRect();
+        var pos = (e.clientX - rect.left) / rect.width;
+        var stops = sortedStops();
+        var lo=stops[0],hi=stops[stops.length-1];
+        for(var j=0;j<stops.length-1;j++){ if(pos>=stops[j].pos&&pos<=stops[j+1].pos){lo=stops[j];hi=stops[j+1];break;} }
+        var range=hi.pos-lo.pos, f=range<0.0001?0:(pos-lo.pos)/range;
+        var r=Math.round(lo.r+(hi.r-lo.r)*f),g=Math.round(lo.g+(hi.g-lo.g)*f),b=Math.round(lo.b+(hi.b-lo.b)*f);
+        inst.shapeGradStops.push({pos:pos,r:r,g:g,b:b,hex:'#'+[r,g,b].map(function(c){return c.toString(16).padStart(2,'0');}).join('')});
+        renderHandles();renderBar();syncToGL();
+      };
+
+      renderBar();
+      renderHandles();
+      syncToGL();
+
+      // Re-render if the panel was hidden when first initialized (e.g. tab not active)
+      if (typeof ResizeObserver !== 'undefined') {
+        var _ro = new ResizeObserver(function(entries) {
+          if (bar.clientWidth > 1) { renderBar(); _ro.disconnect(); }
+        });
+        _ro.observe(bar);
+      }
+    }
+
+    // ══════════════════════════════════════════════════
+    //  CANVAS SIZE
+    // ══════════════════════════════════════════════════
+
+    function setCanvasMode(mode) {
+      var p = window.shaderParams;
+      p.canvasMode = mode;
+      document.getElementById('btn-canvas-fullscreen').classList.toggle('active', mode === 'fullscreen');
+      document.getElementById('btn-canvas-custom').classList.toggle('active', mode === 'custom');
+      document.getElementById('canvas-custom-controls').style.display = mode === 'custom' ? '' : 'none';
+      applyCanvasSize();
+    }
+
+    function applyCanvasSize() {
+      var p = window.shaderParams;
+      var container = document.getElementById('canvas-container');
+      var canvas = document.getElementById('glCanvas');
+      if (p.canvasMode === 'custom') {
+        var w = Math.round(p.canvasWidth || 1920);
+        var h = Math.round(p.canvasHeight || 1080);
+        container.classList.add('custom');
+        canvas.classList.add('custom-size');
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+      } else {
+        container.classList.remove('custom');
+        canvas.classList.remove('custom-size');
+        canvas.style.width = '';
+        canvas.style.height = '';
+      }
+      window.shaderDirty = true;
+    }
+
+    // ── Canvas background color ───────────────────────────────────
+    // JS mirror of fragment shader hash: fract(sin(n)*43758.5453123)
+    function shaderHash(n) {
+      var x = Math.sin(n) * 43758.5453123;
+      return x - Math.floor(x);
+    }
+
+    // Interpolate gradient stops at position t
+    function sampleGradient(stops, t) {
+      if (!stops || stops.length === 0) return { r: 0.5, g: 0.5, b: 0.5 };
+      // Ensure each stop has numeric r,g,b (parse hex if needed)
+      var parsed = stops.map(function(s) {
+        var r = s.r, g = s.g, b = s.b;
+        if (r == null || isNaN(r)) {
+          var h = (s.hex || '#808080').replace('#','');
+          r = parseInt(h.slice(0,2),16) || 0;
+          g = parseInt(h.slice(2,4),16) || 0;
+          b = parseInt(h.slice(4,6),16) || 0;
+        }
+        return { pos: s.pos, r: r, g: g, b: b };
+      });
+      var sorted = parsed.slice().sort(function(a,b){ return a.pos - b.pos; });
+      t = Math.max(0, Math.min(1, t));
+      var lo = sorted[0], hi = sorted[sorted.length-1];
+      for (var i = 0; i < sorted.length - 1; i++) {
+        if (t >= sorted[i].pos && t <= sorted[i+1].pos) { lo = sorted[i]; hi = sorted[i+1]; break; }
+      }
+      var range = hi.pos - lo.pos;
+      var f = range < 0.0001 ? 0 : (t - lo.pos) / range;
+      return {
+        r: (lo.r + (hi.r - lo.r) * f) / 255,
+        g: (lo.g + (hi.g - lo.g) * f) / 255,
+        b: (lo.b + (hi.b - lo.b) * f) / 255
+      };
+    }
+
+    // Mirrors computeCellFinalColor for a given pseudo cell index `ci`
+    function computeCellColorJS(ci) {
+      var p = window.shaderParams;
+      var colorSeed = p.colorSeed || 0;
+      var gradientSeed = p.gradientSeed || 0;
+      var satMin = p.satMin != null ? p.satMin : 0;
+      var satMax = p.satMax != null ? p.satMax : 1;
+      var valMin = p.valueMin != null ? p.valueMin : 0.75;
+      var valMax = p.valueMax != null ? p.valueMax : 1.0;
+      var satSeed = p.satSeed || 0;
+      var brightSeed = p.brightSeed || 0;
+
+      // cellT — mirrors: hash(float(ci)*7.31 + mod(colorSeed*53.7,6283) + mod(gradSeed*17.3,6283) + 2.9)
+      var t = shaderHash(ci * 7.31 + ((colorSeed * 53.7) % 6283) + ((gradientSeed * 17.3) % 6283) + 2.9);
+
+      var r, g, b;
+
+      if (p.colorize !== false) {
+        if ((p.colorMode || 0) === 0) {
+          // Gradient mode: sample gradient at t
+          var gc = sampleGradient(p.gradientStops, t);
+          r = gc.r; g = gc.g; b = gc.b;
+        } else {
+          // Hue mode — mirrors shader hue mode path
+          var h = ((ci * 0.618033988 + ((colorSeed * 0.1317) % 1.0)) % 1.0 + 1.0) % 1.0;
+          h = ((h * (p.hueRadius != null ? p.hueRadius : 1.0) + (p.hueOffset || 0)) % 1.0 + 1.0) % 1.0;
+          var sat = (satMin + satMax) * 0.5;
+          if (satSeed > 0) {
+            var sr = shaderHash(ci * 13.37 + ((satSeed * 41.3) % 6283) + 5.7);
+            sat = satMin + sr * (satMax - satMin);
+          }
+          var val = (valMin + valMax) * 0.5;
+          if (brightSeed > 0) {
+            var br = shaderHash(ci * 7.31 + ((brightSeed * 53.7) % 6283) + 2.9);
+            val = valMin + br * (valMax - valMin);
+          }
+          var rgb = hsvToRgbJS(h, sat, val);
+          r = rgb[0]; g = rgb[1]; b = rgb[2];
+        }
+      } else {
+        // No colorize — base cellColor
+        var sat2 = (satMin + satMax) * 0.5;
+        if (satSeed > 0) { var sr2 = shaderHash(ci*13.37+((satSeed*41.3)%6283)+5.7); sat2=satMin+sr2*(satMax-satMin); }
+        var val2 = (valMin + valMax) * 0.5;
+        if (brightSeed > 0) { var br2 = shaderHash(ci*7.31+((brightSeed*53.7)%6283)+2.9); val2=valMin+br2*(valMax-valMin); }
+        var h2 = ((ci * 0.618033988 + ((colorSeed * 0.1317) % 1.0)) % 1.0 + 1.0) % 1.0;
+        var rgb2 = hsvToRgbJS(h2, sat2, val2);
+        r = rgb2[0]; g = rgb2[1]; b = rgb2[2];
+      }
+      return [r, g, b];
+    }
+
+    function hsvToRgbJS(h, s, v) {
+      h = ((h % 1.0) + 1.0) % 1.0;
+      var h6 = h * 6.0, i = Math.floor(h6), f = h6 - i;
+      var p = v*(1-s), q = v*(1-s*f), tv = v*(1-s*(1-f));
+      switch(i % 6) {
+        case 0: return [v,tv,p];  case 1: return [q,v,p];
+        case 2: return [p,v,tv];  case 3: return [p,q,v];
+        case 4: return [tv,p,v];  default: return [v,p,q];
+      }
+    }
+
+    function rgbFloatToHex(r, g, b) {
+      return '#' + [r,g,b].map(function(c){ return Math.round(Math.max(0,Math.min(1,c))*255).toString(16).padStart(2,'0'); }).join('');
+    }
+
+    function computeRandomBgColor() {
+      var p = window.shaderParams;
+      // Simple: generate a single 0-1 float from the seed, then run it through
+      // the active color filter exactly as the shader would.
+      var t = shaderHash((p.bgSeed || 0) * 1.618033988 + 0.5);
+
+      var r, g, b;
+
+      if (p.colorize !== false && (p.colorMode || 0) === 0) {
+        // ── Gradient mode: sample the gradient at t ──
+        var gc = sampleGradient(p.gradientStops, t);
+        r = gc.r; g = gc.g; b = gc.b;
+      } else {
+        // ── Hue mode (or no colorize): t is the raw hue, apply hueOffset + hueRadius ──
+        var hueRadius = p.hueRadius != null ? p.hueRadius : 1.0;
+        var hueOffset = p.hueOffset || 0;
+        var hue = ((t * hueRadius + hueOffset) % 1.0 + 1.0) % 1.0;
+        // Sat from satMin/satMax midpoint
+        var satMin = p.satMin != null ? p.satMin : 0;
+        var satMax = p.satMax != null ? p.satMax : 1;
+        var sat = (satMin + satMax) * 0.5;
+        // Val from valueMin/valueMax midpoint
+        var valMin = p.valueMin != null ? p.valueMin : 0.75;
+        var valMax = p.valueMax != null ? p.valueMax : 1.0;
+        var val = (valMin + valMax) * 0.5;
+        var rgb = hsvToRgbJS(hue, sat, val);
+        r = rgb[0]; g = rgb[1]; b = rgb[2];
+      }
+
+      return rgbFloatToHex(r, g, b);
+    }
+
+    function updateBgRandomPreview() {
+      var hex = computeRandomBgColor();
+      var preview = document.getElementById('bg-random-preview');
+      if (preview) preview.style.background = hex;
+      if (window.shaderParams.bgMode === 'random') {
+        window.shaderParams.bgColor = hex;
+        applyBgColor();
+      }
+    }
+
+    function setBgMode(mode) {
+      var p = window.shaderParams;
+      p.bgMode = mode;
+      document.getElementById('btn-bg-custom').classList.toggle('active', mode === 'custom');
+      document.getElementById('btn-bg-random').classList.toggle('active', mode === 'random');
+      document.getElementById('bg-custom-controls').style.display = mode === 'custom' ? '' : 'none';
+      document.getElementById('bg-random-controls').style.display = mode === 'random' ? '' : 'none';
+      if (mode === 'random') {
+        p.bgColor = computeRandomBgColor();
+        updateBgRandomPreview();
+      }
+      applyBgColor();
+    }
+
+    function applyBgColor() {
+      var hex = window.shaderParams.bgColor || '#000000';
+      var container = document.getElementById('canvas-container');
+      if (container) container.style.background = hex;
+      document.body.style.background = hex;
+      // Apply to WebGL clear color so it shows behind the canvas in custom-size mode
+      if (window._glRef) {
+        var gl = window._glRef;
+        var c = hexToRgb01JS(hex);
+        gl.clearColor(c[0], c[1], c[2], 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      window.shaderDirty = true;
+    }
+
+    function hexToRgb01JS(hex) {
+      return [
+        parseInt(hex.slice(1,3),16)/255,
+        parseInt(hex.slice(3,5),16)/255,
+        parseInt(hex.slice(5,7),16)/255
+      ];
+    }
+
+    // Wire bg seed slider
+    (function() {
+      var sl = document.getElementById('sBgSeed');
+      var disp = document.getElementById('vBgSeed');
+      if (!sl) return;
+      function sync(v) {
+        window.shaderParams.bgSeed = v;
+        if (disp) disp.value = v;
+        updateBgRandomPreview();
+      }
+      sl.addEventListener('input', function() { sync(parseInt(sl.value)); });
+      if (disp) disp.addEventListener('change', function() {
+        var v = Math.max(0, Math.min(1000, parseInt(disp.value) || 0));
+        sl.value = v; sync(v);
+      });
+    })();
+
+    // Init bg color swatch
+    (function() {
+      var sw = document.getElementById('bg-color-swatch');
+      if (sw) sw.style.background = window.shaderParams.bgColor || '#000000';
+      applyBgColor();
+    })();
+    function toggleOblique() { setPixOblique(activePixelateTab); }
+    function toggleQuadtree() { setPixQuad(activePixelateTab); }
+    function setWeaveMode(m) { setPixWeave(activePixelateTab, m); }
+    function toggleGenDiamond() { setPixGenDiamond(activePixelateTab); }
+    function setPixelShape(s) { setPixShape(activePixelateTab, s); }
+    function setShapeGradDir(d) { setPixSGDir(activePixelateTab, d); }
+    function toggleTileGrad() { setPixTileGrad(activePixelateTab); }
+    function toggleImgPixel() { togglePixImgPixel(activePixelateTab); }
+    function toggleImgPixelAffectScale() { togglePixImgPixelAffect(activePixelateTab, 'scale'); }
+    function toggleImgPixelAffectRotate() { togglePixImgPixelAffect(activePixelateTab, 'rotate'); }
+    function toggleImgPixelAffectOffset() { togglePixImgPixelAffect(activePixelateTab, 'offset'); }
+    function handleImgPixelUpload(e) { handlePixImgPixelUpload(e, activePixelateTab); }
+    function addOpPattern() { addPixOpPattern(activePixelateTab); }
+    function setOpPatMode(m) { setPixOpPatMode(activePixelateTab, m); }
 
     function toggleOutline() {
       window.shaderParams.showOutline = !window.shaderParams.showOutline;
@@ -1730,36 +3098,32 @@
     }
 
     function toggleAllOpPatterns() {
+      // Legacy global function — delegate to active pixelate instance
+      if (typeof activePixelateTab !== 'undefined') {
+        togglePixOpPatterns(activePixelateTab);
+        return;
+      }
       window.shaderParams.opPatternsEnabled = !window.shaderParams.opPatternsEnabled;
       var on = window.shaderParams.opPatternsEnabled;
-      document.getElementById('btn-oppattern-toggle').classList.toggle('on', on);
+      var btn = document.getElementById('btn-oppattern-toggle');
+      if (btn) btn.classList.toggle('on', on);
       var ctrl = document.getElementById('oppattern-controls');
-      if(ctrl) ctrl.classList.toggle('controls-disabled', !on);
-      // Disable/enable all card toggles visually but remember individual states
-      document.querySelectorAll('#oppattern-list .group-card').forEach(function(card) {
-        var toggle = card.querySelector('.toggle-active');
-        var body = card.querySelector('.group-body');
-        if(!on) {
-          // Master off: disable all cards visually
-          if(body) body.classList.add('controls-disabled');
-          if(toggle) toggle.style.pointerEvents = 'none';
-        } else {
-          // Master on: restore individual states
-          if(toggle) {
-            toggle.style.pointerEvents = '';
-            var isOn = toggle.classList.contains('on');
-            if(body) body.classList.toggle('controls-disabled', !isOn);
-          }
-        }
-      });
+      if (ctrl) ctrl.classList.toggle('controls-disabled', !on);
       uploadAllOpPatterns();
       window.shaderDirty = true;
     }
 
     function setOpPatMode(m) {
+      // Legacy global — delegate to active pixelate instance
+      if (typeof activePixelateTab !== 'undefined') {
+        setPixOpPatMode(activePixelateTab, m);
+        return;
+      }
       window.shaderParams.opPatternMode = m;
-      document.getElementById('btn-oppat-color').classList.toggle('active', m === 0);
-      document.getElementById('btn-oppat-shape').classList.toggle('active', m === 1);
+      var b1 = document.getElementById('btn-oppat-color');
+      var b2 = document.getElementById('btn-oppat-shape');
+      if (b1) b1.classList.toggle('active', m === 0);
+      if (b2) b2.classList.toggle('active', m === 1);
       window.shaderDirty = true;
     }
 
@@ -2070,7 +3434,13 @@
       function setSlider(id, val, dispId, fmt) {
         const s = el(id), d = el(dispId);
         if (s && val != null) s.value = val;
-        if (d && fmt && val != null) d.textContent = fmt(val);
+        if (d && fmt && val != null) {
+          if (d.tagName === 'INPUT') {
+            d.value = String(fmt(val)).replace(/[°%]/g,'').trim();
+          } else {
+            d.textContent = fmt(val);
+          }
+        }
       }
       function setToggle(id, active) {
         const e = el(id); if (e) e.classList.toggle('active', !!active);
@@ -2103,6 +3473,12 @@
       setSlider('sSpring', p.spring, 'vSpring', v => v.toFixed(1));
       setSlider('sGridUnit', p.gridUnit, 'vGridUnit', v => Math.round(v));
       setSlider('sColorSeed', p.colorSeed, 'vColorSeed', v => Math.round(v));
+      setSlider('sHueOffset', p.hueOffset != null ? p.hueOffset : 0, 'vHueOffset', v => v.toFixed(2));
+      setSlider('sHueRadius', p.hueRadius != null ? p.hueRadius : 1, 'vHueRadius', v => v.toFixed(2));
+      setSlider('sSatSeed', p.satSeed || 0, 'vSatSeed', v => Math.round(v));
+      setSlider('sSatMin', p.satMin != null ? p.satMin : 0, 'vSatMin', v => v.toFixed(2));
+      setSlider('sSatMax', p.satMax != null ? p.satMax : 1, 'vSatMax', v => v.toFixed(2));
+      setSlider('sBrightSeed', p.brightSeed || 0, 'vBrightSeed', v => Math.round(v));
       setSlider('sValueMin', p.valueMin, 'vValueMin', v => v.toFixed(2));
       setSlider('sValueMax', p.valueMax, 'vValueMax', v => v.toFixed(2));
       setSlider('sOutlineWidth', p.outlineWidth, 'vOutlineWidth', v => v.toFixed(1));
@@ -2118,11 +3494,22 @@
       setSlider('sShapeMargin', p.shapeMargin, 'vShapeMargin', v => Math.round(v));
       setSlider('sShapeBleed', p.shapeBleed, 'vShapeBleed', v => Math.round(v));
       setSlider('sShapeGradOpacity', p.shapeGradOpacity, 'vShapeGradOpacity', v => v.toFixed(2));
+      // Tile Gradient toggle
+      var tge = p.tileGradEnabled !== false;
+      setToggle('btn-tilegrad-toggle', tge);
+      var tgc = el('tilegrad-controls');
+      if (tgc) tgc.classList.toggle('controls-disabled', !tge);
       setSlider('sGapOpacity', p.gapOpacity, 'vGapOpacity', v => v.toFixed(2));
       setSlider('sGradeHue', p.gradeHue, 'vGradeHue', v => Math.round(v) + '°');
       setSlider('sGradeSat', p.gradeSat, 'vGradeSat', v => v.toFixed(2));
       setSlider('sGradeVal', p.gradeVal, 'vGradeVal', v => v.toFixed(2));
       setSlider('sGradeContrast', p.gradeContrast, 'vGradeContrast', v => v.toFixed(2));
+
+      // Post-process toggle
+      var ppe = p.postProcessEnabled !== false;
+      setToggle('btn-postprocess-toggle', ppe);
+      var ppc = el('postprocess-controls');
+      if (ppc) ppc.classList.toggle('controls-disabled', !ppe);
       setSlider('sSpeed', p.animSpeed, 'vSpeed', v => Math.round(v));
       var fpsSel = document.getElementById('selFps');
       if(fpsSel) fpsSel.value = String(p.fps || 30);
@@ -2144,6 +3531,12 @@
       var resDisp = el('vRenderRes');
       if (resSlider && p.renderRes) { resSlider.value = p.renderRes; }
       if (resDisp && p.renderRes) { resDisp.textContent = p.renderRes === 1 ? 'Full' : '1/' + p.renderRes; }
+      setToggle('btn-precompute', p.precompute);
+      setVis('precompute-controls', p.precompute);
+      var pcfSlider = el('sPrecomputeFrames');
+      var pcfDisp = el('vPrecomputeFrames');
+      if (pcfSlider) pcfSlider.value = p.precomputeFrames || 3;
+      if (pcfDisp) { if(pcfDisp.tagName==='INPUT') pcfDisp.value = p.precomputeFrames||3; else pcfDisp.textContent = p.precomputeFrames||3; }
       var bt = el('btn-banding-toggle');
       if(bt) bt.classList.toggle('on', p.banding);
       var bc = el('banding-controls');
@@ -2162,14 +3555,37 @@
       setToggle('btn-band-outline', p.bandOutline);
       var pt = el('btn-pixelate-toggle');
       if(pt) pt.classList.toggle('on', p.pixelate);
-      var pc = el('pixelate-controls');
-      if(pc) pc.classList.toggle('controls-disabled', !p.pixelate);
-      setToggle('btn-oblique', p.oblique);
-      setToggle('btn-quadtree', p.quadEnabled);
-      setVis('quadtree-controls', p.quadEnabled);
-      setToggle('btn-gen-diamond', p.genDiamond);
-      setVis('gen-diamond-row', p.weaveMode === 4);
-      setSlider('sQuadSteps', p.quadSteps, 'vQuadSteps', v => Math.round(v));
+      var pmw = el('pixelate-master-wrap');
+      if(pmw) pmw.classList.toggle('controls-disabled', !p.pixelate);
+
+      // Canvas size
+      var cmode = p.canvasMode || 'fullscreen';
+      var cbf = el('btn-canvas-fullscreen'); if(cbf) cbf.classList.toggle('active', cmode==='fullscreen');
+      var cbc = el('btn-canvas-custom'); if(cbc) cbc.classList.toggle('active', cmode==='custom');
+      var ccc = el('canvas-custom-controls'); if(ccc) ccc.style.display = cmode==='custom'?'':'none';
+      var slW = el('sCanvasW'); if(slW) slW.value = p.canvasWidth || 1920;
+      var valW = el('vCanvasW'); if(valW) valW.value = p.canvasWidth || 1920;
+      var slH = el('sCanvasH'); if(slH) slH.value = p.canvasHeight || 1080;
+      var valH = el('vCanvasH'); if(valH) valH.value = p.canvasHeight || 1080;
+      applyCanvasSize();
+
+      // Background color
+      var bgm = p.bgMode || 'custom';
+      var bbcBtn = el('btn-bg-custom'); if(bbcBtn) bbcBtn.classList.toggle('active', bgm==='custom');
+      var bbrBtn = el('btn-bg-random'); if(bbrBtn) bbrBtn.classList.toggle('active', bgm==='random');
+      var bgCC = el('bg-custom-controls'); if(bgCC) bgCC.style.display = bgm==='custom'?'':'none';
+      var bgRC = el('bg-random-controls'); if(bgRC) bgRC.style.display = bgm==='random'?'':'none';
+      var bgSw = el('bg-color-swatch'); if(bgSw) bgSw.style.background = p.bgColor||'#000000';
+      var bgSl = el('sBgSeed'); if(bgSl) bgSl.value = p.bgSeed||0;
+      var bgVl = el('vBgSeed'); if(bgVl) bgVl.value = p.bgSeed||0;
+      if(bgm==='random' && typeof updateBgRandomPreview==='function') updateBgRandomPreview();
+      else if(typeof applyBgColor==='function') applyBgColor();
+
+      // Pixelate instances — rebuild tabs and panel
+      initPixelateInstances();
+      activePixelateTab = 0;
+      renderPixelateTabs();
+      renderPixelateInstancePanel(0);
 
       // Groups master toggle
       var gc = el('groups-controls');
@@ -2179,29 +3595,59 @@
       var gl2 = el('groups-list');
       if (gl2) gl2.style.display = p.groupsEnabled !== false ? '' : 'none';
 
-      // Opacity patterns master toggle
-      var oc = el('oppattern-controls');
-      if(oc) oc.classList.toggle('controls-disabled', !p.opPatternsEnabled);
-      var ot = el('btn-oppattern-toggle');
-      if (ot) ot.classList.toggle('on', p.opPatternsEnabled !== false);
-      var ol = el('oppattern-list');
-      if (ol) ol.style.display = p.opPatternsEnabled !== false ? '' : 'none';
-      var osr = el('oppattern-seed-row');
-      if (osr) osr.style.display = p.opPatternsEnabled !== false ? '' : 'none';
-      var omr = el('oppattern-mode-row');
-      if (omr) omr.style.display = p.opPatternsEnabled !== false ? '' : 'none';
-      setToggle('btn-oppat-color', (p.opPatternMode || 0) === 0);
-      setToggle('btn-oppat-shape', (p.opPatternMode || 0) === 1);
       setToggle('btn-outline', p.showOutline);
       setVis('outline-controls', p.showOutline);
 
       // Color mode
-      setToggle('btn-cm-raw', p.colorMode === 2);
+      var colorize = p.colorize !== false;
+      setToggle('btn-colorize-toggle', colorize);
+      var cw = el('colorize-wrapper');
+      if (cw) cw.classList.toggle('controls-disabled', !colorize);
       setToggle('btn-cm-grad', p.colorMode === 0);
       setToggle('btn-cm-hue', p.colorMode === 1);
       setVis('gradient-controls', p.colorMode === 0);
       setVis('hue-controls', p.colorMode === 1);
-      setVis('raw-controls', p.colorMode === 2);
+
+      // Image Pixel
+      var ipe = !!p.imgPixelEnabled;
+      setToggle('btn-imgpixel-toggle', ipe);
+      var ipc = el('imgpixel-controls');
+      if (ipc) ipc.classList.toggle('controls-disabled', !ipe);
+      setSlider('sImgPixelCols', p.imgPixelCols || 5, 'vImgPixelCols', v => Math.round(v));
+      setSlider('sImgPixelRows', p.imgPixelRows || 5, 'vImgPixelRows', v => Math.round(v));
+      setSlider('sImgPixelOpacity', p.imgPixelOpacity != null ? p.imgPixelOpacity : 1, 'vImgPixelOpacity', v => v.toFixed(2));
+      var ipbSel = el('selImgPixelBlend');
+      if (ipbSel) ipbSel.value = String(p.imgPixelBlend != null ? p.imgPixelBlend : 8);
+      
+      var ipas = !!p.imgPixelAffectScale;
+      var ipasBtn = el('btn-imgpixel-scale');
+      if (ipasBtn) ipasBtn.classList.toggle('active', ipas);
+      var ipasCtrl = el('imgpixel-scale-controls');
+      if (ipasCtrl) ipasCtrl.style.display = ipas ? '' : 'none';
+      setSlider('sImgPixelMinScale', p.imgPixelMinScale != null ? p.imgPixelMinScale : -4, 'vImgPixelMinScale', v => v.toFixed(2));
+      setSlider('sImgPixelMaxScale', p.imgPixelMaxScale != null ? p.imgPixelMaxScale : 4, 'vImgPixelMaxScale', v => v.toFixed(2));
+      
+      var ipar = !!p.imgPixelAffectRotate;
+      var iparBtn = el('btn-imgpixel-rotate');
+      if (iparBtn) iparBtn.classList.toggle('active', ipar);
+      var iparCtrl = el('imgpixel-rotate-controls');
+      if (iparCtrl) iparCtrl.style.display = ipar ? '' : 'none';
+      setSlider('sImgPixelMinRotate', p.imgPixelMinRotate != null ? p.imgPixelMinRotate : -90, 'vImgPixelMinRotate', v => Math.round(v) + '°');
+      setSlider('sImgPixelMaxRotate', p.imgPixelMaxRotate != null ? p.imgPixelMaxRotate : 90, 'vImgPixelMaxRotate', v => Math.round(v) + '°');
+      
+      var ipao = !!p.imgPixelAffectOffset;
+      var ipaoBtn = el('btn-imgpixel-offset');
+      if (ipaoBtn) ipaoBtn.classList.toggle('active', ipao);
+      var ipaoCtrl = el('imgpixel-offset-controls');
+      if (ipaoCtrl) ipaoCtrl.style.display = ipao ? '' : 'none';
+      setSlider('sImgPixelMinOffset', p.imgPixelMinOffset != null ? p.imgPixelMinOffset : -0.5, 'vImgPixelMinOffset', v => v.toFixed(2));
+      setSlider('sImgPixelMaxOffset', p.imgPixelMaxOffset != null ? p.imgPixelMaxOffset : 0.5, 'vImgPixelMaxOffset', v => v.toFixed(2));
+
+      // Pre Process
+      var pp = !!p.preProcess;
+      setToggle('btn-preprocess-toggle', pp);
+      var pc = el('preprocess-controls');
+      if (pc) pc.classList.toggle('controls-disabled', !pp);
       setSlider('sCamHue', p.camHue, 'vCamHue', v => Math.round(v) + '°');
       setSlider('sCamSat', p.camSat, 'vCamSat', v => v.toFixed(2));
       setSlider('sCamVal', p.camVal, 'vCamVal', v => v.toFixed(2));
@@ -2266,12 +3712,42 @@
     function wire(sliderId, displayId, paramKey, fmt) {
       const slider  = document.getElementById(sliderId);
       const display = document.getElementById(displayId);
+      if (!slider) return;
+      const isInput = display && display.tagName === 'INPUT';
+      // Params that affect the random bg color preview
+      const bgRelevant = ['colorSeed','hueOffset','hueRadius','gradientSeed','satMin','satMax','valueMin','valueMax','brightSeed','satSeed'];
+      function updateDisplay(v) {
+        if (!display) return;
+        if (isInput) {
+          display.value = String(fmt(v)).replace(/[°%]/g,'').trim();
+        } else {
+          display.textContent = fmt(v);
+        }
+      }
+      function afterChange() {
+        if (bgRelevant.indexOf(paramKey) !== -1 && window.shaderParams.bgMode === 'random') {
+          updateBgRandomPreview();
+        }
+      }
       slider.addEventListener('input', () => {
         const v = parseFloat(slider.value);
         window.shaderParams[paramKey] = v;
-        display.textContent = fmt(v);
+        updateDisplay(v);
         window.shaderDirty = true;
+        afterChange();
       });
+      if (isInput) {
+        display.addEventListener('change', () => {
+          let v = parseFloat(display.value);
+          if (isNaN(v)) return;
+          v = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), v));
+          slider.value = v;
+          window.shaderParams[paramKey] = v;
+          display.value = String(fmt(v)).replace(/[°%]/g,'').trim();
+          window.shaderDirty = true;
+          afterChange();
+        });
+      }
     }
 
     wire('sPoints',  'vPoints',  'points',       v => Math.round(v));
@@ -2296,6 +3772,31 @@
         window.shaderDirty = true;
       });
     })();
+
+    // Precompute frames slider
+    (function() {
+      const slider = document.getElementById('sPrecomputeFrames');
+      const display = document.getElementById('vPrecomputeFrames');
+      if (!slider) return;
+      function sync(v) {
+        if (display) { if (display.tagName==='INPUT') display.value=v; else display.textContent=v; }
+      }
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value);
+        window.shaderParams.precomputeFrames = v;
+        sync(v);
+        if (window.resetPrecomputeBuffer) window.resetPrecomputeBuffer();
+      });
+      if (display && display.tagName==='INPUT') {
+        display.addEventListener('change', () => {
+          let v = Math.max(parseInt(slider.min)||1, Math.min(parseInt(slider.max)||60, parseInt(display.value)||3));
+          slider.value = v; sync(v);
+          window.shaderParams.precomputeFrames = v;
+          if (window.resetPrecomputeBuffer) window.resetPrecomputeBuffer();
+        });
+      }
+    })();
+
     wire('sOutline', 'vOutline', 'outlineWidth', v => v.toFixed(1));
     wire('sDotRadius','vDotRadius','dotRadius', v => v.toFixed(3));
     wire('sOpPatSeed','vOpPatSeed','opPatternSeed', v => Math.round(v));
@@ -2329,10 +3830,49 @@
     wire('sGradeVal',     'vGradeVal',     'gradeVal',      v => v.toFixed(2));
     wire('sGradeContrast','vGradeContrast','gradeContrast',  v => v.toFixed(2));
 
+    // Canvas size sliders
+    (function() {
+      const slW = document.getElementById('sCanvasW');
+      const valW = document.getElementById('vCanvasW');
+      const slH = document.getElementById('sCanvasH');
+      const valH = document.getElementById('vCanvasH');
+      function applyW(v) {
+        window.shaderParams.canvasWidth = v;
+        if (window.shaderParams.canvasMode === 'custom') applyCanvasSize();
+      }
+      function applyH(v) {
+        window.shaderParams.canvasHeight = v;
+        if (window.shaderParams.canvasMode === 'custom') applyCanvasSize();
+      }
+      if (slW) {
+        slW.addEventListener('input', () => { const v=parseInt(slW.value); valW.value=v; applyW(v); });
+        valW.addEventListener('change', () => { const v=Math.max(64,Math.min(3840,parseInt(valW.value)||1920)); slW.value=v; valW.value=v; applyW(v); });
+      }
+      if (slH) {
+        slH.addEventListener('input', () => { const v=parseInt(slH.value); valH.value=v; applyH(v); });
+        valH.addEventListener('change', () => { const v=Math.max(64,Math.min(2160,parseInt(valH.value)||1080)); slH.value=v; valH.value=v; applyH(v); });
+      }
+    })();
+
     wire('sColorSeed','vColorSeed','colorSeed',  v => Math.round(v));
+    wire('sHueOffset','vHueOffset','hueOffset',  v => v.toFixed(2));
+    wire('sHueRadius','vHueRadius','hueRadius',  v => v.toFixed(2));
+    wire('sSatSeed','vSatSeed','satSeed',  v => Math.round(v));
+    wire('sSatMin','vSatMin','satMin',  v => v.toFixed(2));
+    wire('sSatMax','vSatMax','satMax',  v => v.toFixed(2));
+    wire('sBrightSeed','vBrightSeed','brightSeed',  v => Math.round(v));
     wire('sValueMin', 'vValueMin', 'valueMin',   v => v.toFixed(2));
     wire('sValueMax', 'vValueMax', 'valueMax',   v => v.toFixed(2));
     wire('sGradientSeed', 'vGradientSeed', 'gradientSeed', v => Math.round(v));
+    wire('sImgPixelCols', 'vImgPixelCols', 'imgPixelCols', v => Math.round(v));
+    wire('sImgPixelRows', 'vImgPixelRows', 'imgPixelRows', v => Math.round(v));
+    wire('sImgPixelOpacity', 'vImgPixelOpacity', 'imgPixelOpacity', v => v.toFixed(2));
+    wire('sImgPixelMinScale', 'vImgPixelMinScale', 'imgPixelMinScale', v => v.toFixed(2));
+    wire('sImgPixelMaxScale', 'vImgPixelMaxScale', 'imgPixelMaxScale', v => v.toFixed(2));
+    wire('sImgPixelMinRotate', 'vImgPixelMinRotate', 'imgPixelMinRotate', v => Math.round(v) + '°');
+    wire('sImgPixelMaxRotate', 'vImgPixelMaxRotate', 'imgPixelMaxRotate', v => Math.round(v) + '°');
+    wire('sImgPixelMinOffset', 'vImgPixelMinOffset', 'imgPixelMinOffset', v => v.toFixed(2));
+    wire('sImgPixelMaxOffset', 'vImgPixelMaxOffset', 'imgPixelMaxOffset', v => v.toFixed(2));
 
     /* ── Gradient Editor ──────────────────────────────────────────── */
     function hexToRgb(hex) {
@@ -2473,6 +4013,7 @@
       if (window.uploadGradient) {
         window.uploadGradient(sortedStops());
       }
+      if (window.shaderParams.bgMode === 'random' && typeof updateBgRandomPreview === 'function') updateBgRandomPreview();
     }
 
     // initial render
@@ -2564,7 +4105,8 @@
       });
     }
 
-    document.getElementById('shapeGradBar').addEventListener('click', (e) => {
+    const _sgb = document.getElementById('shapeGradBar');
+    if (_sgb) _sgb.addEventListener('click', (e) => {
       const rect = e.target.getBoundingClientRect();
       const pos = (e.clientX - rect.left) / rect.width;
       const stops = sortedShapeStops();
@@ -2657,21 +4199,11 @@
       uploadAllOpPatterns();
     }
 
-    function uploadAllOpPatterns() {
-      if (window.uploadOpPatterns) {
-        if (window.shaderParams.opPatternsEnabled === false) {
-          window.uploadOpPatterns([]);  // clear texture when master is off
-        } else {
-          const active = window.shaderParams.opPatterns.filter(op => op.active !== false);
-          window.uploadOpPatterns(active);
-        }
-      }
-      window.shaderDirty = true;
-    }
+    // uploadAllOpPatterns is defined earlier (per-instance version) — no override here
 
     function renderOpPatterns() {
       const list = document.getElementById('oppattern-list');
-      list.innerHTML = '';
+      if (!list) return;  // now per-instance — nothing to render here
       const pats = window.shaderParams.opPatterns;
 
       pats.forEach((pat, idx) => {
@@ -2697,13 +4229,13 @@
               <label>Hue Shift</label>
               <input type="range" min="0" max="1" step="0.01" value="${pat.hueShift}"
                      data-opid="${pat.id}" data-opkey="hueShift">
-              <span class="val" id="ophs-${pat.id}">${pat.hueShift.toFixed(2)}</span>
+              <input type="number" class="val" id="ophs-${pat.id}" value="${pat.hueShift.toFixed(2)}">
             </div>
             <div class="row">
               <label>Hue Opacity</label>
               <input type="range" min="0" max="1" step="0.01" value="${pat.hueOpacity}"
                      data-opid="${pat.id}" data-opkey="hueOpacity">
-              <span class="val" id="opho-${pat.id}">${pat.hueOpacity.toFixed(2)}</span>
+              <input type="number" class="val" id="opho-${pat.id}" value="${pat.hueOpacity.toFixed(2)}">
             </div>
           </div>
         `;
@@ -2738,7 +4270,26 @@
           if (!pat) return;
           pat[key] = parseFloat(slider.value);
           const label = document.getElementById(key === 'hueShift' ? 'ophs-' + id : 'opho-' + id);
-          if (label) label.textContent = pat[key].toFixed(2);
+          if (label) { if (label.tagName==='INPUT') label.value = pat[key].toFixed(2); else label.textContent = pat[key].toFixed(2); }
+          uploadAllOpPatterns();
+        });
+      });
+
+      // Wire number val inputs two-way
+      list.querySelectorAll('input.val[id^="ophs-"], input.val[id^="opho-"]').forEach(inp => {
+        const range = inp.previousElementSibling;
+        if (!range || range.type !== 'range') return;
+        const id = parseInt(range.dataset.opid);
+        const key = range.dataset.opkey;
+        inp.addEventListener('change', () => {
+          let v = parseFloat(inp.value);
+          if (isNaN(v)) return;
+          v = Math.max(parseFloat(range.min), Math.min(parseFloat(range.max), v));
+          const pat = pats.find(p => p.id === id);
+          if (!pat) return;
+          pat[key] = v;
+          range.value = v;
+          inp.value = v.toFixed(2);
           uploadAllOpPatterns();
         });
       });
@@ -2813,31 +4364,31 @@
               <label>Displace X</label>
               <input type="range" min="-1" max="1" step="0.01" value="${grp.dx}"
                      data-id="${grp.id}" data-key="dx">
-              <span class="val" id="gdx-${grp.id}">${grp.dx.toFixed(2)}</span>
+              <input type="number" class="val" id="gdx-${grp.id}" value="${grp.dx.toFixed(2)}">
             </div>
             <div class="row">
               <label>Displace Y</label>
               <input type="range" min="-1" max="1" step="0.01" value="${grp.dy}"
                      data-id="${grp.id}" data-key="dy">
-              <span class="val" id="gdy-${grp.id}">${grp.dy.toFixed(2)}</span>
+              <input type="number" class="val" id="gdy-${grp.id}" value="${grp.dy.toFixed(2)}">
             </div>
             <div class="row">
               <label>Scale</label>
               <input type="range" min="0" max="2" step="0.01" value="${grp.scale}"
                      data-id="${grp.id}" data-key="scale">
-              <span class="val" id="gscl-${grp.id}">${grp.scale.toFixed(2)}</span>
+              <input type="number" class="val" id="gscl-${grp.id}" value="${grp.scale.toFixed(2)}">
             </div>
             <div class="row">
               <label>Threshold</label>
               <input type="range" min="0" max="1" step="0.001" value="${grp.threshold}"
                      data-id="${grp.id}" data-key="threshold">
-              <span class="val" id="gthr-${grp.id}">${grp.threshold.toFixed(3)}</span>
+              <input type="number" class="val" id="gthr-${grp.id}" value="${grp.threshold.toFixed(3)}">
             </div>
             <div class="row">
               <label>Seed</label>
               <input type="range" min="1" max="1000" step="1" value="${grp.seed}"
                      data-id="${grp.id}" data-key="seed">
-              <span class="val" id="gseed-${grp.id}">${Math.round(grp.seed)}</span>
+              <input type="number" class="val" id="gseed-${grp.id}" value="${Math.round(grp.seed)}">
             </div>
           </div>
         `;
@@ -2887,7 +4438,29 @@
                     : key === 'seed'      ? String(Math.round(v))
                     :                       v.toFixed(2);
           const el = document.getElementById(displayId);
-          if (el) el.textContent = fmt;
+          if (el) { if (el.tagName==='INPUT') el.value = fmt; else el.textContent = fmt; }
+          window.shaderDirty = true;
+        });
+      });
+
+      // Two-way: number inputs back-drive the range slider
+      list.querySelectorAll('input.val[data-id], input[type=number].val[id^="gdx-"], input[type=number].val[id^="gdy-"], input[type=number].val[id^="gscl-"], input[type=number].val[id^="gthr-"], input[type=number].val[id^="gseed-"]').forEach(inp => {
+        const range = inp.previousElementSibling;
+        if (!range || range.type !== 'range') return;
+        inp.addEventListener('change', () => {
+          let v = parseFloat(inp.value);
+          if (isNaN(v)) return;
+          v = Math.max(parseFloat(range.min), Math.min(parseFloat(range.max), v));
+          const id  = parseInt(range.dataset.id);
+          const key = range.dataset.key;
+          const grp = window.shaderParams.groups.find(g => g.id === id);
+          if (!grp) return;
+          grp[key] = v;
+          range.value = v;
+          const fmt = key === 'threshold' ? v.toFixed(3)
+                    : key === 'seed'      ? String(Math.round(v))
+                    :                       v.toFixed(2);
+          inp.value = fmt;
           window.shaderDirty = true;
         });
       });
@@ -2901,9 +4474,19 @@
     renderOpPatterns();
     document.getElementById('btn-groups-toggle').classList.toggle('on', window.shaderParams.groupsEnabled !== false);
     
-    document.getElementById('btn-oppattern-toggle').classList.toggle('on', window.shaderParams.opPatternsEnabled !== false);
-    
-    
+    const _bopt = document.getElementById('btn-oppattern-toggle');
+    if (_bopt) _bopt.classList.toggle('on', window.shaderParams.opPatternsEnabled !== false);
+
+    // Initialize pixelate instances
+    initPixelateInstances();
+    renderPixelateTabs();
+    renderPixelateInstancePanel(0);
+
+    // Initialize canvas size
+    applyCanvasSize();
+
+    // Initialize background color
+    applyBgColor();
     
   </script>
 
@@ -2911,10 +4494,7 @@
   <script>
     // Upload opacity patterns after shader.js creates the texture
     setTimeout(() => {
-      if (window.uploadOpPatterns) {
-        const active = window.shaderParams.opPatterns.filter(op => op.active !== false);
-        window.uploadOpPatterns(active);
-      }
+      uploadAllOpPatterns();
     }, 300);
   </script>
 </body>

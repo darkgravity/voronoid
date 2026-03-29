@@ -14,6 +14,9 @@ uniform int       uPixelShape;
 uniform float     uShapeMargin;
 uniform float     uShapeBleed;
 uniform float     uPixelScale;
+uniform float     uShapeScale;
+uniform int       uForceSquare;       // 0=off, 1=parent shape to square frame
+uniform int       uMaintainThickness; // 0=off, 1=keep arm thickness optically constant across quadtree
 uniform int       uOblique;
 uniform int       uBandOutline;
 uniform vec3      uGapColor;
@@ -21,6 +24,7 @@ uniform float     uGapOpacity;
 uniform sampler2D uShapeGradTex;
 uniform float     uShapeGradOpacity;
 uniform int       uShapeGradDir;
+uniform int       uTileGradEnabled;
 uniform vec2      uRadialCenter;      // radial gradient center offset (-1 to 1)
 uniform float     uRadialScale;       // radial gradient scale (0-2)
 uniform int       uEmbossBlendMode; // same blend mode set as banding
@@ -29,6 +33,43 @@ uniform float     uGradeHue;
 uniform float     uGradeSat;
 uniform float     uGradeVal;
 uniform float     uGradeContrast;
+uniform int       uPostProcess;
+
+/* ── Image Pixel uniforms ──────────────────────────────────── */
+uniform int       uImgPixelEnabled;
+uniform sampler2D uImgPixelTex;
+uniform float     uImgPixelCols;
+uniform float     uImgPixelRows;
+uniform int       uImgPixelBlend;
+uniform float     uImgPixelOpacity;
+uniform int       uImgPixelAffectScale;
+uniform float     uImgPixelMinScale;
+uniform float     uImgPixelMaxScale;
+uniform int       uImgPixelAffectRotate;
+uniform float     uImgPixelMinRotate;
+uniform float     uImgPixelMaxRotate;
+uniform int       uImgPixelAffectOffset;
+uniform float     uImgPixelMinOffset;
+uniform float     uImgPixelMaxOffset;
+uniform int       uImgPixelMask;          // 0=normal, 1=mask (lum→opacity)
+
+/* ── Oct Diamond Image Pixel uniforms (layer 2 for Oct weave) ── */
+uniform int       uImgPixel2Enabled;
+uniform sampler2D uImgPixel2Tex;
+uniform float     uImgPixel2Cols;
+uniform float     uImgPixel2Rows;
+uniform int       uImgPixel2Blend;
+uniform float     uImgPixel2Opacity;
+uniform int       uImgPixel2AffectScale;
+uniform float     uImgPixel2MinScale;
+uniform float     uImgPixel2MaxScale;
+uniform int       uImgPixel2AffectRotate;
+uniform float     uImgPixel2MinRotate;
+uniform float     uImgPixel2MaxRotate;
+uniform int       uImgPixel2AffectOffset;
+uniform float     uImgPixel2MinOffset;
+uniform float     uImgPixel2MaxOffset;
+uniform int       uImgPixel2Mask;
 
 /* ── Opacity Pattern uniforms ──────────────────────────────── */
 uniform int       uOpPatternCount;    // 0-4 active patterns
@@ -63,84 +104,116 @@ uniform int       uQuadSteps;         // 1=off, 2-5=number of size levels
 uniform int       uQuadEnabled;       // 0=off, 1=on
 uniform int       uGenDiamond;        // 0=off, 1=generate full diamond shapes at oct corners
 
+// Snap a base grid size so every quadtree level halves to exact integers.
+// divisor = 2^(steps-1); round smallest cell ≥ 1, base = smallest * divisor.
+vec2 snapQuadBase(vec2 base, int steps) {
+    float div = 1.0;
+    for(int i = 0; i < 4; i++) { if(i < steps - 1) div *= 2.0; }
+    vec2 smallest = max(floor(base / div + 0.5), vec2(1.0));
+    return smallest * div;
+}
+
 vec2 quadtreeGrid(vec2 rawUV, vec2 baseGrid) {
-    if(uQuadEnabled==0 || uQuadSteps <= 1) return baseGrid;
+    vec2 baseInt = floor(baseGrid + 0.5);
+    baseInt = max(baseInt, vec2(1.0));
+    if(uQuadEnabled==0 || uQuadSteps <= 1) return baseInt;
 
-    // Sample scene at this pixel's base grid center
-    vec2 baseUV = baseGrid / iResolution;
-    vec2 baseCell = floor(rawUV / baseUV);
-    vec2 baseCenter = (baseCell + 0.5) * baseUV;
-    float lum = dot(texture2D(uSceneTex, baseCenter).rgb, vec3(0.299, 0.587, 0.114));
-    lum = clamp(lum, 0.0, 1.0);
+    // Snap base so every subdivision is an exact halving
+    vec2 snappedBase = snapQuadBase(baseInt, uQuadSteps);
 
-    // Map luminance to a level: 0=smallest, steps-1=largest
-    int lvl = int(floor(lum * float(uQuadSteps)));
-    if(lvl >= uQuadSteps) lvl = uQuadSteps - 1;
+    vec2 canvasCenter = floor(iResolution * 0.5);
+    vec2 pixPos = rawUV * iResolution;
 
-    // Level 0 = base/8, level 1 = base/4, level 2 = base/2, level steps-1 = base
-    // Scale from 1/(2^(steps-1)) up to 1
-    // So with 4 steps: 1/8, 1/4, 1/2, 1
-    float scale = 1.0;
-    int shifts = uQuadSteps - 1 - lvl;
+    // Iterative top-down quadtree: at each level, sample luminance
+    // at the current cell's own center, decide whether to subdivide.
+    vec2 cellPx = snappedBase;
+
     for(int i = 0; i < 4; i++) {
-        if(i < shifts) scale *= 0.5;
+        if(i >= uQuadSteps - 1) break;
+
+        vec2 ci = floor((pixPos - canvasCenter) / cellPx);
+        vec2 centerUV = (canvasCenter + (ci + 0.5) * cellPx) / iResolution;
+
+        float lum = dot(texture2D(uSceneTex,
+                        clamp(centerUV, vec2(0.001), vec2(0.999))).rgb,
+                        vec3(0.299, 0.587, 0.114));
+        lum = clamp(lum, 0.0, 1.0);
+
+        float threshold = float(uQuadSteps - 1 - i) / float(uQuadSteps);
+        if(lum >= threshold) break;
+
+        // Halve — exact because cellPx is always a multiple of smallest
+        cellPx = cellPx * 0.5;
     }
 
-    vec2 grid = baseGrid * scale;
-    // Ensure minimum 1px
-    grid = max(grid, vec2(1.0));
-    return grid;
+    return cellPx;
 }
 
 BlockInfo getBlock(vec2 rawUV) {
     BlockInfo b; b.isWarp=false; b.cell=vec2(0);
     if(uPixelate==0){b.uv=rawUV;b.tilePx=vec2(1);b.shapePx=vec2(1);return b;}
 
+    // Canvas center (integer pixel) — grid originates here
+    vec2 canvasCenter = floor(iResolution * 0.5);
+    // Effective pixel position for grid lookup
+    vec2 pixPos = rawUV * iResolution;
     float outerSize = (uOblique==1) ? max(uPixelSize.x, uPixelSize.y) : 0.0;
 
     // Hexagonal grid (weave mode 3)
     if(uWeaveMode==3){
-        float sz = max(uPixelSize.x, uPixelSize.y);
+        float sz = floor(max(uPixelSize.x, uPixelSize.y) + 0.5);
+        sz = max(sz, 1.0);
         vec2 actualGrid = quadtreeGrid(rawUV, vec2(sz));
-        float cellW = actualGrid.x / iResolution.x;
-        float cellH = cellW * 0.866025; // sqrt(3)/2
-        float row = floor(rawUV.y / cellH);
-        float xOff = mod(row, 2.0) >= 1.0 ? cellW * 0.5 : 0.0;
-        float col = floor((rawUV.x - xOff) / cellW);
-        vec2 center = vec2((col + 0.5) * cellW + xOff, (row + 0.5) * cellH);
-        // Check nearest of 3 candidates for true hex center
-        float bestD = 1e9; vec2 bestC = center; vec2 bestCell = vec2(col, row);
+        float cellWpx = actualGrid.x;                       // integer px width
+        float cellHpx = floor(cellWpx * 0.866025 + 0.5);   // integer px height (sqrt3/2)
+        cellHpx = max(cellHpx, 1.0);
+        // Shift each odd row by half a cell width (in integer px)
+        float halfWpx = floor(cellWpx * 0.5 + 0.5);
+        // Offset pixel position from canvas center
+        vec2 off = pixPos - canvasCenter;
+        float row = floor(off.y / cellHpx);
+        float xShift = mod(row, 2.0) >= 1.0 ? halfWpx : 0.0;
+        float col = floor((off.x - xShift) / cellWpx);
+        vec2 cellCenterPx = canvasCenter + vec2((col + 0.5) * cellWpx + xShift, (row + 0.5) * cellHpx);
+        // Find nearest of 9 candidates for true hex center
+        float bestD = 1e9; vec2 bestC = cellCenterPx; vec2 bestCell = vec2(col, row);
         for(int dy = -1; dy <= 1; dy++) {
             float nr = row + float(dy);
-            float nxOff = mod(nr, 2.0) >= 1.0 ? cellW * 0.5 : 0.0;
+            float nxShift = mod(nr, 2.0) >= 1.0 ? halfWpx : 0.0;
             for(int dx = -1; dx <= 1; dx++) {
                 float nc = col + float(dx);
-                vec2 cc = vec2((nc + 0.5) * cellW + nxOff, (nr + 0.5) * cellH);
-                float dd = length(rawUV - cc);
+                vec2 cc = canvasCenter + vec2((nc + 0.5) * cellWpx + nxShift, (nr + 0.5) * cellHpx);
+                float dd = length(pixPos - cc);
                 if(dd < bestD) { bestD = dd; bestC = cc; bestCell = vec2(nc, nr); }
             }
         }
-        b.uv = bestC; b.tilePx = actualGrid; b.shapePx = actualGrid; b.cell = bestCell;
+        b.uv = bestC / iResolution;
+        b.tilePx = actualGrid;
+        b.shapePx = actualGrid;
+        b.cell = bestCell;
         return b;
     }
 
     // Octagonal grid (weave mode 4)
     if(uWeaveMode==4){
-        float sz = max(uPixelSize.x, uPixelSize.y);
+        float sz = floor(max(uPixelSize.x, uPixelSize.y) + 0.5);
+        sz = max(sz, 1.0);
         vec2 actualGrid = quadtreeGrid(rawUV, vec2(sz));
-        vec2 tUV = actualGrid / iResolution;
-        vec2 ci = floor(rawUV / tUV);
-        vec2 sqCenter = (ci + 0.5) * tUV;
-        
+        vec2 cellPx = actualGrid;
+        // Center-based cell index
+        vec2 off = pixPos - canvasCenter;
+        vec2 ci = floor(off / cellPx);
+        vec2 sqCenterPx = canvasCenter + (ci + 0.5) * cellPx;
+
         if(uGenDiamond==0) {
-            // Default mode: L1 distance assigns corner pixels to diamond cells
-            vec2 diCI = floor(rawUV / tUV + 0.5);
-            vec2 vtx = diCI * tUV;
-            vec2 dv = abs(rawUV - vtx) / tUV;
+            // Diamond cells at grid corners (offset by 0.5 cell)
+            vec2 diCI = floor(off / cellPx + 0.5);
+            vec2 vtxPx = canvasCenter + diCI * cellPx;
+            vec2 dv = abs(pixPos - vtxPx) / cellPx;
             float l1 = dv.x + dv.y;
             if(l1 < 0.2929) {
-                float diaSz = 0.2929 * 2.0 * actualGrid.x;
-                b.uv = vtx;
+                float diaSz = floor(0.2929 * 2.0 * cellPx.x + 0.5);
+                b.uv = vtxPx / iResolution;
                 b.tilePx = vec2(diaSz);
                 b.shapePx = vec2(diaSz);
                 b.cell = diCI + vec2(5000.0);
@@ -148,39 +221,71 @@ BlockInfo getBlock(vec2 rawUV) {
                 return b;
             }
         }
-        // genDiamond ON: pure square grid here, diamond overlay layer handles the rest
-        
-        b.uv = sqCenter; b.tilePx = actualGrid; b.shapePx = actualGrid; b.cell = ci;
+        b.uv = sqCenterPx / iResolution;
+        b.tilePx = cellPx;
+        b.shapePx = cellPx;
+        b.cell = ci;
         return b;
     }
 
+    // Weave (mode 2): checkerboard warp/weft
     if(uWeaveMode==2){
-        float ts=max(uPixelSize.x,uPixelSize.y);
-        vec2 baseGrid = vec2(ts);
-        vec2 actualGrid = quadtreeGrid(rawUV, baseGrid);
-        vec2 tUV=actualGrid/iResolution;
-        vec2 ci=floor(rawUV/tUV);
-        bool warp=mod(ci.x+ci.y,2.0)>=1.0;
-        b.isWarp=warp; b.tilePx=actualGrid;
-        float ratio = actualGrid.x / ts;
-        b.shapePx=warp?vec2(uPixelSize.y,uPixelSize.x)*ratio:uPixelSize*ratio;
-        b.uv=(ci+0.5)*tUV;
-        b.cell=ci;
+        float ts = floor(max(uPixelSize.x, uPixelSize.y) + 0.5);
+        ts = max(ts, 1.0);
+        vec2 actualGrid = quadtreeGrid(rawUV, vec2(ts));
+        vec2 cellPx = actualGrid;
+        vec2 off = pixPos - canvasCenter;
+        vec2 ci = floor(off / cellPx);
+        bool warp = mod(ci.x + ci.y, 2.0) >= 1.0;
+        b.isWarp = warp;
+        b.tilePx = cellPx;
+        // Snap shape sizes to integer
+        vec2 shapeBase = warp ? vec2(uPixelSize.y, uPixelSize.x) : uPixelSize;
+        b.shapePx = floor(shapeBase + 0.5);
+        b.shapePx = max(b.shapePx, vec2(1.0));
+        b.uv = (canvasCenter + (ci + 0.5) * cellPx) / iResolution;
+        b.cell = ci;
         return b;
     }
 
+    // Default rectangular grid (modes 0 = none, 1 = brick)
     vec2 gridSize = (uOblique==1) ? vec2(outerSize) : uPixelSize;
     vec2 actualGrid = quadtreeGrid(rawUV, gridSize);
-    vec2 bUV=actualGrid/iResolution;
-    vec2 c=floor(rawUV/bUV);
-    float ratio = actualGrid.x / gridSize.x;
-
-    if(uWeaveMode==1 && mod(c.y,2.0)>=1.0){
-        float sx=rawUV.x-bUV.x*0.5; c.x=floor(sx/bUV.x);
-        b.uv=vec2((c.x+0.5)*bUV.x+bUV.x*0.5,(c.y+0.5)*bUV.y);
-        b.tilePx=actualGrid; b.shapePx=uPixelSize*ratio; b.cell=c; return b;
+    // Snap cell to integer px
+    vec2 cellPx = actualGrid;   // already integer from quadtreeGrid
+    // Force-square: parent cell wrapper to square (max of w,h), shape stays as-is
+    if (uForceSquare == 1) {
+        float sq = max(cellPx.x, cellPx.y);
+        cellPx = vec2(sq);
     }
-    b.uv=(c+0.5)*bUV; b.tilePx=actualGrid; b.shapePx=uPixelSize*ratio; b.cell=c; return b;
+    vec2 off = pixPos - canvasCenter;
+
+    // Brick offset (mode 1): odd rows shift by half cell width
+    vec2 ci = floor(off / cellPx);
+    if(uWeaveMode==1 && mod(ci.y, 2.0) >= 1.0){
+        // Shift x by half cell, re-derive ci.x
+        float offX = off.x - cellPx.x * 0.5;
+        ci.x = floor(offX / cellPx.x);
+        vec2 ctrPx = canvasCenter + vec2((ci.x + 0.5) * cellPx.x + cellPx.x * 0.5,
+                                         (ci.y + 0.5) * cellPx.y);
+        // Snap shape size; if force-square, parent to max(w,h)
+        vec2 sPx = floor(uPixelSize + 0.5); sPx = max(sPx, vec2(1.0));
+        if(uForceSquare==1) { float sq=max(sPx.x,sPx.y); sPx=vec2(sq); }
+        b.uv = ctrPx / iResolution;
+        b.tilePx = cellPx;
+        b.shapePx = sPx;
+        b.cell = ci;
+        return b;
+    }
+
+    vec2 ctrPx = canvasCenter + (ci + 0.5) * cellPx;
+    vec2 sPx = floor(uPixelSize + 0.5); sPx = max(sPx, vec2(1.0));
+    if(uForceSquare==1) { float sq=max(sPx.x,sPx.y); sPx=vec2(sq); }
+    b.uv = ctrPx / iResolution;
+    b.tilePx = cellPx;
+    b.shapePx = sPx;
+    b.cell = ci;
+    return b;
 }
 
 vec2 snapUV(vec2 uv){return getBlock(uv).uv;}
@@ -224,6 +329,59 @@ float octSDF(vec2 p, vec2 h, float m){
     float d = max(max(a.x, a.y), (a.x + a.y) * 0.7071) - sz;
     return d;
 }
+// ── Stroke (capsule) SDF ─────────────────────────────────────────
+// Horizontal capsule: segment (-halfLen,0)→(halfLen,0), with rounded caps of radius r.
+// r and halfLen are ALREADY accounting for margin (no further shrinkage inside).
+float capsuleH(vec2 p, float halfLen, float r) {
+    float dx = max(abs(p.x) - halfLen, 0.0);
+    return length(vec2(dx, p.y)) - r;
+}
+// Same but vertical
+float capsuleV(vec2 p, float halfLen, float r) {
+    float dy = max(abs(p.y) - halfLen, 0.0);
+    return length(vec2(p.x, dy)) - r;
+}
+
+// ── Cross "+" / "×" geometry helper ─────────────────────────────
+// Given cell half-extents hx/hy, stroke radius r (from slider), margin m:
+//   - outer edge of cap = halfExtent - m  →  cap_center + r ≤ halfExtent - m
+//   - so cap_center = halfExtent - m - r  (= arm half-length)
+//   - degenerate when arm half-length ≤ 0: just a circle at origin
+
+// Cross "+" — two arms along X and Y axes
+float crossPlusSDF(vec2 p, vec2 h, float m, float r) {
+    // r clamped so cap fits inside cell with margin on all sides
+    float rX = min(r, max(h.x - m, 0.001));  // clamp to cell in X
+    float rY = min(r, max(h.y - m, 0.001));  // clamp to cell in Y
+    float rUse = min(rX, rY);                  // single consistent stroke radius
+    // Arm half-lengths (0 = pure circle)
+    float lX = max(h.x - m - rUse, 0.0);
+    float lY = max(h.y - m - rUse, 0.0);
+    float d1 = capsuleH(p, lX, rUse);   // horizontal arm
+    float d2 = capsuleV(p, lY, rUse);   // vertical arm
+    return min(d1, d2);
+}
+
+// Cross "×" — same two arms rotated 45°
+float crossXSDF(vec2 p, vec2 h, float m, float r) {
+    float c45 = 0.7071068; float s45 = 0.7071068;
+    vec2 pr = vec2(p.x*c45 + p.y*s45, -p.x*s45 + p.y*c45);
+    // In the 45° frame the effective half-extent = min(h.x,h.y) * 0.7071 (conservative — ensures no cap escapes the cell corner)
+    float sz = min(h.x, h.y) * 0.7071;
+    float rUse = min(r, max(sz - m, 0.001));
+    float l = max(sz - m - rUse, 0.0);
+    float d1 = capsuleH(pr, l, rUse);
+    float d2 = capsuleV(pr, l, rUse);
+    return min(d1, d2);
+}
+
+// Backward-compat wrappers (used by shapeSDF for non-MT path)
+float crossPlusSDFt(vec2 p, vec2 h, float m, float thickH, float thickV) {
+    return crossPlusSDF(p, h, m, min(thickH, thickV));
+}
+float crossXSDFt(vec2 p, vec2 h, float m, float thick) {
+    return crossXSDF(p, h, m, thick);
+}
 float shapeSDF(vec2 p,vec2 h,float m){
     if(uPixelShape==1)return pillSDF(p,h,m);
     if(uPixelShape==2)return diamondSDF(p,h,m);
@@ -231,6 +389,8 @@ float shapeSDF(vec2 p,vec2 h,float m){
     if(uPixelShape==4)return chevronSDF(p,h,m);
     if(uPixelShape==5)return hexSDF(p,h,m);
     if(uPixelShape==6)return octSDF(p,h,m);
+    if(uPixelShape==7){ float r=min(h.x,h.y)*0.35; return crossPlusSDF(p,h,m,r); }
+    if(uPixelShape==8){ float r=min(h.x,h.y)*0.35; return crossXSDF(p,h,m,r); }
     return -1.0;
 }
 
@@ -262,6 +422,7 @@ bool diffCellOnly(vec4 a,vec4 b){
     return hueDiff>0.05 || satDiff>0.15;
 }
 vec3 grade(vec3 c){
+    if(uPostProcess==0) return c;
     vec3 h=rgb2hsv(c);h.x=fract(h.x+uGradeHue/360.0);
     h.y=clamp(h.y*uGradeSat,0.0,1.0);h.z=clamp(h.z*uGradeVal,0.0,1.0);
     vec3 r=hsv2rgb(h);return clamp((r-0.5)*uGradeContrast+0.5,0.0,1.0);
@@ -308,52 +469,94 @@ void main(){
         effectiveShape = (uGenDiamond==0 && blk.isWarp) ? 2 : 6;
     }
 
-    bool isOctGap = false; // tracks if pixel is in octagon gap waiting for diamond overlay
+    bool isOctGap = false;
+    bool isDiamondPixel = false;  // set by genDiamond overlay so image pixel can route to L2
+    vec2 diaOverlayUV = vec2(0.0);     // center UV of diamond painted by overlay
+    vec2 diaOverlayTilePx = vec2(0.0); // tile size (px) of diamond painted by overlay
 
     if(uPixelate==1 && effectiveShape>0){
-        vec2 posInTile=(obliqueUV-blk.uv)*iResolution;
-        vec2 halfShape=blk.shapePx*0.5;
-        // For hex/oct auto-shapes, use same margin for all tiles
-        float margin = uShapeMargin;
+        // posInTile in PIXEL space — DO NOT scale this
+        vec2 posInTile = (obliqueUV - blk.uv) * iResolution;
+        float sc = max(uShapeScale, 0.01);
+
+        // Cell half-extents in pixels.
+        // Use the ACTUAL cell boundary: min of shape frame and tile frame.
+        // In quadtree, tilePx shrinks per subdivision level while shapePx stays
+        // at the slider value — the shape must fit within the real tile.
+        vec2 cellHalf = min(blk.shapePx, blk.tilePx) * 0.5;
+
+        // ── Margin: insets the cell boundary in optical pixel space ─────
+        // Content area = cell minus margin on all sides.
+        // Margin always wins — content can shrink to 0 but never negative.
+        vec2 content = max(cellHalf - vec2(uShapeMargin), vec2(1.0));
+
+        // ── Stroke radius: min(pixelW,pixelH)/2 from sliders ────────────
+        // This is the CAP radius = half the stroke thickness.
+        // Clamped so the cap (r on each side) fits inside content on the short axis.
+        float rSlider = min(uPixelSize.x, uPixelSize.y) * 0.5;
+        // r must fit perpendicularly: the cap must not touch the margin
+        float rMax = min(content.x, content.y);
+        float r = clamp(rSlider, 1.0, rMax);
+
+        // ── Scale: arm LENGTH scales with sc, radius stays fixed ─────────
+        // In pixel space: shape arm tip is at (content * sc) from center.
+        // capsule arm half-length = max(content_axis * sc - r, 0)
+        // When armLen=0: shape degenerates to a circle of radius r at center.
+        // (For quadtree: different cells have different content sizes → different arm lengths)
+
         float d = -1.0;
-        if(effectiveShape==1) d=pillSDF(posInTile,halfShape,margin);
-        if(effectiveShape==2) d=diamondSDF(posInTile,halfShape,margin);
-        if(effectiveShape==3) d=squareSDF(posInTile,halfShape,margin);
-        if(effectiveShape==4) d=chevronSDF(posInTile,halfShape,margin);
-        if(effectiveShape==5) d=hexSDF(posInTile,halfShape,margin);
-        if(effectiveShape==6) d=octSDF(posInTile,halfShape,margin);
+
+        if(effectiveShape==1){
+            // Pill: oriented along longer axis
+            if(cellHalf.x >= cellHalf.y){
+                float rCap = min(r, content.y);   // can't exceed content short axis
+                float armLen = max(content.x * sc - rCap, 0.0);
+                d = capsuleH(posInTile, armLen, rCap);
+            } else {
+                float rCap = min(r, content.x);
+                float armLen = max(content.y * sc - rCap, 0.0);
+                d = capsuleV(posInTile, armLen, rCap);
+            }
+        }
+        if(effectiveShape==2) d=diamondSDF(posInTile, cellHalf, uShapeMargin);
+        if(effectiveShape==3) d=squareSDF(posInTile,  cellHalf, uShapeMargin);
+        if(effectiveShape==4) d=chevronSDF(posInTile, cellHalf, uShapeMargin);
+        if(effectiveShape==5) d=hexSDF(posInTile,     cellHalf, uShapeMargin);
+        if(effectiveShape==6) d=octSDF(posInTile,     cellHalf, uShapeMargin);
+
+        if(effectiveShape==7){
+            // Cross "+": horizontal arm along X, vertical arm along Y
+            // Each arm independently: r clamped per-axis
+            float rX = min(r, content.y);   // horizontal arm: perp = Y axis
+            float rY = min(r, content.x);   // vertical arm:   perp = X axis
+            float rUse = min(rX, rY);        // single consistent r across both arms
+            float lX = max(content.x * sc - rUse, 0.0);
+            float lY = max(content.y * sc - rUse, 0.0);
+            d = min(capsuleH(posInTile, lX, rUse),
+                    capsuleV(posInTile, lY, rUse));
+        }
+
+        if(effectiveShape==8){
+            // Cross "×": same arms rotated 45°
+            float c45 = 0.7071068; float s45 = 0.7071068;
+            vec2 pr = vec2(posInTile.x*c45 + posInTile.y*s45,
+                          -posInTile.x*s45 + posInTile.y*c45);
+            // In the 45° frame the cell half-extent along each arm axis
+            float diagHalf = min(content.x, content.y) * 0.7071;
+            float rUse = min(r, diagHalf);
+            float l = max(diagHalf * sc - rUse, 0.0);
+            d = min(capsuleH(pr, l, rUse), capsuleV(pr, l, rUse));
+        }
+
         d -= uShapeBleed;
-        if(d>0.0){
-            if(uWeaveMode==4 && uGenDiamond==1) {
+        if(d > 0.0){
+            if(uWeaveMode==4 && uGenDiamond==1){
                 isOctGap = true;
             } else {
-                gl_FragColor=vec4(grade(mix(color,uGapColor,uGapOpacity)),1.0);
+                gl_FragColor = vec4(grade(mix(color, uGapColor, uGapOpacity)), 1.0);
                 return;
             }
-        } else {
-
-        // Emboss gradient overlay on the tile
-        if(uShapeGradOpacity>0.0){
-            vec2 ss=blk.shapePx;
-            float gradT;
-            if(uShapeGradDir==0){
-                // Horizontal
-                gradT=blk.isWarp?(posInTile.y/ss.y)+0.5:(posInTile.x/ss.x)+0.5;
-            }else if(uShapeGradDir==1){
-                // Vertical
-                gradT=blk.isWarp?(posInTile.x/ss.x)+0.5:(posInTile.y/ss.y)+0.5;
-            }else{
-                // Radial — distance from offset center
-                vec2 norm = posInTile / ss; // -0.5 to 0.5
-                vec2 center = uRadialCenter * 0.5; // map -1..1 to -0.5..0.5
-                float dist = length(norm - center) * 2.0 / max(uRadialScale, 0.001); // 0 at center, 1 at edge
-                gradT = clamp(dist, 0.0, 1.0);
-            }
-            gradT=clamp(gradT,0.0,1.0);
-            vec3 gCol=texture2D(uShapeGradTex,vec2(gradT,0.5)).rgb;
-            color=mix(color,blendV(color,gCol,uEmbossBlendMode),uShapeGradOpacity);
         }
-        } // close else (not in gap)
     }
 
     /* ── Outline ───────────────────────────────────────────────── */
@@ -474,18 +677,20 @@ void main(){
     // Larger levels paint over smaller ones.
     if(uPixelate==1 && uWeaveMode==4 && uGenDiamond==1){
         float sz = max(uPixelSize.x, uPixelSize.y);
-        vec2 basePx = vec2(sz);
+        vec2 basePx = vec2(floor(sz + 0.5));
+        basePx = max(basePx, vec2(1.0));
         int steps = (uQuadEnabled==1 && uQuadSteps > 1) ? uQuadSteps : 1;
+        // Snap base so all levels halve to exact integers
+        if(steps > 1) basePx = snapQuadBase(basePx, steps);
 
         // Iterate levels: 0 = smallest, steps-1 = largest (on top)
         for(int lvl = 0; lvl < 5; lvl++) {
             if(lvl >= steps) break;
 
-            // Compute grid size for this level
-            float scale = 1.0;
+            // Compute grid size for this level by exact halving
+            vec2 lvlPx = basePx;
             int shifts = steps - 1 - lvl;
-            for(int s = 0; s < 4; s++) { if(s < shifts) scale *= 0.5; }
-            vec2 lvlPx = max(basePx * scale, vec2(1.0));
+            for(int s = 0; s < 4; s++) { if(s < shifts) lvlPx = lvlPx * 0.5; }
             vec2 lvlTUV = lvlPx / iResolution;
 
             // --- Octagon at this level ---
@@ -508,7 +713,7 @@ void main(){
                 sUV = clamp(sUV, vec2(0.001), vec2(0.999));
                 vec3 octCol = texture2D(uSceneTex, sUV).rgb;
                 // Emboss gradient
-                if(uShapeGradOpacity > 0.0){
+                if(uTileGradEnabled==1 && uShapeGradOpacity > 0.0){
                     vec2 onorm = octPos / lvlPx;
                     float gT;
                     if(uShapeGradDir==0) gT = onorm.x + 0.5;
@@ -544,7 +749,7 @@ void main(){
                     }
                     sUV = clamp(sUV, vec2(0.001), vec2(0.999));
                     vec3 diaCol = texture2D(uSceneTex, sUV).rgb;
-                    if(uShapeGradOpacity > 0.0){
+                    if(uTileGradEnabled==1 && uShapeGradOpacity > 0.0){
                         vec2 dn = diaPos / vec2(diaHalf);
                         float gT;
                         if(uShapeGradDir==0) gT = dn.x * 0.5 + 0.5;
@@ -555,9 +760,118 @@ void main(){
                         diaCol = mix(diaCol, blendV(diaCol, gC, uEmbossBlendMode), uShapeGradOpacity);
                     }
                     color = diaCol;
+                    isDiamondPixel = true;
+                    diaOverlayUV = diCenter;
+                    diaOverlayTilePx = vec2(max(diaR * 2.0, 1.0));
                 }
             }
         }
+    }
+
+    /* ── Image Pixel: map each pixelated block to an image grid cell by luminance ── */
+    // For Oct weave: diamond cells use layer 2 settings, octagon cells use layer 1.
+    // Diamond cells can come from getBlock (isWarp=true, genDiamond=0) or the
+    // overlay section (isDiamondPixel=true, genDiamond=1).
+    bool isDiaCell = blk.isWarp || isDiamondPixel;
+    bool useL2 = uWeaveMode==4 && isDiaCell && uImgPixel2Enabled==1;
+    bool useL1 = uImgPixelEnabled==1 && !(uWeaveMode==4 && isDiaCell && uImgPixel2Enabled==1);
+
+    if((useL1 || useL2) && uPixelate==1){
+        // Select which set of params to use
+        float ipCols   = useL2 ? uImgPixel2Cols    : uImgPixelCols;
+        float ipRows   = useL2 ? uImgPixel2Rows    : uImgPixelRows;
+        int   ipBlend  = useL2 ? uImgPixel2Blend   : uImgPixelBlend;
+        float ipOp     = useL2 ? uImgPixel2Opacity  : uImgPixelOpacity;
+        int   ipMask   = useL2 ? uImgPixel2Mask     : uImgPixelMask;
+        int   ipAffSc  = useL2 ? uImgPixel2AffectScale  : uImgPixelAffectScale;
+        float ipMinSc  = useL2 ? uImgPixel2MinScale     : uImgPixelMinScale;
+        float ipMaxSc  = useL2 ? uImgPixel2MaxScale     : uImgPixelMaxScale;
+        int   ipAffRot = useL2 ? uImgPixel2AffectRotate : uImgPixelAffectRotate;
+        float ipMinRot = useL2 ? uImgPixel2MinRotate    : uImgPixelMinRotate;
+        float ipMaxRot = useL2 ? uImgPixel2MaxRotate    : uImgPixelMaxRotate;
+        int   ipAffOff = useL2 ? uImgPixel2AffectOffset : uImgPixelAffectOffset;
+        float ipMinOff = useL2 ? uImgPixel2MinOffset    : uImgPixelMinOffset;
+        float ipMaxOff = useL2 ? uImgPixel2MaxOffset    : uImgPixelMaxOffset;
+
+        float lum=dot(color,vec3(0.299,0.587,0.114));
+        float totalCells=ipCols*ipRows;
+        float cellIdx=clamp(floor(lum*totalCells),0.0,totalCells-1.0);
+        float imgCol=mod(cellIdx,ipCols);
+        float imgRow=floor(cellIdx/ipCols);
+
+        // Compute position within the pixelated block (0→1)
+        // For overlay diamonds (genDiamond=1), diaOverlayTilePx is already post-margin.
+        // For getBlock diamonds (genDiamond=0), blk.tilePx includes margin — shrink it.
+        vec2 ipTilePx = isDiamondPixel ? diaOverlayTilePx : blk.tilePx;
+        if(isDiaCell && !isDiamondPixel)
+            ipTilePx = max(ipTilePx - vec2(uShapeMargin * 2.0), vec2(1.0));
+        vec2 ipCenterUV = isDiamondPixel ? diaOverlayUV : blk.uv;
+        vec2 tileUV=ipTilePx/iResolution;
+        vec2 offset=obliqueUV-ipCenterUV;
+        vec2 posInBlock=offset/tileUV+0.5;
+        posInBlock=clamp(posInBlock,0.001,0.999);
+        
+        posInBlock.y=1.0-posInBlock.y;
+        if(isDiaCell) posInBlock=vec2(1.0-posInBlock.y, posInBlock.x);
+
+        float cellW=1.0/ipCols;
+        float cellH=1.0/ipRows;
+        float cellMinX=imgCol*cellW;
+        float cellMaxX=(imgCol+1.0)*cellW;
+        float cellMinY=imgRow*cellH;
+        float cellMaxY=(imgRow+1.0)*cellH;
+        
+        vec2 centered=posInBlock-0.5;
+        
+        if(ipAffOff==1){
+            float offsetAmount=mix(ipMinOff,ipMaxOff,lum);
+            centered+=vec2(offsetAmount);
+        }
+        if(ipAffRot==1){
+            float angleRad=radians(mix(ipMinRot,ipMaxRot,lum));
+            float cosA=cos(angleRad); float sinA=sin(angleRad);
+            centered=vec2(centered.x*cosA-centered.y*sinA, centered.x*sinA+centered.y*cosA);
+        }
+        if(ipAffSc==1){
+            float scale=mix(ipMinSc,ipMaxSc,lum);
+            if(abs(scale)>0.001) centered/=scale;
+        }
+        
+        vec2 scaledPos=clamp(centered+0.5, 0.0, 1.0);
+        vec2 imgUV=vec2((imgCol+scaledPos.x)*cellW, (imgRow+scaledPos.y)*cellH);
+        imgUV.x=clamp(imgUV.x, cellMinX+0.001, cellMaxX-0.001);
+        imgUV.y=clamp(imgUV.y, cellMinY+0.001, cellMaxY-0.001);
+
+        // Sample from the correct texture
+        vec3 imgColor = useL2 ? texture2D(uImgPixel2Tex,imgUV).rgb
+                               : texture2D(uImgPixelTex,imgUV).rgb;
+        if(ipMask==1){
+            float maskVal=dot(imgColor,vec3(0.299,0.587,0.114));
+            color=mix(mix(color,uGapColor,uGapOpacity), color, maskVal*ipOp);
+        } else {
+            vec3 blended=blendV(color,imgColor,ipBlend);
+            color=mix(color,blended,ipOp);
+        }
+    }
+
+    /* ── Tile Gradient (after image pixel) ─────────────────────── */
+    if(uTileGradEnabled==1 && uPixelate==1 && uShapeGradOpacity>0.0){
+        vec2 posInTile2=(obliqueUV-blk.uv)*iResolution;
+        vec2 ss=blk.shapePx;
+        float gradT;
+        if(uShapeGradDir==0){
+            gradT=blk.isWarp?(posInTile2.y/ss.y)+0.5:(posInTile2.x/ss.x)+0.5;
+        }else if(uShapeGradDir==1){
+            gradT=blk.isWarp?(posInTile2.x/ss.x)+0.5:(posInTile2.y/ss.y)+0.5;
+        }else{
+            vec2 norm=posInTile2/ss;
+            vec2 center=uRadialCenter*0.5;
+            float dist=length(norm-center)*2.0/max(uRadialScale,0.001);
+            gradT=clamp(dist,0.0,1.0);
+        }
+        gradT=clamp(gradT,0.0,1.0);
+        vec3 gCol=texture2D(uShapeGradTex,vec2(gradT,0.5)).rgb;
+        color=mix(color,blendV(color,gCol,uEmbossBlendMode),uShapeGradOpacity);
     }
 
     gl_FragColor=vec4(grade(color),1.0);

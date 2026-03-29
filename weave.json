@@ -1,10 +1,12 @@
 {
+  "source": "voronoi",
+  "cameraFacing": "user",
   "mode": 0,
-  "points": 4,
-  "seed": 28,
-  "rot": 47.838679999994966,
-  "dx": 0.3022587453410571,
-  "dy": -0.783710322030191,
+  "points": 10,
+  "seed": 248,
+  "rot": 305.6553466666623,
+  "dx": 0.1751976396184577,
+  "dy": -0.3486957730486197,
   "sx": 1,
   "sy": 1,
   "mirrorX": 1,
@@ -16,14 +18,43 @@
   "gridUnit": 50,
   "fastMode": false,
   "renderRes": 2,
+  "precompute": false,
+  "precomputeFrames": 3,
   "showDots": false,
   "dotRadius": 0.008,
   "colorSeed": 0,
-  "colorMode": 0,
+  "hueOffset": 0,
+  "hueRadius": 0.14,
+  "satSeed": 83,
+  "satMin": 0.59,
+  "satMax": 1.23,
+  "brightSeed": 643,
+  "colorMode": 1,
+  "colorize": true,
+  "preProcess": false,
+  "camHue": 0,
+  "camSat": 1,
+  "camVal": 1,
+  "camContrast": 1,
   "gradientSeed": 0,
-  "valueMin": 0.75,
-  "valueMax": 1,
-  "animSpeed": 10,
+  "imgPixelEnabled": false,
+  "imgPixelCols": 5,
+  "imgPixelRows": 5,
+  "imgPixelBlend": 8,
+  "imgPixelOpacity": 1,
+  "imgPixelAffectScale": false,
+  "imgPixelMinScale": -4,
+  "imgPixelMaxScale": 4,
+  "imgPixelAffectRotate": false,
+  "imgPixelMinRotate": -90,
+  "imgPixelMaxRotate": 90,
+  "imgPixelAffectOffset": false,
+  "imgPixelMinOffset": -0.5,
+  "imgPixelMaxOffset": 0.5,
+  "valueMin": 0.72,
+  "valueMax": 2,
+  "animSpeed": 5,
+  "fps": 12,
   "outlineWidth": 0,
   "outlineColor": "#000000",
   "showOutline": false,
@@ -36,8 +67,15 @@
   "shapeBleed": 0,
   "pixelScale": 0.36,
   "oblique": true,
+  "quadSteps": 4,
+  "quadEnabled": false,
+  "genDiamond": false,
   "shapeGradOpacity": 0,
   "shapeGradDir": 0,
+  "tileGradEnabled": true,
+  "radialCenterX": 0,
+  "radialCenterY": 0,
+  "radialScale": 1,
   "embossBlendMode": 8,
   "shapeGradStops": [
     {
@@ -64,20 +102,118 @@
   ],
   "gapColor": "#000000",
   "gapOpacity": 1,
+  "canvasMode": "fullscreen",
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "pixelateInstances": [
+    {
+      "id": 1,
+      "enabled": true,
+      "resolution": 1,
+      "pixelW": 23,
+      "pixelH": 17,
+      "pixelScale": 0.63,
+      "weaveMode": 2,
+      "pixelShape": 3,
+      "shapeMargin": 0,
+      "shapeBleed": 1,
+      "oblique": false,
+      "quadSteps": 4,
+      "quadEnabled": false,
+      "genDiamond": false,
+      "shapeGradOpacity": 0.2,
+      "shapeGradDir": 0,
+      "tileGradEnabled": true,
+      "radialCenterX": 0,
+      "radialCenterY": 0,
+      "radialScale": 1,
+      "embossBlendMode": 8,
+      "shapeGradStops": [
+        {
+          "pos": 0,
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "hex": "#000000"
+        },
+        {
+          "pos": 0.5,
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "hex": "#ffffff"
+        },
+        {
+          "pos": 1,
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "hex": "#000000"
+        }
+      ],
+      "gapColor": "#290000",
+      "gapOpacity": 1,
+      "opPatterns": [
+        {
+          "id": 1,
+          "active": true,
+          "grid": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "hueShift": 0.58,
+          "hueOpacity": 1
+        }
+      ],
+      "opPatternIdCounter": 4,
+      "opPatternsEnabled": true,
+      "opPatternSeed": 0,
+      "opPatternMode": 0,
+      "imgPixelEnabled": false,
+      "imgPixelCols": 5,
+      "imgPixelRows": 5,
+      "imgPixelBlend": 1,
+      "imgPixelOpacity": 1,
+      "imgPixelAffectScale": false,
+      "imgPixelMinScale": -4,
+      "imgPixelMaxScale": 4,
+      "imgPixelAffectRotate": false,
+      "imgPixelMinRotate": -90,
+      "imgPixelMaxRotate": 90,
+      "imgPixelAffectOffset": false,
+      "imgPixelMinOffset": -0.5,
+      "imgPixelMaxOffset": 0.5,
+      "imgPixelName": "tile.png",
+      "imgDataURL": null
+    }
+  ],
   "banding": true,
-  "bandCount": 20,
+  "bandCount": 17,
   "bandLumMin": 0,
   "bandLumMax": 1,
   "bandStrength": 1,
   "bandRandomize": true,
   "bandBlendMode": 5,
+  "bandAngleMode": 0,
+  "bandAngleSeed": 0,
+  "bandRandCount": true,
+  "bandRandCountMin": 0.3,
+  "bandRandCountMax": 1,
+  "bandRandCountSeed": 0,
   "bandHueStrength": 0.51,
   "bandHueRadius": 1,
   "bandOutline": false,
   "gradeHue": 0,
-  "gradeSat": 1.27,
-  "gradeVal": 1.05,
-  "gradeContrast": 1.68,
+  "gradeSat": 0.91,
+  "gradeVal": 1.06,
+  "gradeContrast": 1.32,
+  "postProcessEnabled": true,
   "gradientStops": [
     {
       "pos": 0,
@@ -116,6 +252,76 @@
     }
   ],
   "groupsEnabled": true,
+  "opPatterns": [
+    {
+      "id": 1,
+      "active": true,
+      "grid": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.22,
+      "hueOpacity": 1
+    },
+    {
+      "id": 2,
+      "active": false,
+      "grid": [
+        [
+          1
+        ],
+        [
+          0
+        ]
+      ],
+      "hueShift": 0.42,
+      "hueOpacity": 1
+    },
+    {
+      "id": 3,
+      "active": false,
+      "grid": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.17,
+      "hueOpacity": 1
+    },
+    {
+      "id": 4,
+      "active": false,
+      "grid": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.55,
+      "hueOpacity": 1
+    }
+  ],
+  "opPatternIdCounter": 4,
+  "opPatternsEnabled": true,
+  "opPatternSeed": 623,
+  "opPatternMode": 0,
   "groups": [
     {
       "id": 1,

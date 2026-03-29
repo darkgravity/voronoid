@@ -1,0 +1,266 @@
+{
+  "source": "voronoi",
+  "cameraFacing": "user",
+  "mode": 0,
+  "points": 12,
+  "seed": 307,
+  "rot": 230.3466799996375,
+  "dx": 0.36037483042676083,
+  "dy": 0.17295171842340826,
+  "sx": 1,
+  "sy": 1,
+  "mirrorX": 1,
+  "mirrorY": 1,
+  "flipX": 0,
+  "flipY": 0,
+  "spring": 0,
+  "snapGrid": false,
+  "gridUnit": 50,
+  "fastMode": false,
+  "renderRes": 2,
+  "showDots": false,
+  "dotRadius": 0.008,
+  "colorSeed": 36,
+  "hueOffset": 0.05,
+  "hueRadius": 0.08,
+  "satSeed": 83,
+  "satMin": 0.65,
+  "satMax": 1.29,
+  "brightSeed": 230,
+  "colorMode": 1,
+  "colorize": true,
+  "preProcess": false,
+  "camHue": 0,
+  "camSat": 1,
+  "camVal": 1,
+  "camContrast": 1,
+  "gradientSeed": 0,
+  "valueMin": 0.48,
+  "valueMax": 1,
+  "animSpeed": 10,
+  "fps": 30,
+  "outlineWidth": 0,
+  "outlineColor": "#000000",
+  "showOutline": false,
+  "pixelate": false,
+  "pixelW": 23,
+  "pixelH": 13,
+  "weaveMode": 2,
+  "pixelShape": 3,
+  "shapeMargin": 1,
+  "shapeBleed": 6,
+  "pixelScale": 1.42,
+  "oblique": true,
+  "quadSteps": 4,
+  "quadEnabled": false,
+  "genDiamond": false,
+  "shapeGradOpacity": 0.29,
+  "shapeGradDir": 0,
+  "radialCenterX": 0,
+  "radialCenterY": 0,
+  "radialScale": 1,
+  "embossBlendMode": 1,
+  "shapeGradStops": [
+    {
+      "pos": 0,
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "hex": "#000000"
+    },
+    {
+      "pos": 0.5,
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "hex": "#ffffff"
+    },
+    {
+      "pos": 1,
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "hex": "#000000"
+    }
+  ],
+  "gapColor": "#000000",
+  "gapOpacity": 1,
+  "banding": true,
+  "bandCount": 17,
+  "bandLumMin": 0,
+  "bandLumMax": 0.76,
+  "bandStrength": 0.56,
+  "bandRandomize": false,
+  "bandBlendMode": 0,
+  "bandAngleMode": 1,
+  "bandAngleSeed": 0,
+  "bandRandCount": true,
+  "bandRandCountMin": 0.2,
+  "bandRandCountMax": 1,
+  "bandRandCountSeed": 307,
+  "bandHueStrength": 0.02,
+  "bandHueRadius": 1,
+  "bandOutline": false,
+  "gradeHue": 0,
+  "gradeSat": 1.13,
+  "gradeVal": 1.2,
+  "gradeContrast": 1.13,
+  "postProcessEnabled": true,
+  "gradientStops": [
+    {
+      "pos": 0.36633324184560817,
+      "r": 160,
+      "g": 60,
+      "b": 180,
+      "hex": "#a03cb4"
+    },
+    {
+      "pos": 0.75,
+      "r": 200,
+      "g": 50,
+      "b": 100,
+      "hex": "#c83264"
+    },
+    {
+      "pos": 1,
+      "r": 240,
+      "g": 200,
+      "b": 180,
+      "hex": "#f0c8b4"
+    },
+    {
+      "pos": 0,
+      "r": 34,
+      "g": 52,
+      "b": 188,
+      "hex": "#2234bc"
+    }
+  ],
+  "groupsEnabled": true,
+  "opPatterns": [
+    {
+      "id": 1,
+      "active": true,
+      "grid": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.22,
+      "hueOpacity": 1
+    },
+    {
+      "id": 2,
+      "active": false,
+      "grid": [
+        [
+          1
+        ],
+        [
+          0
+        ]
+      ],
+      "hueShift": 0.42,
+      "hueOpacity": 1
+    },
+    {
+      "id": 3,
+      "active": false,
+      "grid": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.17,
+      "hueOpacity": 1
+    },
+    {
+      "id": 4,
+      "active": false,
+      "grid": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.55,
+      "hueOpacity": 1
+    }
+  ],
+  "opPatternIdCounter": 4,
+  "opPatternsEnabled": true,
+  "opPatternSeed": 623,
+  "opPatternMode": 0,
+  "groups": [
+    {
+      "id": 1,
+      "active": true,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.12,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 2,
+      "active": false,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.22,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 3,
+      "active": false,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 1.25,
+      "threshold": 0,
+      "seed": 914
+    },
+    {
+      "id": 4,
+      "active": false,
+      "dx": 0.27,
+      "dy": 0.18,
+      "scale": 0.95,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 5,
+      "active": false,
+      "dx": 0.27,
+      "dy": 0.27,
+      "scale": 0.82,
+      "threshold": 0,
+      "seed": 1
+    },
+    {
+      "id": 6,
+      "active": false,
+      "dx": 0.27,
+      "dy": 0.09,
+      "scale": 0.71,
+      "threshold": 0,
+      "seed": 1
+    }
+  ]
+}

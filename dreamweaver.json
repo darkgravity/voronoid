@@ -1,10 +1,12 @@
 {
-  "mode": 0,
-  "points": 16,
-  "seed": 28,
-  "rot": 106.28449999998459,
-  "dx": 0.24615414887666698,
-  "dy": -0.2533651828765871,
+  "source": "voronoi",
+  "cameraFacing": "user",
+  "mode": 1,
+  "points": 8,
+  "seed": 62,
+  "rot": 264.9273333333229,
+  "dx": -0.20271580989330748,
+  "dy": -0.00048496605237631496,
   "sx": 1,
   "sy": 1,
   "mirrorX": 1,
@@ -14,29 +16,67 @@
   "spring": 0,
   "snapGrid": false,
   "gridUnit": 50,
+  "fastMode": false,
+  "renderRes": 2,
+  "precompute": false,
+  "precomputeFrames": 3,
   "showDots": false,
   "dotRadius": 0.008,
   "colorSeed": 0,
-  "colorMode": 0,
+  "hueOffset": 0,
+  "hueRadius": 0.02,
+  "satSeed": 83,
+  "satMin": 0.59,
+  "satMax": 1.29,
+  "brightSeed": 643,
+  "colorMode": 1,
+  "colorize": true,
+  "preProcess": false,
+  "camHue": 0,
+  "camSat": 1,
+  "camVal": 1,
+  "camContrast": 1,
   "gradientSeed": 0,
-  "valueMin": 0.75,
-  "valueMax": 1,
-  "animSpeed": 13,
-  "outlineWidth": 1,
-  "outlineColor": "#4f0000",
+  "imgPixelEnabled": false,
+  "imgPixelCols": 5,
+  "imgPixelRows": 5,
+  "imgPixelBlend": 8,
+  "imgPixelOpacity": 1,
+  "imgPixelAffectScale": false,
+  "imgPixelMinScale": -4,
+  "imgPixelMaxScale": 4,
+  "imgPixelAffectRotate": false,
+  "imgPixelMinRotate": -90,
+  "imgPixelMaxRotate": 90,
+  "imgPixelAffectOffset": false,
+  "imgPixelMinOffset": -0.5,
+  "imgPixelMaxOffset": 0.5,
+  "valueMin": 0.3,
+  "valueMax": 1.78,
+  "animSpeed": 10,
+  "fps": 30,
+  "outlineWidth": 0,
+  "outlineColor": "#000000",
   "showOutline": false,
   "pixelate": true,
-  "pixelW": 18,
-  "pixelH": 6,
-  "weaveMode": 1,
+  "pixelW": 21,
+  "pixelH": 21,
+  "weaveMode": 0,
   "pixelShape": 1,
-  "shapeMargin": 2,
+  "shapeMargin": 1,
   "shapeBleed": 0,
-  "pixelScale": 1.23,
-  "oblique": false,
-  "shapeGradOpacity": 0.67,
+  "pixelScale": 0.5,
+  "oblique": true,
+  "quadSteps": 4,
+  "quadEnabled": false,
+  "genDiamond": false,
+  "shapeGradOpacity": 0,
   "shapeGradDir": 0,
-  "embossBlendMode": 3,
+  "tileGradEnabled": true,
+  "radialCenterX": 0,
+  "radialCenterY": 0,
+  "radialScale": 1,
+  "embossBlendMode": 8,
   "shapeGradStops": [
     {
       "pos": 0,
@@ -58,97 +98,372 @@
       "g": 0,
       "b": 0,
       "hex": "#000000"
-    },
-    {
-      "pos": 0.8539540650123661,
-      "r": 74,
-      "g": 74,
-      "b": 74,
-      "hex": "#4a4a4a"
     }
   ],
-  "gapColor": "#140052",
-  "gapOpacity": 1,
+  "gapColor": "#000000",
+  "gapOpacity": 0.08,
+  "canvasMode": "fullscreen",
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "pixelateInstances": [
+    {
+      "id": 1,
+      "enabled": true,
+      "resolution": 1,
+      "pixelW": 23,
+      "pixelH": 23,
+      "pixelScale": 2.87,
+      "weaveMode": 1,
+      "pixelShape": 6,
+      "shapeMargin": 1,
+      "shapeBleed": 0,
+      "oblique": false,
+      "quadSteps": 4,
+      "quadEnabled": true,
+      "genDiamond": false,
+      "shapeGradOpacity": 0.2,
+      "shapeGradDir": 0,
+      "tileGradEnabled": false,
+      "radialCenterX": 0,
+      "radialCenterY": 0,
+      "radialScale": 1,
+      "embossBlendMode": 8,
+      "shapeGradStops": [
+        {
+          "pos": 0,
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "hex": "#000000"
+        },
+        {
+          "pos": 0.5,
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "hex": "#ffffff"
+        },
+        {
+          "pos": 1,
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "hex": "#000000"
+        }
+      ],
+      "gapColor": "#290000",
+      "gapOpacity": 1,
+      "opPatterns": [
+        {
+          "id": 1,
+          "active": true,
+          "grid": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "hueShift": 0.04,
+          "hueOpacity": 0.92
+        }
+      ],
+      "opPatternIdCounter": 4,
+      "opPatternsEnabled": false,
+      "opPatternSeed": 0,
+      "opPatternMode": 0,
+      "imgPixelEnabled": false,
+      "imgPixelCols": 5,
+      "imgPixelRows": 5,
+      "imgPixelBlend": 1,
+      "imgPixelOpacity": 1,
+      "imgPixelAffectScale": false,
+      "imgPixelMinScale": -4,
+      "imgPixelMaxScale": 4,
+      "imgPixelAffectRotate": false,
+      "imgPixelMinRotate": -90,
+      "imgPixelMaxRotate": 90,
+      "imgPixelAffectOffset": false,
+      "imgPixelMinOffset": -0.5,
+      "imgPixelMaxOffset": 0.5,
+      "imgPixelName": "tile.png",
+      "imgDataURL": null
+    },
+    {
+      "id": 2,
+      "enabled": true,
+      "resolution": 1,
+      "pixelW": 23,
+      "pixelH": 9,
+      "pixelScale": 0.63,
+      "weaveMode": 1,
+      "pixelShape": 1,
+      "shapeMargin": 1,
+      "shapeBleed": 0,
+      "oblique": false,
+      "quadSteps": 4,
+      "quadEnabled": false,
+      "genDiamond": false,
+      "shapeGradOpacity": 0.34,
+      "shapeGradDir": 0,
+      "tileGradEnabled": true,
+      "radialCenterX": 0,
+      "radialCenterY": 0,
+      "radialScale": 1,
+      "embossBlendMode": 0,
+      "shapeGradStops": [
+        {
+          "pos": 0,
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "hex": "#000000"
+        },
+        {
+          "pos": 0.5,
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "hex": "#ffffff"
+        },
+        {
+          "pos": 1,
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "hex": "#000000"
+        }
+      ],
+      "gapColor": "#000000",
+      "gapOpacity": 1,
+      "opPatterns": [
+        {
+          "id": 5,
+          "active": true,
+          "grid": [
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "hueShift": 0.13,
+          "hueOpacity": 1
+        }
+      ],
+      "opPatternIdCounter": 5,
+      "opPatternsEnabled": true,
+      "opPatternSeed": 0,
+      "opPatternMode": 0,
+      "imgPixelEnabled": false,
+      "imgPixelCols": 5,
+      "imgPixelRows": 5,
+      "imgPixelBlend": 1,
+      "imgPixelOpacity": 1,
+      "imgPixelAffectScale": false,
+      "imgPixelMinScale": -4,
+      "imgPixelMaxScale": 4,
+      "imgPixelAffectRotate": false,
+      "imgPixelMinRotate": -90,
+      "imgPixelMaxRotate": 90,
+      "imgPixelAffectOffset": false,
+      "imgPixelMinOffset": -0.5,
+      "imgPixelMaxOffset": 0.5,
+      "imgPixelName": "tile.png",
+      "imgDataURL": null
+    }
+  ],
   "banding": true,
-  "bandCount": 8,
-  "bandLumMin": 0,
-  "bandLumMax": 0.72,
-  "bandStrength": 1,
+  "bandCount": 12,
+  "bandLumMin": 0.4,
+  "bandLumMax": 1,
+  "bandStrength": 0.79,
   "bandRandomize": true,
-  "bandBlendMode": 0,
-  "bandHueStrength": 0.2,
+  "bandBlendMode": 1,
+  "bandAngleMode": 0,
+  "bandAngleSeed": 0,
+  "bandRandCount": false,
+  "bandRandCountMin": 0.2,
+  "bandRandCountMax": 1,
+  "bandRandCountSeed": 0,
+  "bandHueStrength": 0.17,
   "bandHueRadius": 1,
   "bandOutline": false,
-  "gradeHue": 0,
-  "gradeSat": 1.27,
-  "gradeVal": 1.31,
-  "gradeContrast": 1.69,
+  "gradeHue": 360,
+  "gradeSat": 0.76,
+  "gradeVal": 0.94,
+  "gradeContrast": 1.13,
+  "postProcessEnabled": true,
   "gradientStops": [
     {
-      "pos": 0,
-      "r": 40,
-      "g": 40,
-      "b": 80,
-      "hex": "#282850"
+      "pos": 0.36633324184560817,
+      "r": 79,
+      "g": 79,
+      "b": 79,
+      "hex": "#4f4f4f"
     },
     {
-      "pos": 0.25,
-      "r": 255,
-      "g": 0,
-      "b": 0,
-      "hex": "#ff0000"
+      "pos": 0.6259609161995954,
+      "r": 153,
+      "g": 162,
+      "b": 129,
+      "hex": "#99a281"
     },
     {
-      "pos": 0.5,
-      "r": 0,
-      "g": 3,
-      "b": 77,
-      "hex": "#00034d"
+      "pos": 0.00000926296258509308,
+      "r": 147,
+      "g": 169,
+      "b": 174,
+      "hex": "#93a9ae"
     },
     {
-      "pos": 0.75,
-      "r": 255,
-      "g": 0,
-      "b": 0,
-      "hex": "#ff0000"
+      "pos": 0.6899786989170169,
+      "r": 57,
+      "g": 60,
+      "b": 60,
+      "hex": "#393c3c"
     },
     {
-      "pos": 1,
-      "r": 255,
-      "g": 255,
-      "b": 0,
-      "hex": "#ffff00"
+      "pos": 0.9993979820512209,
+      "r": 73,
+      "g": 75,
+      "b": 75,
+      "hex": "#494b4b"
     },
     {
-      "pos": 0.42006801903520924,
-      "r": 82,
-      "g": 2,
-      "b": 52,
-      "hex": "#520234"
+      "pos": 0.16361026324044006,
+      "r": 102,
+      "g": 111,
+      "b": 112,
+      "hex": "#666f70"
     },
     {
-      "pos": 0.3039965927228488,
-      "r": 11,
-      "g": 0,
-      "b": 71,
-      "hex": "#0b0047"
+      "pos": 0.2845327417066807,
+      "r": 101,
+      "g": 109,
+      "b": 111,
+      "hex": "#656d6f"
     },
     {
-      "pos": 0.7959183518561859,
-      "r": 255,
-      "g": 47,
-      "b": 0,
-      "hex": "#ff2f00"
+      "pos": 0.23829767641076513,
+      "r": 120,
+      "g": 128,
+      "b": 96,
+      "hex": "#788060"
     },
     {
-      "pos": 0.8981717512265986,
-      "r": 0,
-      "g": 40,
-      "b": 87,
-      "hex": "#002857"
+      "pos": 0.49081226379614995,
+      "r": 108,
+      "g": 111,
+      "b": 68,
+      "hex": "#6c6f44"
+    },
+    {
+      "pos": 0.857136242679173,
+      "r": 102,
+      "g": 110,
+      "b": 111,
+      "hex": "#666e6f"
+    },
+    {
+      "pos": 0.7753357425402455,
+      "r": 104,
+      "g": 113,
+      "b": 115,
+      "hex": "#687173"
+    },
+    {
+      "pos": 0.9353801993337993,
+      "r": 99,
+      "g": 107,
+      "b": 108,
+      "hex": "#636b6c"
+    },
+    {
+      "pos": 0.7931184599617516,
+      "r": 103,
+      "g": 107,
+      "b": 91,
+      "hex": "#676b5b"
     }
   ],
   "groupsEnabled": true,
+  "opPatterns": [
+    {
+      "id": 1,
+      "active": true,
+      "grid": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.22,
+      "hueOpacity": 1
+    },
+    {
+      "id": 2,
+      "active": false,
+      "grid": [
+        [
+          1
+        ],
+        [
+          0
+        ]
+      ],
+      "hueShift": 0.42,
+      "hueOpacity": 1
+    },
+    {
+      "id": 3,
+      "active": false,
+      "grid": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.17,
+      "hueOpacity": 1
+    },
+    {
+      "id": 4,
+      "active": false,
+      "grid": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "hueShift": 0.55,
+      "hueOpacity": 1
+    }
+  ],
+  "opPatternIdCounter": 4,
+  "opPatternsEnabled": true,
+  "opPatternSeed": 623,
+  "opPatternMode": 0,
   "groups": [
     {
       "id": 1,
