@@ -685,8 +685,23 @@
       <div class="divider"></div>
       <div class="section-title">Source</div>
       <div class="seg-bar">
-        <button id="btn-src-voronoi" class="active" onclick="setSource('voronoi')">Voronoi</button>
+        <button id="btn-src-pattern" class="active" onclick="setSource('pattern')">Pattern</button>
+        <button id="btn-src-image" onclick="setSource('image')">Image</button>
         <button id="btn-src-camera" onclick="setSource('camera')">Camera</button>
+      </div>
+
+      <!-- Image controls (hidden by default) -->
+      <div id="image-controls" style="display:none">
+        <div class="btn-row" style="margin-top:6px">
+          <button onclick="document.getElementById('imageSourceInput').click()">Upload Image</button>
+          <span id="imageSourceName" style="color:rgba(255,255,255,0.35);font-size:10px;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">none</span>
+        </div>
+        <input type="file" id="imageSourceInput" accept="image/*" style="display:none" onchange="handleImageSourceUpload(event)">
+        <div class="row">
+          <label>Scale</label>
+          <input type="range" id="sImageScale" min="0.1" max="4" step="0.01" value="1">
+          <input type="number" class="val" id="vImageScale" value="1.00" min="0.1" max="4" step="0.01">
+        </div>
       </div>
 
       <!-- Camera controls (hidden by default) -->
@@ -696,16 +711,203 @@
         </div>
       </div>
 
-      <!-- Voronoi-only sections -->
+      <!-- Pattern-only sections -->
       <div id="voronoi-sections">
       <div class="divider"></div>
-      <div class="section-title">Metric</div>
+      <div class="section-title">Pattern Type</div>
       <div class="seg-bar">
         <button id="btn-chebyshev" class="active" onclick="setMode(0)">Chebyshev</button>
         <button id="btn-manhattan" onclick="setMode(1)">Manhattan</button>
-        <button id="btn-circuit" onclick="setMode(2)">Circuit</button>
+        <button id="btn-euclidean" onclick="setMode(2)">Euclidean</button>
+        <button id="btn-noise" onclick="setMode(3)">Noise</button>
+        <button id="btn-flow" onclick="setMode(4)">Flow</button>
       </div>
 
+      <!-- Noise controls (shown when Noise selected) -->
+      <div id="noise-controls" style="display:none">
+        <div class="row" style="margin-top:6px">
+          <label>Type</label>
+          <select id="selNoiseType" onchange="window.shaderParams.noiseType=parseInt(this.value);window.shaderDirty=true">
+            <option value="0">Simplex Cloud</option>
+            <option value="1">Fast</option>
+            <option value="2">Sparse Convolution</option>
+            <option value="3">Alligator</option>
+            <option value="4">Perlin</option>
+            <option value="5">Perlin Flow</option>
+            <option value="6">Simplex</option>
+            <option value="7">Worley Cellular F1</option>
+            <option value="8">Worley Cellular F2-F1</option>
+            <option value="9">Manhattan Cellular F1</option>
+            <option value="10">Manhattan Cellular F2-F1</option>
+            <option value="11">Chebyshev Cellular F1</option>
+            <option value="12">Chebyshev Cellular F2-F1</option>
+            <option value="13">Perlin Cloud</option>
+            <option value="14">Simplex Cloud (deep)</option>
+            <option value="15">Fast Simplex Cloud</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Element Size</label>
+          <input type="range" id="sNoiseElemSize" min="0.01" max="2" step="0.01" value="0.5">
+          <input type="number" class="val" id="vNoiseElemSize" value="0.50" min="0.01" max="2" step="0.01">
+        </div>
+        <div class="row">
+          <label>Offset X</label>
+          <input type="range" id="sNoiseOffsetX" min="0" max="1" step="0.001" value="0">
+          <input type="number" class="val" id="vNoiseOffsetX" value="0.000" min="0" max="1" step="0.001">
+        </div>
+        <div class="row">
+          <label>Offset Y</label>
+          <input type="range" id="sNoiseOffsetY" min="0" max="1" step="0.001" value="0">
+          <input type="number" class="val" id="vNoiseOffsetY" value="0.000" min="0" max="1" step="0.001">
+        </div>
+        <div class="row">
+          <label>Max Octaves</label>
+          <input type="range" id="sNoiseOctaves" min="1" max="16" step="1" value="5">
+          <input type="number" class="val" id="vNoiseOctaves" value="5" min="1" max="16" step="1">
+        </div>
+        <div class="row">
+          <label>Lacunarity</label>
+          <input type="range" id="sNoiseLac" min="0" max="4" step="0.01" value="2">
+          <input type="number" class="val" id="vNoiseLac" value="2.00" min="0" max="4" step="0.01">
+        </div>
+        <div class="row">
+          <label>Roughness</label>
+          <input type="range" id="sNoiseRough" min="0" max="1" step="0.01" value="0.5">
+          <input type="number" class="val" id="vNoiseRough" value="0.50" min="0" max="1" step="0.01">
+        </div>
+      </div>
+
+      <!-- Flow controls (shown when Flow selected) -->
+      <div id="flow-controls" style="display:none">
+
+        <!-- Flow Type dropdown -->
+        <div class="row" style="margin-top:6px">
+          <label>Flow Type</label>
+          <select id="selFlowType" onchange="setFlowType(parseInt(this.value))" style="flex:1;background:#1a1a1a;border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:4px;padding:3px 6px;font-size:11px">
+            <option value="0">Flow 1</option>
+            <option value="1">Flow 2</option>
+          </select>
+        </div>
+
+        <!-- ── Flow 1 specific controls ── -->
+        <div id="flow1-controls">
+          <div class="row" style="margin-top:4px">
+            <label>Style</label>
+            <select id="selFlow1Style" onchange="setFlow1Style(parseInt(this.value))" style="flex:1;background:#1a1a1a;border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:4px;padding:3px 6px;font-size:11px">
+              <option value="0">Simplex Fluid (default)</option>
+              <option value="1">Simplex Cloud</option>
+              <option value="2">Value (Fast)</option>
+              <option value="3">Sparse Convolution</option>
+              <option value="4">Alligator</option>
+              <option value="5">Perlin</option>
+              <option value="6">Perlin Flow</option>
+              <option value="7">Simplex</option>
+              <option value="8">Worley Cellular F1</option>
+              <option value="9">Worley Cellular F2-F1</option>
+              <option value="10">Manhattan Cellular F1</option>
+              <option value="11">Manhattan Cellular F2-F1</option>
+              <option value="12">Chebyshev Cellular F1</option>
+              <option value="13">Chebyshev Cellular F2-F1</option>
+              <option value="14">Perlin Cloud</option>
+              <option value="15">Value Cloud</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Scale</label>
+            <input type="range" id="sFlowScale" min="0.1" max="8" step="0.01" value="2">
+            <input type="number" class="val" id="vFlowScale" value="2.00" min="0.1" max="8" step="0.01">
+          </div>
+          <div class="row">
+            <label>Speed</label>
+            <input type="range" id="sFlowSpeed" min="0" max="5" step="0.01" value="1">
+            <input type="number" class="val" id="vFlowSpeed" value="1.00" min="0" max="5" step="0.01">
+          </div>
+          <div class="row">
+            <label>Warp 1</label>
+            <input type="range" id="sFlowDistort1" min="0" max="20" step="0.01" value="8.1">
+            <input type="number" class="val" id="vFlowDistort1" value="8.10" min="0" max="20" step="0.01">
+          </div>
+          <div class="row">
+            <label>Warp 2</label>
+            <input type="range" id="sFlowDistort2" min="0" max="20" step="0.01" value="4.13">
+            <input type="number" class="val" id="vFlowDistort2" value="4.13" min="0" max="20" step="0.01">
+          </div>
+          <div class="row">
+            <label>Smooth Lo</label>
+            <input type="range" id="sFlowSmoothLo" min="0" max="1.0" step="0.01" value="0.15">
+            <input type="number" class="val" id="vFlowSmoothLo" value="0.15" min="0" max="0.5" step="0.01">
+          </div>
+          <div class="row">
+            <label>Smooth Hi</label>
+            <input type="range" id="sFlowSmoothHi" min="0.5" max="1" step="0.01" value="0.85">
+            <input type="number" class="val" id="vFlowSmoothHi" value="0.85" min="0.5" max="1" step="0.01">
+          </div>
+          <div class="row">
+            <label>Hue Offset</label>
+            <input type="range" id="sFlowHueOffset" min="0" max="1" step="0.001" value="0">
+            <input type="number" class="val" id="vFlowHueOffset" value="0.000" min="0" max="1" step="0.001">
+          </div>
+          <div class="row">
+            <label>Hue Radius</label>
+            <input type="range" id="sFlowHueRadius" min="0" max="1" step="0.001" value="1">
+            <input type="number" class="val" id="vFlowHueRadius" value="1.000" min="0" max="1" step="0.001">
+          </div>
+        </div>
+
+        <!-- ── Flow 2 specific controls ── -->
+        <div id="flow2-controls" style="display:none">
+          <div class="section-title" style="margin-top:8px">Mode</div>
+          <div class="seg-bar" style="margin-bottom:6px">
+            <button id="btn-f2m0" class="active" onclick="setFlow2Mode(0)">A · Vel+Grad</button>
+            <button id="btn-f2m1" onclick="setFlow2Mode(1)">B · Vel+Pos</button>
+            <button id="btn-f2m2" onclick="setFlow2Mode(2)">C · Curl+Grad</button>
+            <button id="btn-f2m3" onclick="setFlow2Mode(3)">D · Curl+Pos</button>
+          </div>
+          <div class="row">
+            <label>Scale</label>
+            <input type="range" id="sF2Scale" min="1" max="20" step="0.1" value="6">
+            <input type="number" class="val" id="vF2Scale" value="6.0" min="1" max="20" step="0.1">
+          </div>
+          <div class="row">
+            <label>Vel X</label>
+            <input type="range" id="sF2VelX" min="0" max="1" step="0.001" value="0.1">
+            <input type="number" class="val" id="vF2VelX" value="0.100" min="0" max="1" step="0.001">
+          </div>
+          <div class="row">
+            <label>Vel Y</label>
+            <input type="range" id="sF2VelY" min="0" max="1" step="0.001" value="0.2">
+            <input type="number" class="val" id="vF2VelY" value="0.200" min="0" max="1" step="0.001">
+          </div>
+          <div class="row">
+            <label>Anim Speed</label>
+            <input type="range" id="sF2Speed" min="0" max="10" step="0.01" value="2.5">
+            <input type="number" class="val" id="vF2Speed" value="2.50" min="0" max="10" step="0.01">
+          </div>
+          <div class="row">
+            <label>Detail</label>
+            <input type="range" id="sF2Detail" min="10" max="500" step="1" value="200">
+            <input type="number" class="val" id="vF2Detail" value="200" min="10" max="500" step="1">
+          </div>
+          <div class="row">
+            <label>Twist</label>
+            <input type="range" id="sF2Twist" min="0" max="200" step="0.5" value="50">
+            <input type="number" class="val" id="vF2Twist" value="50.0" min="0" max="200" step="0.5">
+          </div>
+          <div class="row">
+            <label>Grad Iters</label>
+            <input type="range" id="sF2Iter1" min="1" max="20" step="1" value="20">
+            <input type="number" class="val" id="vF2Iter1" value="20" min="1" max="20" step="1">
+          </div>
+          <div class="row" id="f2iter2-row">
+            <label>Curl Iters</label>
+            <input type="range" id="sF2Iter2" min="1" max="20" step="1" value="20">
+            <input type="number" class="val" id="vF2Iter2" value="20" min="1" max="20" step="1">
+          </div>
+        </div>
+
+      </div>
+      <div id="voronoi-controls">
       <div class="divider"></div>
       <div class="section-title">Points</div>
 
@@ -837,6 +1039,7 @@
       <div id="groups-list"></div>
       </div><!-- end groups-controls -->
 
+      </div><!-- end voronoi-controls -->
       </div><!-- end voronoi-sections -->
 
       <!-- Pre Process section (always visible, works for both voronoi and camera) -->
@@ -845,6 +1048,7 @@
       <div class="seg-bar" id="canvas-mode-bar">
         <button id="btn-canvas-fullscreen" class="active" onclick="setCanvasMode('fullscreen')">Fullscreen</button>
         <button id="btn-canvas-custom" onclick="setCanvasMode('custom')">Custom</button>
+        <button id="btn-canvas-imageframe" onclick="setCanvasMode('imageframe')">Image Frame</button>
       </div>
       <div id="canvas-custom-controls" style="display:none">
         <div class="row">
@@ -914,12 +1118,10 @@
 
       <div class="tab-panel" id="panel-color">
 
-      <div class="toggle-header">
-        <span class="toggle-label">Colorize</span>
-        <button class="toggle-active on" id="btn-colorize-toggle" onclick="toggleColorize()"></button>
-      </div>
+      <div class="section-title">Colorize</div>
       <div id="colorize-wrapper">
       <div class="seg-bar" style="margin-bottom:8px">
+        <button id="btn-cm-raw" onclick="setColorMode(2)">Raw</button>
         <button id="btn-cm-grad" class="active" onclick="setColorMode(0)">Gradient</button>
         <button id="btn-cm-hue" onclick="setColorMode(1)">Hue</button>
       </div>
@@ -1161,9 +1363,18 @@
     let groupIdCounter = 6;
 
     window.shaderParams = {
-      source: 'voronoi',
+      source: 'pattern',
       cameraFacing: 'user',
       mode: 0, points: 14, seed: 0,
+      noiseType: 0, noiseElementSize: 0.5, noiseOffsetX: 0, noiseOffsetY: 0,
+      noiseOctaves: 5, noiseLacunarity: 2.0, noiseRoughness: 0.5,
+      flowScale: 2.0, flowSpeed: 1.0, flowDistort1: 8.1, flowDistort2: 4.13,
+      flowSmoothLo: 0.15, flowSmoothHi: 0.85,
+      flowType: 0,
+      flow1Style: 0, flowHueOffset: 0.0, flowHueRadius: 1.0,
+      f2Scale: 6.0, f2VelX: 0.1, f2VelY: 0.2, f2Speed: 2.5,
+      f2Detail: 200.0, f2Twist: 50.0, f2Iter1: 20, f2Iter2: 20, f2Mode: 0,
+      imageScale: 1.0,
       rot: 117, dx: 0, dy: 0,
       sx: 1, sy: 1,
       mirrorX: 1, mirrorY: 1,
@@ -1333,6 +1544,38 @@
       }, {passive: true});
     })();
 
+    // Pinch-to-zoom on canvas: adjusts noise element size when in noise mode
+    (function() {
+      const canvas = document.getElementById('glCanvas');
+      let pinchStartDist = 0, pinchStartSize = 0;
+      canvas.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          pinchStartDist = Math.sqrt(dx*dx + dy*dy);
+          pinchStartSize = window.shaderParams.noiseElementSize || 0.5;
+        }
+      }, {passive: true});
+      canvas.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 2 && window.shaderParams.mode === 3) {
+          e.preventDefault();
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          var dist = Math.sqrt(dx*dx + dy*dy);
+          if (pinchStartDist > 0) {
+            var ratio = pinchStartDist / dist; // pinch in = larger value (zoom out)
+            var newSize = Math.max(0.01, Math.min(2.0, pinchStartSize * ratio));
+            window.shaderParams.noiseElementSize = newSize;
+            var sl = document.getElementById('sNoiseElemSize');
+            var va = document.getElementById('vNoiseElemSize');
+            if (sl) sl.value = newSize;
+            if (va) va.value = newSize.toFixed(2);
+            window.shaderDirty = true;
+          }
+        }
+      }, {passive: false});
+    })();
+
     function toggleUI() {
       uiVisible = !uiVisible;
       document.getElementById('ui').classList.toggle('hidden', !uiVisible);
@@ -1355,11 +1598,13 @@
 
     function setSource(src) {
       window.shaderParams.source = src;
-      document.getElementById('btn-src-voronoi').classList.toggle('active', src === 'voronoi');
+      document.getElementById('btn-src-pattern').classList.toggle('active', src === 'pattern');
+      document.getElementById('btn-src-image').classList.toggle('active', src === 'image');
       document.getElementById('btn-src-camera').classList.toggle('active', src === 'camera');
-      document.getElementById('voronoi-sections').style.display = src === 'voronoi' ? '' : 'none';
-      document.getElementById('voronoi-sections-2').style.display = src === 'voronoi' ? '' : 'none';
+      document.getElementById('voronoi-sections').style.display = src === 'pattern' ? '' : 'none';
+      document.getElementById('voronoi-sections-2').style.display = src === 'pattern' ? '' : 'none';
       document.getElementById('camera-controls').style.display = src === 'camera' ? '' : 'none';
+      document.getElementById('image-controls').style.display = src === 'image' ? '' : 'none';
 
       if (src === 'camera') {
         startCamera();
@@ -1389,7 +1634,7 @@
       }).catch(err => {
         console.error('Camera error:', err);
         alert('Could not access camera. Check permissions.');
-        setSource('voronoi');
+        setSource('pattern');
       });
     }
 
@@ -1408,6 +1653,27 @@
         stopCamera();
         startCamera();
       }
+    }
+
+    /* ── Image source upload ─────────────────────────────────────── */
+    function handleImageSourceUpload(event) {
+      var file = event.target.files[0];
+      if (!file) return;
+      var nm = document.getElementById('imageSourceName');
+      if (nm) nm.textContent = file.name;
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        window.shaderParams.imageDataURL = e.target.result;
+        var img = new Image();
+        img.onload = function() {
+          if (window.uploadImageSourceTex) window.uploadImageSourceTex(img);
+          // Resize canvas if in imageframe mode
+          if (window.shaderParams.canvasMode === 'imageframe') applyCanvasSize();
+          window.shaderDirty = true;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
     }
 
     /* ── Custom color picker ──────────────────────────────────────── */
@@ -1560,16 +1826,55 @@
       });
     })();
 
+    function setFlowType(t) {
+      window.shaderParams.flowType = t;
+      var sel = document.getElementById('selFlowType');
+      if(sel) sel.value = String(t);
+      var f1 = document.getElementById('flow1-controls');
+      var f2 = document.getElementById('flow2-controls');
+      if(f1) f1.style.display = t === 0 ? '' : 'none';
+      if(f2) f2.style.display = t === 1 ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function setFlow1Style(s) {
+      window.shaderParams.flow1Style = s;
+      var sel = document.getElementById('selFlow1Style');
+      if(sel) sel.value = String(s);
+      window.shaderDirty = true;
+    }
+
+    function setFlow2Mode(m) {
+      window.shaderParams.f2Mode = m;
+      for(var i = 0; i < 4; i++) {
+        var btn = document.getElementById('btn-f2m' + i);
+        if(btn) btn.classList.toggle('active', i === m);
+      }
+      // Show Curl Iters row only for modes C and D (fieldMode=1)
+      var r = document.getElementById('f2iter2-row');
+      if(r) r.style.display = m >= 2 ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
     function setMode(m) {
       window.shaderParams.mode = m;
       document.getElementById('btn-chebyshev').classList.toggle('active', m === 0);
       document.getElementById('btn-manhattan').classList.toggle('active', m === 1);
-      document.getElementById('btn-circuit').classList.toggle('active', m === 2);
+      document.getElementById('btn-euclidean').classList.toggle('active', m === 2);
+      document.getElementById('btn-noise').classList.toggle('active', m === 3);
+      document.getElementById('btn-flow').classList.toggle('active', m === 4);
+      // Show the right sub-panel
+      document.getElementById('noise-controls').style.display  = m === 3 ? '' : 'none';
+      document.getElementById('flow-controls').style.display   = m === 4 ? '' : 'none';
+      document.getElementById('voronoi-controls').style.display = (m === 3 || m === 4) ? 'none' : '';
       window.shaderDirty = true;
     }
 
     function setColorMode(m) {
       window.shaderParams.colorMode = m;
+      // Raw=2 means colorize is on but mode skips recoloring
+      window.shaderParams.colorize = (m !== 2);
+      document.getElementById('btn-cm-raw').classList.toggle('active', m === 2);
       document.getElementById('btn-cm-grad').classList.toggle('active', m === 0);
       document.getElementById('btn-cm-hue').classList.toggle('active', m === 1);
       document.getElementById('gradient-controls').style.display = m === 0 ? '' : 'none';
@@ -1590,11 +1895,7 @@
     }
 
     function toggleColorize() {
-      var p = window.shaderParams;
-      p.colorize = !p.colorize;
-      document.getElementById('btn-colorize-toggle').classList.toggle('on', p.colorize);
-      document.getElementById('colorize-wrapper').classList.toggle('controls-disabled', !p.colorize);
-      window.shaderDirty = true;
+      // No longer used — colorize is controlled by Raw/Gradient/Hue buttons
     }
 
     function togglePostProcess() {
@@ -2786,6 +3087,7 @@
       p.canvasMode = mode;
       document.getElementById('btn-canvas-fullscreen').classList.toggle('active', mode === 'fullscreen');
       document.getElementById('btn-canvas-custom').classList.toggle('active', mode === 'custom');
+      document.getElementById('btn-canvas-imageframe').classList.toggle('active', mode === 'imageframe');
       document.getElementById('canvas-custom-controls').style.display = mode === 'custom' ? '' : 'none';
       applyCanvasSize();
     }
@@ -2801,6 +3103,16 @@
         canvas.classList.add('custom-size');
         canvas.style.width = w + 'px';
         canvas.style.height = h + 'px';
+      } else if (p.canvasMode === 'imageframe') {
+        var iw = window._imageSrcWidth || 1920;
+        var ih = window._imageSrcHeight || 1080;
+        var scale = p.imageScale || 1;
+        var fw = Math.round(iw * scale);
+        var fh = Math.round(ih * scale);
+        container.classList.add('custom');
+        canvas.classList.add('custom-size');
+        canvas.style.width = fw + 'px';
+        canvas.style.height = fh + 'px';
       } else {
         container.classList.remove('custom');
         canvas.classList.remove('custom-size');
@@ -3425,6 +3737,37 @@
 
       applyConfigToUI();
       window.shaderDirty = true;
+
+      // Restore image pixel textures from saved dataURLs
+      var insts = window.shaderParams.pixelateInstances || [];
+      insts.forEach(function(inst, idx) {
+        if (inst.imgDataURL) {
+          var img = new Image();
+          img.onload = function() {
+            if (window.uploadInstanceImgPixelTex) window.uploadInstanceImgPixelTex(idx, img);
+            window.shaderDirty = true;
+          };
+          img.src = inst.imgDataURL;
+        }
+        if (inst.imgData2URL) {
+          var img2 = new Image();
+          img2.onload = function() {
+            if (window.uploadInstanceImgPixel2Tex) window.uploadInstanceImgPixel2Tex(idx, img2);
+            window.shaderDirty = true;
+          };
+          img2.src = inst.imgData2URL;
+        }
+      });
+
+      // Restore image source texture
+      if (window.shaderParams.imageDataURL) {
+        var srcImg = new Image();
+        srcImg.onload = function() {
+          if (window.uploadImageSourceTex) window.uploadImageSourceTex(srcImg);
+          window.shaderDirty = true;
+        };
+        srcImg.src = window.shaderParams.imageDataURL;
+      }
     }
 
     function applyConfigToUI() {
@@ -3451,16 +3794,25 @@
 
       // Mode
       // Source
-      var src = p.source || 'voronoi';
-      setToggle('btn-src-voronoi', src === 'voronoi');
+      var src = p.source || 'pattern';
+      if (src === 'voronoi') src = 'pattern'; // backward compat
+      p.source = src;
+      setToggle('btn-src-pattern', src === 'pattern');
+      setToggle('btn-src-image', src === 'image');
       setToggle('btn-src-camera', src === 'camera');
-      setVis('voronoi-sections', src === 'voronoi');
-      setVis('voronoi-sections-2', src === 'voronoi');
+      setVis('voronoi-sections', src === 'pattern');
+      setVis('voronoi-sections-2', src === 'pattern');
       setVis('camera-controls', src === 'camera');
+      setVis('image-controls', src === 'image');
 
       setToggle('btn-chebyshev', p.mode === 0);
       setToggle('btn-manhattan', p.mode === 1);
-      setToggle('btn-circuit', p.mode === 2);
+      setToggle('btn-euclidean', p.mode === 2);
+      setToggle('btn-noise', p.mode === 3);
+      var btnFlow = el('btn-flow'); if(btnFlow) btnFlow.classList.toggle('active', p.mode === 4);
+      setVis('noise-controls', p.mode === 3);
+      setVis('flow-controls', p.mode === 4);
+      setVis('voronoi-controls', p.mode !== 3 && p.mode !== 4);
 
       // Sliders
       setSlider('sPoints', p.points, 'vPoints', v => Math.round(v));
@@ -3472,6 +3824,39 @@
       setSlider('sSy', p.sy, 'vSy', v => v.toFixed(2));
       setSlider('sSpring', p.spring, 'vSpring', v => v.toFixed(1));
       setSlider('sGridUnit', p.gridUnit, 'vGridUnit', v => Math.round(v));
+      setSlider('sNoiseElemSize', p.noiseElementSize || 0.5, 'vNoiseElemSize', v => v.toFixed(2));
+      setSlider('sNoiseOffsetX', p.noiseOffsetX || 0, 'vNoiseOffsetX', v => v.toFixed(3));
+      setSlider('sNoiseOffsetY', p.noiseOffsetY || 0, 'vNoiseOffsetY', v => v.toFixed(3));
+      setSlider('sNoiseOctaves', p.noiseOctaves != null ? p.noiseOctaves : 5, 'vNoiseOctaves', v => Math.round(v));
+      setSlider('sNoiseLac', p.noiseLacunarity != null ? p.noiseLacunarity : 2, 'vNoiseLac', v => v.toFixed(2));
+      setSlider('sNoiseRough', p.noiseRoughness != null ? p.noiseRoughness : 0.5, 'vNoiseRough', v => v.toFixed(2));
+      setSlider('sFlowScale',    p.flowScale    != null ? p.flowScale    : 2.0,  'vFlowScale',    v => v.toFixed(2));
+      setSlider('sFlowSpeed',    p.flowSpeed    != null ? p.flowSpeed    : 1.0,  'vFlowSpeed',    v => v.toFixed(2));
+      setSlider('sFlowDistort1', p.flowDistort1 != null ? p.flowDistort1 : 8.1,  'vFlowDistort1', v => v.toFixed(2));
+      setSlider('sFlowDistort2', p.flowDistort2 != null ? p.flowDistort2 : 4.13, 'vFlowDistort2', v => v.toFixed(2));
+      setSlider('sFlowSmoothLo', p.flowSmoothLo != null ? p.flowSmoothLo : 0.15, 'vFlowSmoothLo', v => v.toFixed(2));
+      setSlider('sFlowSmoothHi', p.flowSmoothHi != null ? p.flowSmoothHi : 0.85, 'vFlowSmoothHi', v => v.toFixed(2));
+      // Flow type + Flow 2 controls
+      var ft = p.flowType != null ? p.flowType : 0;
+      setFlowType(ft);
+      var f1s = p.flow1Style != null ? p.flow1Style : 0;
+      setFlow1Style(f1s);
+      setSlider('sFlowHueOffset', p.flowHueOffset != null ? p.flowHueOffset : 0.0, 'vFlowHueOffset', v => v.toFixed(3));
+      setSlider('sFlowHueRadius', p.flowHueRadius != null ? p.flowHueRadius : 1.0, 'vFlowHueRadius', v => v.toFixed(3));
+      var f2m = p.f2Mode != null ? p.f2Mode : 0;
+      setFlow2Mode(f2m);
+      setSlider('sF2Scale',  p.f2Scale  != null ? p.f2Scale  : 6.0,   'vF2Scale',  v => v.toFixed(1));
+      setSlider('sF2VelX',   p.f2VelX   != null ? p.f2VelX   : 0.1,   'vF2VelX',   v => v.toFixed(3));
+      setSlider('sF2VelY',   p.f2VelY   != null ? p.f2VelY   : 0.2,   'vF2VelY',   v => v.toFixed(3));
+      setSlider('sF2Speed',  p.f2Speed  != null ? p.f2Speed  : 2.5,   'vF2Speed',  v => v.toFixed(2));
+      setSlider('sF2Detail', p.f2Detail != null ? p.f2Detail : 200.0, 'vF2Detail', v => Math.round(v));
+      setSlider('sF2Twist',  p.f2Twist  != null ? p.f2Twist  : 50.0,  'vF2Twist',  v => v.toFixed(1));
+      setSlider('sF2Iter1',  p.f2Iter1  != null ? p.f2Iter1  : 20,    'vF2Iter1',  v => Math.round(v));
+      setSlider('sF2Iter2',  p.f2Iter2  != null ? p.f2Iter2  : 20,    'vF2Iter2',  v => Math.round(v));
+      setSlider('sImageScale', p.imageScale != null ? p.imageScale : 1, 'vImageScale', v => v.toFixed(2));
+      // Noise type dropdown
+      var nts = document.getElementById('selNoiseType');
+      if (nts) nts.value = p.noiseType || 0;
       setSlider('sColorSeed', p.colorSeed, 'vColorSeed', v => Math.round(v));
       setSlider('sHueOffset', p.hueOffset != null ? p.hueOffset : 0, 'vHueOffset', v => v.toFixed(2));
       setSlider('sHueRadius', p.hueRadius != null ? p.hueRadius : 1, 'vHueRadius', v => v.toFixed(2));
@@ -3562,6 +3947,7 @@
       var cmode = p.canvasMode || 'fullscreen';
       var cbf = el('btn-canvas-fullscreen'); if(cbf) cbf.classList.toggle('active', cmode==='fullscreen');
       var cbc = el('btn-canvas-custom'); if(cbc) cbc.classList.toggle('active', cmode==='custom');
+      var cbi = el('btn-canvas-imageframe'); if(cbi) cbi.classList.toggle('active', cmode==='imageframe');
       var ccc = el('canvas-custom-controls'); if(ccc) ccc.style.display = cmode==='custom'?'':'none';
       var slW = el('sCanvasW'); if(slW) slW.value = p.canvasWidth || 1920;
       var valW = el('vCanvasW'); if(valW) valW.value = p.canvasWidth || 1920;
@@ -3599,10 +3985,7 @@
       setVis('outline-controls', p.showOutline);
 
       // Color mode
-      var colorize = p.colorize !== false;
-      setToggle('btn-colorize-toggle', colorize);
-      var cw = el('colorize-wrapper');
-      if (cw) cw.classList.toggle('controls-disabled', !colorize);
+      setToggle('btn-cm-raw', p.colorMode === 2);
       setToggle('btn-cm-grad', p.colorMode === 0);
       setToggle('btn-cm-hue', p.colorMode === 1);
       setVis('gradient-controls', p.colorMode === 0);
@@ -3760,6 +4143,29 @@
     wire('sSy',      'vSy',      'sy',           v => v.toFixed(2));
     wire('sSpring',  'vSpring',  'spring',       v => v.toFixed(1));
     wire('sGridUnit','vGridUnit','gridUnit',     v => Math.round(v));
+    wire('sNoiseElemSize', 'vNoiseElemSize', 'noiseElementSize', v => v.toFixed(2));
+    wire('sNoiseOffsetX', 'vNoiseOffsetX', 'noiseOffsetX', v => v.toFixed(3));
+    wire('sNoiseOffsetY', 'vNoiseOffsetY', 'noiseOffsetY', v => v.toFixed(3));
+    wire('sNoiseOctaves', 'vNoiseOctaves', 'noiseOctaves', v => Math.round(v));
+    wire('sNoiseLac', 'vNoiseLac', 'noiseLacunarity', v => v.toFixed(2));
+    wire('sNoiseRough', 'vNoiseRough', 'noiseRoughness', v => v.toFixed(2));
+    wire('sImageScale', 'vImageScale', 'imageScale', v => v.toFixed(2));
+    wire('sFlowScale',    'vFlowScale',    'flowScale',    v => v.toFixed(2));
+    wire('sFlowSpeed',    'vFlowSpeed',    'flowSpeed',    v => v.toFixed(2));
+    wire('sFlowDistort1', 'vFlowDistort1', 'flowDistort1', v => v.toFixed(2));
+    wire('sFlowDistort2', 'vFlowDistort2', 'flowDistort2', v => v.toFixed(2));
+    wire('sFlowSmoothLo', 'vFlowSmoothLo', 'flowSmoothLo', v => v.toFixed(2));
+    wire('sFlowSmoothHi', 'vFlowSmoothHi', 'flowSmoothHi', v => v.toFixed(2));
+    wire('sFlowHueOffset', 'vFlowHueOffset', 'flowHueOffset', v => v.toFixed(3));
+    wire('sFlowHueRadius', 'vFlowHueRadius', 'flowHueRadius', v => v.toFixed(3));
+    wire('sF2Scale',  'vF2Scale',  'f2Scale',  v => v.toFixed(1));
+    wire('sF2VelX',   'vF2VelX',   'f2VelX',   v => v.toFixed(3));
+    wire('sF2VelY',   'vF2VelY',   'f2VelY',   v => v.toFixed(3));
+    wire('sF2Speed',  'vF2Speed',  'f2Speed',  v => v.toFixed(2));
+    wire('sF2Detail', 'vF2Detail', 'f2Detail', v => Math.round(v));
+    wire('sF2Twist',  'vF2Twist',  'f2Twist',  v => v.toFixed(1));
+    wire('sF2Iter1',  'vF2Iter1',  'f2Iter1',  v => Math.round(v));
+    wire('sF2Iter2',  'vF2Iter2',  'f2Iter2',  v => Math.round(v));
 
     // Resolution slider — custom wire with fraction display
     (function() {

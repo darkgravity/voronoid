@@ -400,6 +400,63 @@ Promise.all([
   const sGroupSeed      = Array.from({length:8},(_,g)=>gl.getUniformLocation(sceneProg,`uGroupSeed[${g}]`));
   const sGroupScale     = Array.from({length:8},(_,g)=>gl.getUniformLocation(sceneProg,`uGroupScale[${g}]`));
 
+  // Noise + image source uniforms
+  const sNoiseType      = gl.getUniformLocation(sceneProg, 'uNoiseType');
+  const sNoiseElementSize = gl.getUniformLocation(sceneProg, 'uNoiseElementSize');
+  const sNoiseOffsetX   = gl.getUniformLocation(sceneProg, 'uNoiseOffsetX');
+  const sNoiseOffsetY   = gl.getUniformLocation(sceneProg, 'uNoiseOffsetY');
+  const sNoiseOctaves   = gl.getUniformLocation(sceneProg, 'uNoiseOctaves');
+  const sNoiseLacunarity = gl.getUniformLocation(sceneProg, 'uNoiseLacunarity');
+  const sNoiseRoughness = gl.getUniformLocation(sceneProg, 'uNoiseRoughness');
+  const sSourceMode     = gl.getUniformLocation(sceneProg, 'uSourceMode');
+  const sImageTex       = gl.getUniformLocation(sceneProg, 'uImageTex');
+  const sImageScale     = gl.getUniformLocation(sceneProg, 'uImageScale');
+  const sImageAspect    = gl.getUniformLocation(sceneProg, 'uImageAspect');
+
+  // Flow mode uniforms
+  const sFlowTime      = gl.getUniformLocation(sceneProg, 'iTime');
+  const sFlowType      = gl.getUniformLocation(sceneProg, 'uFlowType');
+  const sFlow1Style    = gl.getUniformLocation(sceneProg, 'uFlow1Style');
+  const sFlowHueOffset = gl.getUniformLocation(sceneProg, 'uFlowHueOffset');
+  const sFlowHueRadius = gl.getUniformLocation(sceneProg, 'uFlowHueRadius');
+  const sFlowScale     = gl.getUniformLocation(sceneProg, 'uFlowScale');
+  const sFlowSpeed     = gl.getUniformLocation(sceneProg, 'uFlowSpeed');
+  const sFlowDistort1  = gl.getUniformLocation(sceneProg, 'uFlowDistort1');
+  const sFlowDistort2  = gl.getUniformLocation(sceneProg, 'uFlowDistort2');
+  const sFlowSmoothLo  = gl.getUniformLocation(sceneProg, 'uFlowSmoothLo');
+  const sFlowSmoothHi  = gl.getUniformLocation(sceneProg, 'uFlowSmoothHi');
+  // Flow 2 uniforms
+  const sF2Scale       = gl.getUniformLocation(sceneProg, 'uF2Scale');
+  const sF2VelX        = gl.getUniformLocation(sceneProg, 'uF2VelX');
+  const sF2VelY        = gl.getUniformLocation(sceneProg, 'uF2VelY');
+  const sF2Speed       = gl.getUniformLocation(sceneProg, 'uF2Speed');
+  const sF2Detail      = gl.getUniformLocation(sceneProg, 'uF2Detail');
+  const sF2Twist       = gl.getUniformLocation(sceneProg, 'uF2Twist');
+  const sF2Iter1       = gl.getUniformLocation(sceneProg, 'uF2Iter1');
+  const sF2Iter2       = gl.getUniformLocation(sceneProg, 'uF2Iter2');
+  const sF2Mode        = gl.getUniformLocation(sceneProg, 'uF2Mode');
+
+  // Image source texture
+  let imageSrcTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, imageSrcTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128,128,128,255]));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  window.uploadImageSourceTex = function(img) {
+    gl.bindTexture(gl.TEXTURE_2D, imageSrcTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    // Store dimensions for canvas sizing
+    window._imageSrcWidth = img.naturalWidth || img.width;
+    window._imageSrcHeight = img.naturalHeight || img.height;
+    window.shaderDirty = true;
+  };
+
   const edgeProg      = buildProgram(vert, compileShader(gl.FRAGMENT_SHADER, edgeSrc));
   const eRes          = gl.getUniformLocation(edgeProg, 'iResolution');
   const eSceneTex     = gl.getUniformLocation(edgeProg, 'uSceneTex');
@@ -622,7 +679,7 @@ Promise.all([
   // ── Touch: 1-finger pan, 2-finger rotate + pinch zoom ──
   let touches = {};
   let pinchStartAngle = null, pinchStartRot = 0;
-  let pinchStartDist = null, pinchStartSx = 1, pinchStartSy = 1;
+  let pinchStartDist = null, pinchStartSx = 1, pinchStartSy = 1, pinchStartScale = 1;
 
   function pinchDist(t0, t1) {
     const dx = t1.x - t0.x, dy = t1.y - t0.y;
@@ -646,6 +703,12 @@ Promise.all([
       pinchStartDist = pinchDist(t0, t1);
       pinchStartSx = window.shaderParams.sx;
       pinchStartSy = window.shaderParams.sy;
+      // For flow mode — capture the active scale parameter
+      if (window.shaderParams.mode === 4) {
+        pinchStartScale = window.shaderParams.flowType === 1
+          ? (window.shaderParams.f2Scale != null ? window.shaderParams.f2Scale : 6)
+          : (window.shaderParams.flowScale != null ? window.shaderParams.flowScale : 2);
+      }
     }
   }, {passive: false});
 
@@ -666,22 +729,40 @@ Promise.all([
       const rotLabel = document.getElementById('vRot');
       if (rotLabel) { if (rotLabel.tagName==='INPUT') rotLabel.value = Math.round(window.shaderParams.rot); else rotLabel.textContent = Math.round(window.shaderParams.rot) + '°'; }
 
-      // Pinch zoom — uniform scale
+      // Pinch zoom
       if (pinchStartDist !== null && pinchStartDist > 10) {
         const dist = pinchDist(t0, t1);
         const ratio = dist / pinchStartDist;
-        const newSx = Math.max(0.1, Math.min(5, pinchStartSx * ratio));
-        const newSy = Math.max(0.1, Math.min(5, pinchStartSy * ratio));
-        window.shaderParams.sx = newSx;
-        window.shaderParams.sy = newSy;
-        const sxSlider = document.getElementById('sSx');
-        if (sxSlider) sxSlider.value = newSx;
-        const sxLabel = document.getElementById('vSx');
-        if (sxLabel) { if (sxLabel.tagName==='INPUT') sxLabel.value = newSx.toFixed(2); else sxLabel.textContent = newSx.toFixed(2); }
-        const sySlider = document.getElementById('sSy');
-        if (sySlider) sySlider.value = newSy;
-        const syLabel = document.getElementById('vSy');
-        if (syLabel) { if (syLabel.tagName==='INPUT') syLabel.value = newSy.toFixed(2); else syLabel.textContent = newSy.toFixed(2); }
+
+        if (window.shaderParams.mode === 4) {
+          // Flow mode: drive flowScale (flow1) or f2Scale (flow2)
+          const isF2 = window.shaderParams.flowType === 1;
+          const scaleKey = isF2 ? 'f2Scale' : 'flowScale';
+          const slid = isF2 ? 'sF2Scale' : 'sFlowScale';
+          const labl = isF2 ? 'vF2Scale' : 'vFlowScale';
+          const minS = isF2 ? 1 : 0.1;
+          const maxS = isF2 ? 20 : 8;
+          const newScale = Math.max(minS, Math.min(maxS, pinchStartScale * ratio));
+          window.shaderParams[scaleKey] = newScale;
+          const sl = document.getElementById(slid);
+          if (sl) sl.value = newScale;
+          const lb = document.getElementById(labl);
+          if (lb) { if (lb.tagName === 'INPUT') lb.value = newScale.toFixed(2); else lb.textContent = newScale.toFixed(2); }
+        } else {
+          // Voronoi/noise mode: drive sx/sy
+          const newSx = Math.max(0.1, Math.min(5, pinchStartSx * ratio));
+          const newSy = Math.max(0.1, Math.min(5, pinchStartSy * ratio));
+          window.shaderParams.sx = newSx;
+          window.shaderParams.sy = newSy;
+          const sxSlider = document.getElementById('sSx');
+          if (sxSlider) sxSlider.value = newSx;
+          const sxLabel = document.getElementById('vSx');
+          if (sxLabel) { if (sxLabel.tagName==='INPUT') sxLabel.value = newSx.toFixed(2); else sxLabel.textContent = newSx.toFixed(2); }
+          const sySlider = document.getElementById('sSy');
+          if (sySlider) sySlider.value = newSy;
+          const syLabel = document.getElementById('vSy');
+          if (syLabel) { if (syLabel.tagName==='INPUT') syLabel.value = newSy.toFixed(2); else syLabel.textContent = newSy.toFixed(2); }
+        }
       }
 
       window.shaderDirty = true;
@@ -705,6 +786,8 @@ Promise.all([
   let lastRenderTime = 0;
   let frameCount = 0;
   window.shaderDirty = true;
+  let flowTime = 0;
+  let flowLastMs = 0;
 
   function render(now) {
     requestAnimationFrame(render);
@@ -744,8 +827,19 @@ Promise.all([
         lastRenderTime = now;
         window.shaderDirty = true;
       }
+
+      // Flow time — advance every frame using real elapsed time * flowSpeed
+      if (p.mode === 4) {
+        if (flowLastMs > 0) {
+          const realDt = (now - flowLastMs) * 0.001; // ms → seconds
+          flowTime += realDt * (p.flowSpeed != null ? p.flowSpeed : 1.0);
+        }
+        flowLastMs = now;
+        window.shaderDirty = true;
+      }
     } else {
       lastRenderTime = 0;
+      flowLastMs = 0;
     }
 
     if (!window.shaderDirty) return;
@@ -966,6 +1060,49 @@ Promise.all([
       gl.uniform1f(sGradientSeed, p.gradientSeed);
       gl.uniform1i(sColorMode, p.colorMode);
       gl.uniform1i(sColorize, p.colorize !== false ? 1 : 0);
+
+      // Noise + image source uniforms
+      const srcMode = p.source === 'image' ? 1 : 0;
+      gl.uniform1i(sSourceMode, srcMode);
+      gl.uniform1i(sNoiseType, p.noiseType || 0);
+      gl.uniform1f(sNoiseElementSize, p.noiseElementSize != null ? p.noiseElementSize : 0.5);
+      gl.uniform1f(sNoiseOffsetX, p.noiseOffsetX || 0);
+      gl.uniform1f(sNoiseOffsetY, p.noiseOffsetY || 0);
+      gl.uniform1i(sNoiseOctaves, p.noiseOctaves != null ? p.noiseOctaves : 5);
+      gl.uniform1f(sNoiseLacunarity, p.noiseLacunarity != null ? p.noiseLacunarity : 2.0);
+      gl.uniform1f(sNoiseRoughness, p.noiseRoughness != null ? p.noiseRoughness : 0.5);
+
+      // Flow uniforms
+      gl.uniform1f(sFlowTime,      flowTime);
+      gl.uniform1i(sFlowType,      p.flowType     != null ? p.flowType     : 0);
+      gl.uniform1i(sFlow1Style,    p.flow1Style   != null ? p.flow1Style   : 0);
+      gl.uniform1f(sFlowHueOffset, p.flowHueOffset != null ? p.flowHueOffset : 0.0);
+      gl.uniform1f(sFlowHueRadius, p.flowHueRadius != null ? p.flowHueRadius : 1.0);
+      gl.uniform1f(sFlowScale,     p.flowScale    != null ? p.flowScale    : 2.0);
+      gl.uniform1f(sFlowSpeed,    p.flowSpeed    != null ? p.flowSpeed    : 1.0);
+      gl.uniform1f(sFlowDistort1, p.flowDistort1 != null ? p.flowDistort1 : 8.1);
+      gl.uniform1f(sFlowDistort2, p.flowDistort2 != null ? p.flowDistort2 : 4.13);
+      gl.uniform1f(sFlowSmoothLo, p.flowSmoothLo != null ? p.flowSmoothLo : 0.15);
+      gl.uniform1f(sFlowSmoothHi, p.flowSmoothHi != null ? p.flowSmoothHi : 0.85);
+      // Flow 2 uniforms
+      gl.uniform1f(sF2Scale,      p.f2Scale    != null ? p.f2Scale    : 6.0);
+      gl.uniform1f(sF2VelX,       p.f2VelX     != null ? p.f2VelX     : 0.1);
+      gl.uniform1f(sF2VelY,       p.f2VelY     != null ? p.f2VelY     : 0.2);
+      gl.uniform1f(sF2Speed,      p.f2Speed    != null ? p.f2Speed    : 2.5);
+      gl.uniform1f(sF2Detail,     p.f2Detail   != null ? p.f2Detail   : 200.0);
+      gl.uniform1f(sF2Twist,      p.f2Twist    != null ? p.f2Twist    : 50.0);
+      gl.uniform1i(sF2Iter1,      p.f2Iter1    != null ? p.f2Iter1    : 20);
+      gl.uniform1i(sF2Iter2,      p.f2Iter2    != null ? p.f2Iter2    : 20);
+      gl.uniform1i(sF2Mode,       p.f2Mode     != null ? p.f2Mode     : 0);
+      gl.uniform1f(sImageScale, p.imageScale != null ? p.imageScale : 1.0);
+      const imgAR = (window._imageSrcWidth && window._imageSrcHeight)
+                     ? window._imageSrcWidth / window._imageSrcHeight : 1.0;
+      gl.uniform1f(sImageAspect, imgAR);
+
+      // Image source texture (unit 2)
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, imageSrcTex);
+      gl.uniform1i(sImageTex, 2);
 
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, gradientTex);

@@ -471,8 +471,6 @@ void main(){
 
     bool isOctGap = false;
     bool isDiamondPixel = false;  // set by genDiamond overlay so image pixel can route to L2
-    vec2 diaOverlayUV = vec2(0.0);     // center UV of diamond painted by overlay
-    vec2 diaOverlayTilePx = vec2(0.0); // tile size (px) of diamond painted by overlay
 
     if(uPixelate==1 && effectiveShape>0){
         // posInTile in PIXEL space — DO NOT scale this
@@ -761,20 +759,55 @@ void main(){
                     }
                     color = diaCol;
                     isDiamondPixel = true;
-                    diaOverlayUV = diCenter;
-                    diaOverlayTilePx = vec2(max(diaR * 2.0, 1.0));
+
+                    // ── Inline diamond image pixel (applied immediately per diamond) ──
+                    if(uImgPixel2Enabled==1){
+                        // posInBlock: normalize diaPos into 0-1 within the diamond bounding box
+                        vec2 dpib = diaPos / vec2(diaHalf * 2.0) + 0.5;
+                        dpib.y = 1.0 - dpib.y;
+                        dpib = vec2(1.0 - dpib.y, dpib.x); // warp rotation
+
+                        // Inner wrapper: 0.66× — texture maps to central 66% of bounding box
+                        vec2 dInner = (dpib - 0.5) / 0.66 + 0.5;
+                        if(dInner.x > 0.005 && dInner.x < 0.995 && dInner.y > 0.005 && dInner.y < 0.995){
+                            float dLum = dot(color, vec3(0.299,0.587,0.114));
+                            float dTot = uImgPixel2Cols * uImgPixel2Rows;
+                            float dIdx = clamp(floor(dLum*dTot), 0.0, dTot-1.0);
+                            float dIC = mod(dIdx, uImgPixel2Cols);
+                            float dIR = floor(dIdx / uImgPixel2Cols);
+                            float dCW = 1.0/uImgPixel2Cols, dCH = 1.0/uImgPixel2Rows;
+
+                            vec2 dCen = dInner - 0.5;
+                            if(uImgPixel2AffectOffset==1) dCen += vec2(mix(uImgPixel2MinOffset,uImgPixel2MaxOffset,dLum));
+                            if(uImgPixel2AffectRotate==1){float da=radians(mix(uImgPixel2MinRotate,uImgPixel2MaxRotate,dLum));float dc=cos(da),ds=sin(da);dCen=vec2(dCen.x*dc-dCen.y*ds,dCen.x*ds+dCen.y*dc);}
+                            if(uImgPixel2AffectScale==1){float dsc=mix(uImgPixel2MinScale,uImgPixel2MaxScale,dLum);if(abs(dsc)>0.001)dCen/=dsc;}
+
+                            vec2 dSP = clamp(dCen+0.5, 0.0, 1.0);
+                            vec2 dIUV = vec2((dIC+dSP.x)*dCW, (dIR+dSP.y)*dCH);
+                            dIUV.x = clamp(dIUV.x, dIC*dCW+0.001, (dIC+1.0)*dCW-0.001);
+                            dIUV.y = clamp(dIUV.y, dIR*dCH+0.001, (dIR+1.0)*dCH-0.001);
+
+                            vec3 dImgC = texture2D(uImgPixel2Tex, dIUV).rgb;
+                            if(uImgPixel2Mask==1){
+                                float dMV = dot(dImgC, vec3(0.299,0.587,0.114));
+                                color = mix(mix(color,uGapColor,uGapOpacity), color, dMV*uImgPixel2Opacity);
+                            } else {
+                                color = mix(color, blendV(color,dImgC,uImgPixel2Blend), uImgPixel2Opacity);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
     /* ── Image Pixel: map each pixelated block to an image grid cell by luminance ── */
-    // For Oct weave: diamond cells use layer 2 settings, octagon cells use layer 1.
-    // Diamond cells can come from getBlock (isWarp=true, genDiamond=0) or the
-    // overlay section (isDiamondPixel=true, genDiamond=1).
-    bool isDiaCell = blk.isWarp || isDiamondPixel;
+    // Overlay diamonds (isDiamondPixel) already handled inline above — skip here.
+    // getBlock diamonds (isWarp, genDiamond=0) use L2 settings.
+    // All other cells use L1.
+    bool isDiaCell = blk.isWarp && !isDiamondPixel;
     bool useL2 = uWeaveMode==4 && isDiaCell && uImgPixel2Enabled==1;
-    bool useL1 = uImgPixelEnabled==1 && !(uWeaveMode==4 && isDiaCell && uImgPixel2Enabled==1);
+    bool useL1 = uImgPixelEnabled==1 && !useL2 && !isDiamondPixel;
 
     if((useL1 || useL2) && uPixelate==1){
         // Select which set of params to use
@@ -800,57 +833,68 @@ void main(){
         float imgRow=floor(cellIdx/ipCols);
 
         // Compute position within the pixelated block (0→1)
-        // For overlay diamonds (genDiamond=1), diaOverlayTilePx is already post-margin.
-        // For getBlock diamonds (genDiamond=0), blk.tilePx includes margin — shrink it.
-        vec2 ipTilePx = isDiamondPixel ? diaOverlayTilePx : blk.tilePx;
-        if(isDiaCell && !isDiamondPixel)
+        vec2 ipTilePx = blk.tilePx;
+        if(isDiaCell)
             ipTilePx = max(ipTilePx - vec2(uShapeMargin * 2.0), vec2(1.0));
-        vec2 ipCenterUV = isDiamondPixel ? diaOverlayUV : blk.uv;
         vec2 tileUV=ipTilePx/iResolution;
-        vec2 offset=obliqueUV-ipCenterUV;
+        vec2 offset=obliqueUV-blk.uv;
         vec2 posInBlock=offset/tileUV+0.5;
-        posInBlock=clamp(posInBlock,0.001,0.999);
+        if(!isDiaCell) posInBlock=clamp(posInBlock,0.001,0.999);
         
         posInBlock.y=1.0-posInBlock.y;
         if(isDiaCell) posInBlock=vec2(1.0-posInBlock.y, posInBlock.x);
 
-        float cellW=1.0/ipCols;
-        float cellH=1.0/ipRows;
-        float cellMinX=imgCol*cellW;
-        float cellMaxX=(imgCol+1.0)*cellW;
-        float cellMinY=imgRow*cellH;
-        float cellMaxY=(imgRow+1.0)*cellH;
-        
-        vec2 centered=posInBlock-0.5;
-        
-        if(ipAffOff==1){
-            float offsetAmount=mix(ipMinOff,ipMaxOff,lum);
-            centered+=vec2(offsetAmount);
+        // For getBlock diamond cells: inner 0.66× wrapper
+        bool diaTexVisible = true;
+        if(isDiaCell){
+            vec2 diaInner = (posInBlock - 0.5) / 0.66 + 0.5;
+            if(diaInner.x < 0.005 || diaInner.x > 0.995 || diaInner.y < 0.005 || diaInner.y > 0.995){
+                diaTexVisible = false;
+            } else {
+                posInBlock = diaInner;
+            }
         }
-        if(ipAffRot==1){
-            float angleRad=radians(mix(ipMinRot,ipMaxRot,lum));
-            float cosA=cos(angleRad); float sinA=sin(angleRad);
-            centered=vec2(centered.x*cosA-centered.y*sinA, centered.x*sinA+centered.y*cosA);
-        }
-        if(ipAffSc==1){
-            float scale=mix(ipMinSc,ipMaxSc,lum);
-            if(abs(scale)>0.001) centered/=scale;
-        }
-        
-        vec2 scaledPos=clamp(centered+0.5, 0.0, 1.0);
-        vec2 imgUV=vec2((imgCol+scaledPos.x)*cellW, (imgRow+scaledPos.y)*cellH);
-        imgUV.x=clamp(imgUV.x, cellMinX+0.001, cellMaxX-0.001);
-        imgUV.y=clamp(imgUV.y, cellMinY+0.001, cellMaxY-0.001);
 
-        // Sample from the correct texture
-        vec3 imgColor = useL2 ? texture2D(uImgPixel2Tex,imgUV).rgb
-                               : texture2D(uImgPixelTex,imgUV).rgb;
-        if(ipMask==1){
-            float maskVal=dot(imgColor,vec3(0.299,0.587,0.114));
-            color=mix(mix(color,uGapColor,uGapOpacity), color, maskVal*ipOp);
+        if(!diaTexVisible){
+            color=mix(color,uGapColor,uGapOpacity);
         } else {
-            vec3 blended=blendV(color,imgColor,ipBlend);
-            color=mix(color,blended,ipOp);
+            float cellW=1.0/ipCols;
+            float cellH=1.0/ipRows;
+            float cellMinX=imgCol*cellW;
+            float cellMaxX=(imgCol+1.0)*cellW;
+            float cellMinY=imgRow*cellH;
+            float cellMaxY=(imgRow+1.0)*cellH;
+            
+            vec2 centered=posInBlock-0.5;
+            
+            if(ipAffOff==1){
+                float offsetAmount=mix(ipMinOff,ipMaxOff,lum);
+                centered+=vec2(offsetAmount);
+            }
+            if(ipAffRot==1){
+                float angleRad=radians(mix(ipMinRot,ipMaxRot,lum));
+                float cosA=cos(angleRad); float sinA=sin(angleRad);
+                centered=vec2(centered.x*cosA-centered.y*sinA, centered.x*sinA+centered.y*cosA);
+            }
+            if(ipAffSc==1){
+                float scale=mix(ipMinSc,ipMaxSc,lum);
+                if(abs(scale)>0.001) centered/=scale;
+            }
+            
+            vec2 scaledPos=clamp(centered+0.5, 0.0, 1.0);
+            vec2 imgUV=vec2((imgCol+scaledPos.x)*cellW, (imgRow+scaledPos.y)*cellH);
+            imgUV.x=clamp(imgUV.x, cellMinX+0.001, cellMaxX-0.001);
+            imgUV.y=clamp(imgUV.y, cellMinY+0.001, cellMaxY-0.001);
+
+            vec3 imgColor = useL2 ? texture2D(uImgPixel2Tex,imgUV).rgb
+                                   : texture2D(uImgPixelTex,imgUV).rgb;
+            if(ipMask==1){
+                float maskVal=dot(imgColor,vec3(0.299,0.587,0.114));
+                color=mix(mix(color,uGapColor,uGapOpacity), color, maskVal*ipOp);
+            } else {
+                vec3 blended=blendV(color,imgColor,ipBlend);
+                color=mix(color,blended,ipOp);
+            }
         }
     }
 
@@ -874,5 +918,12 @@ void main(){
         color=mix(color,blendV(color,gCol,uEmbossBlendMode),uShapeGradOpacity);
     }
 
-    gl_FragColor=vec4(grade(color),1.0);
+    // Dither to break 8-bit banding
+    vec2 ditherUV = gl_FragCoord.xy;
+    float d1 = fract(sin(dot(ditherUV, vec2(12.9898,78.233))) * 43758.5453);
+    float d2 = fract(sin(dot(ditherUV, vec2(63.7264,10.873))) * 43758.5453);
+    float dither = (d1 + d2 - 1.0) / 255.0;
+    vec3 finalColor = grade(color) + vec3(dither);
+
+    gl_FragColor=vec4(finalColor,1.0);
 }
