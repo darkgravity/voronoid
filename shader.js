@@ -239,15 +239,15 @@ function rebuildInstanceFBOs() {
   const W = canvas.width, H = canvas.height;
   const insts = (window.shaderParams && window.shaderParams.pixelateInstances) || [];
   const N = insts.length;
-  // We need N-1 intermediate FBOs (instances 0..N-2 each write into one).
-  const needed = Math.max(0, N - 1);
+  // One FBO per instance (including last — final blit handles screen output)
+  const needed = N;
 
   // Free surplus
   while (instanceFBOs.length > needed) destroyFBOSlot(instanceFBOs.pop());
 
   // Create / resize
   for (let i = 0; i < needed; i++) {
-    // Override instances use canvas (full) dims; others use scene dims
+    // Override instances remap to canvas (full) dims; others use scene dims
     const baseW = insts[i].overrideResolution ? W : (sceneW || W);
     const baseH = insts[i].overrideResolution ? H : (sceneH || H);
     const [fw, fh] = resolveFBOSize(baseW, baseH, insts[i].resolution);
@@ -2801,7 +2801,7 @@ void main(){
     const resized = syncSize();
     if (resized) gl.viewport(0, 0, canvas.width, canvas.height);
 
-    // Scene FBO dimensions: always reduced in fast mode even when canvas is full
+    // Scene FBO dims: always at fast-mode resolution even when canvas is full
     const newSceneW = hasOverride ? Math.max(1, (canvas.width / resDivisor) | 0) : canvas.width;
     const newSceneH = hasOverride ? Math.max(1, (canvas.height / resDivisor) | 0) : canvas.height;
     if (resized || newSceneW !== sceneW || newSceneH !== sceneH) {
@@ -3242,27 +3242,12 @@ void main(){
       // Map active instance index back to original index for FBO slot
       const origIdx = insts.indexOf(inst);
 
-      // Determine output target for this instance
-      // Override instances render at canvas (full) resolution; others at scene resolution
-      const instBaseW = inst.overrideResolution ? W : (sceneW || W);
-      const instBaseH = inst.overrideResolution ? H : (sceneH || H);
-      const [iW, iH] = isLast ? [instBaseW, instBaseH] : (() => {
-        const slot = instanceFBOs[origIdx];
-        return slot ? [slot.w, slot.h] : [instBaseW, instBaseH];
-      })();
+      // All instances render to their own FBO; final blit handles screen output
+      const slot = instanceFBOs[origIdx];
+      const iW = slot ? slot.w : W;
+      const iH = slot ? slot.h : H;
 
-      if (isLast) {
-        if (usePrecompute) {
-          ensurePrecomputeFBOs(pcFrames, W, H);
-          const writeIdx = precomputePlayIdx % pcFrames;
-          gl.bindFramebuffer(gl.FRAMEBUFFER, precomputeBuffer[writeIdx].fbo);
-        } else {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        }
-      } else {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, instanceFBOs[origIdx] ? instanceFBOs[origIdx].fbo : null);
-      }
-
+      gl.bindFramebuffer(gl.FRAMEBUFFER, slot ? slot.fbo : null);
       gl.viewport(0, 0, iW, iH);
       gl.useProgram(edgeProg);
       bindQuad(edgeProg);
@@ -3394,14 +3379,30 @@ void main(){
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
       // The output of this instance becomes the input of the next
-      if (!isLast && instanceFBOs[instIdx]) {
-        inputTex = instanceFBOs[instIdx].tex;
+      if (!isLast && slot) {
+        inputTex = slot.tex;
       }
     }
 
-    // Precompute: mark slot ready and display buffered frame
+    // Blit last instance FBO → screen (or precompute buffer)
+    const lastOrigIdx = insts.indexOf(activeInsts[NA - 1]);
+    const lastSlot = instanceFBOs[lastOrigIdx];
+    const lastTex = lastSlot ? lastSlot.tex : blurredSceneTex;
+
     if (usePrecompute) {
+      ensurePrecomputeFBOs(pcFrames, W, H);
       const writeIdx = precomputePlayIdx % pcFrames;
+
+      // Blit last instance result → precompute buffer (upscales if needed)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, precomputeBuffer[writeIdx].fbo);
+      gl.viewport(0, 0, W, H);
+      gl.useProgram(blitProg);
+      bindQuad(blitProg);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, lastTex);
+      gl.uniform1i(blitTex, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
       precomputeBuffer[writeIdx].ready = true;
       gl.finish();
 
@@ -3412,6 +3413,8 @@ void main(){
         blitToScreen(precomputeBuffer[writeIdx].tex, W, H);
       }
       precomputePlayIdx = (precomputePlayIdx + 1) % pcFrames;
+    } else {
+      blitToScreen(lastTex, W, H);
     }
   }
 

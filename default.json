@@ -35,7 +35,7 @@
   "f2HueRadius": 1,
   "f2HueEnabled": false,
   "imageScale": 1,
-  "rot": 102.17167999945416,
+  "rot": 123.5050133327661,
   "dx": 0.5890602077002306,
   "dy": 0.1298720969275292,
   "sx": 1,
@@ -47,8 +47,8 @@
   "spring": 0,
   "snapGrid": false,
   "gridUnit": 50,
-  "fastMode": false,
-  "renderRes": 2,
+  "fastMode": true,
+  "renderRes": 4,
   "precompute": false,
   "precomputeFrames": 3,
   "showDots": false,
@@ -63,6 +63,8 @@
   "colorMode": 2,
   "colorize": false,
   "preProcess": false,
+  "blurRadius": 0,
+  "blurEnabled": true,
   "camHue": 0,
   "camSat": 1,
   "camVal": 1,
@@ -143,10 +145,10 @@
     {
       "id": 1,
       "enabled": true,
-      "resolution": 1,
+      "resolution": 4,
       "pixelW": 23,
       "pixelH": 23,
-      "pixelScale": 5.26,
+      "pixelScale": 2.49,
       "weaveMode": 4,
       "pixelShape": 0,
       "shapeMargin": 0,
@@ -231,15 +233,16 @@
       "imgPixel2Blend": 8,
       "imgPixel2HueOff": 0.877,
       "imgPixel2Mask": true,
-      "imgPixel2Opacity": 1
+      "imgPixel2Opacity": 1,
+      "overrideResolution": true
     },
     {
       "id": 3,
-      "enabled": false,
+      "enabled": true,
       "resolution": 1,
       "pixelW": 23,
       "pixelH": 11,
-      "pixelScale": 0.86,
+      "pixelScale": 0.51,
       "weaveMode": 1,
       "pixelShape": 1,
       "shapeMargin": 1,
@@ -300,7 +303,8 @@
       "imgPixelMinOffset": -0.5,
       "imgPixelMaxOffset": 0.5,
       "imgPixelName": "tile.png",
-      "imgDataURL": null
+      "imgDataURL": null,
+      "overrideResolution": true
     }
   ],
   "banding": false,
@@ -323,7 +327,7 @@
   "gradeHue": 217,
   "gradeSat": 1.02,
   "gradeVal": 1.44,
-  "gradeContrast": 1.06,
+  "gradeContrast": 1.48,
   "postProcessEnabled": true,
   "gradientStops": [
     {
