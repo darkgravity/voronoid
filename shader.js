@@ -27,6 +27,7 @@ const renderScale = isMobile ? 0.5 : 1.0;
 let currentRenderScale = renderScale;
 
 let curW = 0, curH = 0;
+let sceneW = 0, sceneH = 0;
 function syncSize() {
   const dpr = (window.devicePixelRatio || 1) * currentRenderScale;
   const w = (canvas.clientWidth  * dpr) | 0;
@@ -39,6 +40,8 @@ function syncSize() {
   return true;
 }
 syncSize();
+sceneW = canvas.width;
+sceneH = canvas.height;
 gl.viewport(0, 0, canvas.width, canvas.height);
 
 // Use parallel shader compile extension if available to avoid main-thread stall
@@ -143,13 +146,16 @@ let blurFBO_H = null, blurTex_H = null; // after horizontal pass
 let blurFBO_V = null, blurTex_V = null; // after vertical pass (final blur result)
 
 function rebuildFBO() {
+  const sw = sceneW || canvas.width;
+  const sh = sceneH || canvas.height;
+
   if (sceneTex) { gl.deleteTexture(sceneTex); sceneTex = null; }
   if (fbo)      { gl.deleteFramebuffer(fbo);  fbo = null; }
 
   sceneTex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, sceneTex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
-    canvas.width, canvas.height,
+    sw, sh,
     0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -184,9 +190,9 @@ function rebuildFBO() {
   if (blurFBO_H) gl.deleteFramebuffer(blurFBO_H);
   if (blurTex_V) gl.deleteTexture(blurTex_V);
   if (blurFBO_V) gl.deleteFramebuffer(blurFBO_V);
-  const bh = makeBlurTex(canvas.width, canvas.height);
+  const bh = makeBlurTex(sw, sh);
   blurTex_H = bh.tex; blurFBO_H = bh.fbo;
-  const bv = makeBlurTex(canvas.width, canvas.height);
+  const bv = makeBlurTex(sw, sh);
   blurTex_V = bv.tex; blurFBO_V = bv.fbo;
 
   // Invalidate precompute buffer on resize
@@ -241,7 +247,10 @@ function rebuildInstanceFBOs() {
 
   // Create / resize
   for (let i = 0; i < needed; i++) {
-    const [fw, fh] = resolveFBOSize(W, H, insts[i].resolution);
+    // Override instances use canvas (full) dims; others use scene dims
+    const baseW = insts[i].overrideResolution ? W : (sceneW || W);
+    const baseH = insts[i].overrideResolution ? H : (sceneH || H);
+    const [fw, fh] = resolveFBOSize(baseW, baseH, insts[i].resolution);
     if (!instanceFBOs[i] || instanceFBOs[i].w !== fw || instanceFBOs[i].h !== fh) {
       destroyFBOSlot(instanceFBOs[i]);
       instanceFBOs[i] = makeFBOSlot(fw, fh);
@@ -2776,15 +2785,28 @@ void main(){
     // Check if fast mode changed — force resize to update resolution
     const p = window.shaderParams;
     const resDivisor = isFast() ? (p.renderRes || 2) : 1;
-    const wantScale = 1.0 / resDivisor;
+
+    // Check if any enabled instance wants override resolution
+    const hasOverride = isFast() && p.pixelate && p.pixelateInstances &&
+      p.pixelateInstances.some(function(inst) { return inst.enabled !== false && inst.overrideResolution; });
+
+    // Canvas at full resolution when override is active, else reduced by fast mode
+    const wantScale = hasOverride ? 1.0 : (1.0 / resDivisor);
     if (wantScale !== currentRenderScale) {
       currentRenderScale = wantScale;
       curW = 0; curH = 0;
     }
 
     // resize check
-    if (syncSize()) {
-      gl.viewport(0, 0, canvas.width, canvas.height);
+    const resized = syncSize();
+    if (resized) gl.viewport(0, 0, canvas.width, canvas.height);
+
+    // Scene FBO dimensions: always reduced in fast mode even when canvas is full
+    const newSceneW = hasOverride ? Math.max(1, (canvas.width / resDivisor) | 0) : canvas.width;
+    const newSceneH = hasOverride ? Math.max(1, (canvas.height / resDivisor) | 0) : canvas.height;
+    if (resized || newSceneW !== sceneW || newSceneH !== sceneH) {
+      sceneW = newSceneW;
+      sceneH = newSceneH;
       rebuildFBO();
       rebuildInstanceFBOs();
       window.shaderDirty = true;
@@ -2843,7 +2865,7 @@ void main(){
     const isCamera = p.source === 'camera' && window.cameraVideo && window.cameraVideo.readyState >= 2;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, W, H);
+    gl.viewport(0, 0, sceneW, sceneH);
 
     if (isCamera) {
       // Upload video to a separate camera texture
@@ -2986,8 +3008,8 @@ void main(){
       gl.uniform1i(window._camLocs.gradTex, 1);
 
       const vid = window.cameraVideo;
-      gl.uniform2f(window._camLocs.canvasSize, W, H);
-      gl.uniform2f(window._camLocs.videoSize, vid.videoWidth || W, vid.videoHeight || H);
+      gl.uniform2f(window._camLocs.canvasSize, sceneW, sceneH);
+      gl.uniform2f(window._camLocs.videoSize, vid.videoWidth || sceneW, vid.videoHeight || sceneH);
       gl.uniform1i(window._camLocs.colorMode, p.colorMode);
       gl.uniform1i(window._camLocs.colorize, p.colorize !== false ? 1 : 0);
       gl.uniform1i(window._camLocs.preProcess, p.preProcess ? 1 : 0);
@@ -3014,7 +3036,7 @@ void main(){
       gl.useProgram(sceneProg);
       bindQuad(sceneProg);
 
-      gl.uniform2f(sRes,       W, H);
+      gl.uniform2f(sRes,       sceneW, sceneH);
       gl.uniform1i(sMode,      p.mode);
       gl.uniform1f(sSeed,      p.seed);
       gl.uniform1f(sRotation,  p.rot * Math.PI / 180.0);
@@ -3146,11 +3168,11 @@ void main(){
     // --- pass 1.5: optional Gaussian blur of scene result ---
     // blurRadius > 0 runs H then V pass; result ends up in blurTex_V
     // which replaces sceneTex as input to the edge/pixelate chain.
-    const blurR = p.blurRadius || 0;
+    const blurR = (p.blurEnabled !== false) ? (p.blurRadius || 0) : 0;
     let blurredSceneTex = sceneTex;
     if (blurR > 0) {
-      doBlurPass(sceneTex, blurFBO_H, 1.0/W, 0,     blurR, W, H);
-      doBlurPass(blurTex_H, blurFBO_V, 0,    1.0/H, blurR, W, H);
+      doBlurPass(sceneTex, blurFBO_H, 1.0/sceneW, 0,          blurR, sceneW, sceneH);
+      doBlurPass(blurTex_H, blurFBO_V, 0,          1.0/sceneH, blurR, sceneW, sceneH);
       blurredSceneTex = blurTex_V;
     }
 
@@ -3221,9 +3243,12 @@ void main(){
       const origIdx = insts.indexOf(inst);
 
       // Determine output target for this instance
-      const [iW, iH] = isLast ? [W, H] : (() => {
+      // Override instances render at canvas (full) resolution; others at scene resolution
+      const instBaseW = inst.overrideResolution ? W : (sceneW || W);
+      const instBaseH = inst.overrideResolution ? H : (sceneH || H);
+      const [iW, iH] = isLast ? [instBaseW, instBaseH] : (() => {
         const slot = instanceFBOs[origIdx];
-        return slot ? [slot.w, slot.h] : [W, H];
+        return slot ? [slot.w, slot.h] : [instBaseW, instBaseH];
       })();
 
       if (isLast) {
