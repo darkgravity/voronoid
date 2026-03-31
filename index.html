@@ -266,6 +266,20 @@
     #btn-fullscreen:hover { background: rgba(60,60,60,0.8); }
 
     /* ── Recording indicator ────────────────────── */
+    #rec-indicator {
+      display: none; position: fixed; top: 14px; left: 14px; z-index: 100;
+      background: rgba(0,0,0,0.6); border-radius: 6px; padding: 6px 12px;
+      color: #fff; font-size: 12px; font-weight: 600;
+      align-items: center; gap: 6px; backdrop-filter: blur(6px);
+    }
+    #rec-indicator.visible { display: flex; }
+    #rec-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: #f44;
+      animation: recBlink 1s infinite;
+    }
+    @keyframes recBlink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Shader loading overlay ──────────────────── */
     #shader-loading-overlay {
       position: fixed; inset: 0; z-index: 99999;
       background: #0d0d0d;
@@ -289,19 +303,6 @@
       font-family: monospace;
       letter-spacing: 0.05em;
     }
-      display: none; position: fixed; top: 14px; left: 14px; z-index: 100;
-      background: rgba(0,0,0,0.6); border-radius: 6px; padding: 6px 12px;
-      color: #fff; font-size: 12px; font-weight: 600;
-      align-items: center; gap: 6px; backdrop-filter: blur(6px);
-    }
-    #rec-indicator.visible { display: flex; }
-    #rec-dot {
-      width: 10px; height: 10px; border-radius: 50%; background: #f44;
-      animation: recBlink 1s infinite;
-    }
-    @keyframes recBlink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-    /* ── Mobile floating controls ───────────────── */
     #mobile-float {
       display: none; /* hidden on desktop */
     }
@@ -1144,6 +1145,13 @@
 
       <!-- Pre Process section (always visible, works for both voronoi and camera) -->
       <div class="divider"></div>
+      <div class="section-title">Blur</div>
+      <div class="row">
+        <label>Radius</label>
+        <input type="range" id="sBlurRadius" min="0" max="20" step="0.5" value="0">
+        <input type="number" class="val" id="vBlurRadius" value="0.0" min="0" max="20" step="0.5">
+      </div>
+      <div class="divider"></div>
       <div class="toggle-header">
         <span class="toggle-label">Pre Process</span>
         <button class="toggle-active" id="btn-preprocess-toggle" onclick="togglePreProcess()"></button>
@@ -1462,6 +1470,7 @@
       colorMode: 0,
       colorize: true,
       preProcess: false,
+      blurRadius: 0,
       camHue: 0, camSat: 1, camVal: 1, camContrast: 1,  // 0=gradient, 1=hue
       gradientSeed: 0,
       imgPixelEnabled: false,
@@ -2309,7 +2318,7 @@
       var ps = inst.pixelShape || 0;
       var isAutoShape = wm === 3 || wm === 4;
 
-      var resHTML = [1,2,4,8].map(function(r){
+      var resHTML = [1,2,4,8,16].map(function(r){
         var lbl = r===1?'Full':'1/'+r;
         return '<button id="'+s('btn-pix-res-'+r)+'" class="'+(rc===r?'active':'')+'" onclick="setPixRes('+i+','+r+')">'+lbl+'</button>';
       }).join('');
@@ -2772,10 +2781,11 @@
       var inst = window.shaderParams.pixelateInstances[i];
       if (!inst) return;
       inst.resolution = r;
-      [1,2,4,8].forEach(function(rv) {
+      [1,2,4,8,16].forEach(function(rv) {
         var btn = document.getElementById('btn-pix-res-'+rv+'_'+i);
         if (btn) btn.classList.toggle('active', rv === r);
       });
+      window.rebuildInstanceFBOs();
       window.shaderDirty = true;
     }
 
@@ -4185,6 +4195,7 @@
       setToggle('btn-preprocess-toggle', pp);
       var pc = el('preprocess-controls');
       if (pc) pc.classList.toggle('controls-disabled', !pp);
+      setSlider('sBlurRadius', p.blurRadius != null ? p.blurRadius : 0, 'vBlurRadius', v => v.toFixed(1));
       setSlider('sCamHue', p.camHue, 'vCamHue', v => Math.round(v) + '°');
       setSlider('sCamSat', p.camSat, 'vCamSat', v => v.toFixed(2));
       setSlider('sCamVal', p.camVal, 'vCamVal', v => v.toFixed(2));
@@ -4377,6 +4388,7 @@
     wire('sRadialY','vRadialY','radialCenterY', v => v.toFixed(2));
     wire('sRadialScale','vRadialScale','radialScale', v => v.toFixed(2));
     wire('sGapOpacity','vGapOpacity','gapOpacity', v => v.toFixed(2));
+    wire('sBlurRadius','vBlurRadius','blurRadius', v => v.toFixed(1));
     wire('sCamHue','vCamHue','camHue', v => Math.round(v) + '°');
     wire('sCamSat','vCamSat','camSat', v => v.toFixed(2));
     wire('sCamVal','vCamVal','camVal', v => v.toFixed(2));

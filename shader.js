@@ -73,22 +73,37 @@ function checkShader(s) {
 
 // Poll until all programs are linked (non-blocking via rAF), then call onReady()
 function waitForPrograms(programs, shaders, onReady) {
-  function check() {
+  // If the parallel compile extension is available, poll non-blocking via rAF.
+  // Otherwise (mobile, older drivers) just check synchronously — the brief stall
+  // is unavoidable without the extension and is better than an infinite loop.
+  if (COMPLETION_STATUS === null) {
+    // Synchronous path: check compile/link status immediately
+    for (const s of shaders) { try { checkShader(s); } catch(e) { return; } }
     for (const prog of programs) {
-      // If extension available, check non-blocking status first
-      if (COMPLETION_STATUS !== null) {
-        if (!gl.getProgramParameter(prog, COMPLETION_STATUS)) {
-          requestAnimationFrame(check);
-          return;
-        }
-      }
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
         const err = gl.getProgramInfoLog(prog);
         document.body.innerHTML = `<pre style="color:#f66;padding:2rem;font-size:13px;">Shader link error:\n${err}</pre>`;
         return;
       }
     }
-    // All linked — now safe to check individual shader compile logs
+    onReady();
+    return;
+  }
+  function check() {
+    for (const prog of programs) {
+      if (!gl.getProgramParameter(prog, COMPLETION_STATUS)) {
+        requestAnimationFrame(check);
+        return; // not ready yet — come back next frame
+      }
+    }
+    // All done compiling — now check for errors
+    for (const prog of programs) {
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        const err = gl.getProgramInfoLog(prog);
+        document.body.innerHTML = `<pre style="color:#f66;padding:2rem;font-size:13px;">Shader link error:\n${err}</pre>`;
+        return;
+      }
+    }
     for (const s of shaders) { try { checkShader(s); } catch(e) { return; } }
     onReady();
   }
@@ -123,6 +138,9 @@ function hexToRgb01(hex) {
 
 let fbo = null;
 let sceneTex = null;
+// ── Blur FBOs (ping-pong for separable Gaussian) ─────────────────
+let blurFBO_H = null, blurTex_H = null; // after horizontal pass
+let blurFBO_V = null, blurTex_V = null; // after vertical pass (final blur result)
 
 function rebuildFBO() {
   if (sceneTex) { gl.deleteTexture(sceneTex); sceneTex = null; }
@@ -145,6 +163,32 @@ function rebuildFBO() {
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.bindTexture(gl.TEXTURE_2D, null);
+
+  // Rebuild blur ping-pong FBOs at same resolution as scene
+  function makeBlurTex(w, h) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return { tex: t, fbo: fb };
+  }
+  if (blurTex_H) gl.deleteTexture(blurTex_H);
+  if (blurFBO_H) gl.deleteFramebuffer(blurFBO_H);
+  if (blurTex_V) gl.deleteTexture(blurTex_V);
+  if (blurFBO_V) gl.deleteFramebuffer(blurFBO_V);
+  const bh = makeBlurTex(canvas.width, canvas.height);
+  blurTex_H = bh.tex; blurFBO_H = bh.fbo;
+  const bv = makeBlurTex(canvas.width, canvas.height);
+  blurTex_V = bv.tex; blurFBO_V = bv.fbo;
+
   // Invalidate precompute buffer on resize
   precomputeBuffer = [];
   precomputePlayIdx = 0;
@@ -156,12 +200,9 @@ function rebuildFBO() {
 let instanceFBOs = [];   // { tex, fbo, w, h }
 
 function resolveFBOSize(W, H, res) {
-  // res: 'full'|'1/2'|'1/4'|'1/8'
-  if (!res || res === 'full') return [W, H];
-  if (res === '1/2')  return [Math.max(1, W>>1), Math.max(1, H>>1)];
-  if (res === '1/4')  return [Math.max(1, W>>2), Math.max(1, H>>2)];
-  if (res === '1/8')  return [Math.max(1, W>>3), Math.max(1, H>>3)];
-  return [W, H];
+  // res: numeric divisor 1,2,4,8,16
+  const d = parseInt(res) || 1;
+  return [Math.max(1, W/d|0), Math.max(1, H/d|0)];
 }
 
 function makeFBOSlot(w, h) {
@@ -2217,18 +2258,43 @@ void main(){
   // Blit is tiny — compile inline too
   const blitFS = `precision mediump float; uniform sampler2D uTex; varying vec2 vUV;
     void main(){ gl_FragColor = texture2D(uTex, vUV); }`;
-  const blitVS = `attribute vec2 a_pos; varying vec2 vUV;
-    void main(){ vUV = a_pos * 0.5 + 0.5; gl_Position = vec4(a_pos, 0, 1); }`;
+  const blitVS = `attribute vec2 aPos; varying vec2 vUV;
+    void main(){ vUV = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0, 1); }`;
   const blitFrag = compileShader(gl.FRAGMENT_SHADER, blitFS);
   const blitVertShader = compileShader(gl.VERTEX_SHADER, blitVS);
   const blitProg = buildProgram(blitVertShader, blitFrag);
+
+  // ── Gaussian blur shader (separable, 9-tap) ──────────────────────
+  const BLUR_VS = `attribute vec2 aPos; varying vec2 vUV;
+    void main(){ vUV = aPos*0.5+0.5; gl_Position = vec4(aPos,0,1); }`;
+  const BLUR_FS = `precision mediump float;
+    varying vec2 vUV;
+    uniform sampler2D uTex;
+    uniform vec2 uDir;       // (1/W,0) for H pass, (0,1/H) for V pass
+    uniform float uRadius;   // blur radius in pixels
+    void main(){
+      vec2 uv = vUV;
+      // Gaussian weights for 9 taps at spacing=radius/4
+      float step = uRadius / 4.0;
+      vec4 col = vec4(0.0);
+      float wsum = 0.0;
+      for(int i=-4; i<=4; i++){
+        float off = float(i) * step;
+        float w = exp(-0.5 * float(i*i) / 4.0);
+        col += texture2D(uTex, uv + uDir * off) * w;
+        wsum += w;
+      }
+      gl_FragColor = col / wsum;
+    }`;
+  const blurFrag_s  = compileShader(gl.FRAGMENT_SHADER, BLUR_FS);
+  const blurProg    = buildProgram(blitVertShader, blurFrag_s);
 
   // Signal to the HTML overlay that compilation has started
   window._shaderCompiling = true;
 
   waitForPrograms(
-    [sceneProg, edgeProg, blitProg],
-    [sceneFrag, edgeFrag, vert],
+    [sceneProg, edgeProg, blitProg, blurProg],
+    [sceneFrag, edgeFrag, vert, blurFrag_s],
     function() {
   const sRes            = gl.getUniformLocation(sceneProg, 'iResolution');
   const sMode           = gl.getUniformLocation(sceneProg, 'uMode');
@@ -2526,6 +2592,25 @@ void main(){
 
   // ── Blit uniform location (program built above) ──
   const blitTex = gl.getUniformLocation(blitProg, 'uTex');
+
+  // Blur uniform locations
+  const blurTex_u  = gl.getUniformLocation(blurProg, 'uTex');
+  const blurDir    = gl.getUniformLocation(blurProg, 'uDir');
+  const blurRadius = gl.getUniformLocation(blurProg, 'uRadius');
+
+  // Helper: run one separable blur pass
+  function doBlurPass(srcTex, dstFbo, dx, dy, radius, W, H) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(blurProg);
+    bindQuad(blurProg);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
+    gl.uniform1i(blurTex_u, 0);
+    gl.uniform2f(blurDir, dx, dy);
+    gl.uniform1f(blurRadius, radius);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
 
   function blitToScreen(texture, W, H) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -3058,6 +3143,17 @@ void main(){
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
 
+    // --- pass 1.5: optional Gaussian blur of scene result ---
+    // blurRadius > 0 runs H then V pass; result ends up in blurTex_V
+    // which replaces sceneTex as input to the edge/pixelate chain.
+    const blurR = p.blurRadius || 0;
+    let blurredSceneTex = sceneTex;
+    if (blurR > 0) {
+      doBlurPass(sceneTex, blurFBO_H, 1.0/W, 0,     blurR, W, H);
+      doBlurPass(blurTex_H, blurFBO_V, 0,    1.0/H, blurR, W, H);
+      blurredSceneTex = blurTex_V;
+    }
+
     // --- pass 2: edge / pixelate chain ---
     // Resolve pixelate instances.  Fall back to a synthetic single-instance
     // built from the legacy flat params so old configs continue working.
@@ -3115,7 +3211,7 @@ void main(){
     rebuildInstanceFBOs();
 
     // Keep track of the texture that is the input to each pass
-    let inputTex = sceneTex;
+    let inputTex = blurredSceneTex;
 
     for (let instIdx = 0; instIdx < NA; instIdx++) {
       const inst = activeInsts[instIdx];
