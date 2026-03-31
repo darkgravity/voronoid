@@ -35,7 +35,7 @@
   "f2HueRadius": 1,
   "f2HueEnabled": false,
   "imageScale": 1,
-  "rot": 87.17167999952065,
+  "rot": 153.50501333285413,
   "dx": 0.5890602077002306,
   "dy": 0.1298720969275292,
   "sx": 1,
@@ -47,8 +47,8 @@
   "spring": 0,
   "snapGrid": false,
   "gridUnit": 50,
-  "fastMode": false,
-  "renderRes": 2,
+  "fastMode": true,
+  "renderRes": 4,
   "precompute": false,
   "precomputeFrames": 3,
   "showDots": false,
@@ -63,6 +63,8 @@
   "colorMode": 2,
   "colorize": false,
   "preProcess": false,
+  "blurRadius": 0,
+  "blurEnabled": true,
   "camHue": 0,
   "camSat": 1,
   "camVal": 1,
@@ -220,7 +222,8 @@
       "imgDataURL": null,
       "shapeScale": 1,
       "forceSquare": true,
-      "embossHueOff": 0.502
+      "embossHueOff": 0.502,
+      "overrideResolution": true
     },
     {
       "id": 3,
