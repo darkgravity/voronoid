@@ -266,7 +266,29 @@
     #btn-fullscreen:hover { background: rgba(60,60,60,0.8); }
 
     /* ── Recording indicator ────────────────────── */
-    #rec-indicator {
+    #shader-loading-overlay {
+      position: fixed; inset: 0; z-index: 99999;
+      background: #0d0d0d;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px;
+      transition: opacity 0.3s ease;
+    }
+    #shader-loading-overlay.fade-out { opacity: 0; pointer-events: none; }
+    .shader-spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: rgba(255,255,255,0.55);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .shader-loading-text {
+      color: rgba(255,255,255,0.35);
+      font-size: 12px;
+      font-family: monospace;
+      letter-spacing: 0.05em;
+    }
       display: none; position: fixed; top: 14px; left: 14px; z-index: 100;
       background: rgba(0,0,0,0.6); border-radius: 6px; padding: 6px 12px;
       color: #fff; font-size: 12px; font-weight: 600;
@@ -535,6 +557,12 @@
   </style>
 </head>
 <body>
+  <!-- Shader compilation overlay — removed by shader.js when GL programs are ready -->
+  <div id="shader-loading-overlay">
+    <div class="shader-spinner"></div>
+    <div class="shader-loading-text">Compiling shaders…</div>
+  </div>
+
   <div id="canvas-container">
     <canvas id="glCanvas"></canvas>
   </div>
@@ -620,8 +648,15 @@
       <div id="video-panel" style="display:none">
         <div class="row">
           <label>Length</label>
-          <input type="range" id="sVideoLen" min="1" max="10" step="0.5" value="3">
-          <span class="val" id="vVideoLen">3 min</span>
+          <select id="selVideoLen" style="flex:1;background:#1a1a1a;border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:4px;padding:3px 6px;font-size:11px">
+            <option value="0.25">15 sec</option>
+            <option value="0.5">30 sec</option>
+            <option value="1" selected>1 min</option>
+            <option value="2">2 min</option>
+            <option value="3">3 min</option>
+            <option value="5">5 min</option>
+            <option value="10">10 min</option>
+          </select>
         </div>
         <div class="row">
           <label>Format</label>
@@ -650,7 +685,7 @@
         <input type="number" class="val" id="vSpeed" value="10">
         <select id="selFps" onchange="window.shaderParams.fps=parseInt(this.value);window.shaderDirty=true" style="width:60px;flex-shrink:0">
           <option value="12">12 fps</option>
-          <option value="25">25 fps</option>
+          <option value="24">24 fps</option>
           <option value="30" selected>30 fps</option>
           <option value="60">60 fps</option>
         </select>
@@ -708,6 +743,53 @@
       <div id="camera-controls" style="display:none">
         <div class="btn-row" style="margin-top:6px">
           <button id="btn-cam-flip" onclick="flipCamera()">Flip Camera</button>
+        </div>
+      </div>
+
+      <!-- ── Shared: Mirror / Flip / Fast — always visible for all sources and patterns ── -->
+      <div class="divider"></div>
+      <div class="seg-bar">
+        <button id="btn-mx" class="active" onclick="toggleMirror('x')" title="Mirror X">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2,2"/><polyline points="8,8 4,12 8,16"/><polyline points="16,8 20,12 16,16"/></svg>
+        </button>
+        <button id="btn-my" class="active" onclick="toggleMirror('y')" title="Mirror Y">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2,2"/><polyline points="8,8 12,4 16,8"/><polyline points="8,16 12,20 16,16"/></svg>
+        </button>
+        <button id="btn-fx" onclick="toggleFlip('x')" title="Flip X">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21"/><polygon points="4,7 10,12 4,17"/><polygon points="20,7 14,12 20,17" fill="currentColor"/></svg>
+        </button>
+        <button id="btn-fy" onclick="toggleFlip('y')" title="Flip Y">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><polygon points="7,4 12,10 17,4"/><polygon points="7,20 12,14 17,20" fill="currentColor"/></svg>
+        </button>
+        <button id="btn-snapgrid" onclick="toggleSnapGrid()" title="Snap Grid">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="4" x2="4" y2="20"/><line x1="10" y1="4" x2="10" y2="20"/><line x1="16" y1="4" x2="16" y2="20"/><line x1="4" y1="4" x2="20" y2="4"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="10" r="2" fill="currentColor"/></svg>
+        </button>
+        <button id="btn-fast" onclick="toggleFastMode()" title="Fast Mode">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>
+        </button>
+        <button id="btn-precompute" onclick="togglePrecompute()" title="Pre-compute Frames">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+      </div>
+      <div id="snapgrid-controls" style="display:none">
+        <div class="row">
+          <label>Grid Unit</label>
+          <input type="range" id="sGridUnit" min="10" max="500" step="1" value="50">
+          <input type="number" class="val" id="vGridUnit" value="50">
+        </div>
+      </div>
+      <div id="fast-controls" style="display:none">
+        <div class="row">
+          <label>Resolution</label>
+          <input type="range" id="sRenderRes" min="1" max="16" step="1" value="2">
+          <span class="val" id="vRenderRes">1/2</span>
+        </div>
+      </div>
+      <div id="precompute-controls" style="display:none">
+        <div class="row">
+          <label>Frames</label>
+          <input type="range" id="sPrecomputeFrames" min="1" max="10" step="1" value="3">
+          <input type="number" class="val" id="vPrecomputeFrames" value="3">
         </div>
       </div>
 
@@ -843,15 +925,21 @@
             <input type="range" id="sFlowSmoothHi" min="0.5" max="1" step="0.01" value="0.85">
             <input type="number" class="val" id="vFlowSmoothHi" value="0.85" min="0.5" max="1" step="0.01">
           </div>
-          <div class="row">
-            <label>Hue Offset</label>
-            <input type="range" id="sFlowHueOffset" min="0" max="1" step="0.001" value="0">
-            <input type="number" class="val" id="vFlowHueOffset" value="0.000" min="0" max="1" step="0.001">
+          <div class="toggle-header" style="margin-top:6px">
+            <span class="toggle-label">Change Hue</span>
+            <button class="toggle-active" id="btn-flow1-hue-toggle" onclick="toggleFlow1Hue()"></button>
           </div>
-          <div class="row">
-            <label>Hue Radius</label>
-            <input type="range" id="sFlowHueRadius" min="0" max="1" step="0.001" value="1">
-            <input type="number" class="val" id="vFlowHueRadius" value="1.000" min="0" max="1" step="0.001">
+          <div id="flow1-hue-controls" style="display:none">
+            <div class="row">
+              <label>Hue Offset</label>
+              <input type="range" id="sFlowHueOffset" min="0" max="1" step="0.001" value="0">
+              <input type="number" class="val" id="vFlowHueOffset" value="0.000" min="0" max="1" step="0.001">
+            </div>
+            <div class="row">
+              <label>Hue Radius</label>
+              <input type="range" id="sFlowHueRadius" min="0" max="1" step="0.001" value="1">
+              <input type="number" class="val" id="vFlowHueRadius" value="1.000" min="0" max="1" step="0.001">
+            </div>
           </div>
         </div>
 
@@ -904,6 +992,22 @@
             <input type="range" id="sF2Iter2" min="1" max="20" step="1" value="20">
             <input type="number" class="val" id="vF2Iter2" value="20" min="1" max="20" step="1">
           </div>
+          <div class="toggle-header" style="margin-top:6px">
+            <span class="toggle-label">Change Hue</span>
+            <button class="toggle-active" id="btn-f2-hue-toggle" onclick="toggleF2Hue()"></button>
+          </div>
+          <div id="f2-hue-controls" style="display:none">
+            <div class="row">
+              <label>Hue Offset</label>
+              <input type="range" id="sF2HueOffset" min="0" max="1" step="0.001" value="0">
+              <input type="number" class="val" id="vF2HueOffset" value="0.000" min="0" max="1" step="0.001">
+            </div>
+            <div class="row">
+              <label>Hue Radius</label>
+              <input type="range" id="sF2HueRadius" min="0" max="1" step="0.001" value="1">
+              <input type="number" class="val" id="vF2HueRadius" value="1.000" min="0" max="1" step="0.001">
+            </div>
+          </div>
         </div>
 
       </div>
@@ -955,53 +1059,6 @@
         <input type="range" id="sSpring" min="0" max="10" step="0.1" value="0">
         <input type="number" class="val" id="vSpring" value="0.0">
       </div>
-
-      <div class="divider"></div>
-      <div class="seg-bar">
-        <button id="btn-mx" class="active" onclick="toggleMirror('x')" title="Mirror X">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2,2"/><polyline points="8,8 4,12 8,16"/><polyline points="16,8 20,12 16,16"/></svg>
-        </button>
-        <button id="btn-my" class="active" onclick="toggleMirror('y')" title="Mirror Y">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2,2"/><polyline points="8,8 12,4 16,8"/><polyline points="8,16 12,20 16,16"/></svg>
-        </button>
-        <button id="btn-fx" onclick="toggleFlip('x')" title="Flip X">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21"/><polygon points="4,7 10,12 4,17"/><polygon points="20,7 14,12 20,17" fill="currentColor"/></svg>
-        </button>
-        <button id="btn-fy" onclick="toggleFlip('y')" title="Flip Y">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><polygon points="7,4 12,10 17,4"/><polygon points="7,20 12,14 17,20" fill="currentColor"/></svg>
-        </button>
-        <button id="btn-snapgrid" onclick="toggleSnapGrid()" title="Snap Grid">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="4" x2="4" y2="20"/><line x1="10" y1="4" x2="10" y2="20"/><line x1="16" y1="4" x2="16" y2="20"/><line x1="4" y1="4" x2="20" y2="4"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="10" r="2" fill="currentColor"/></svg>
-        </button>
-        <button id="btn-fast" onclick="toggleFastMode()" title="Fast Mode">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>
-        </button>
-        <button id="btn-precompute" onclick="togglePrecompute()" title="Pre-compute Frames">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        </button>
-      </div>
-      <div id="snapgrid-controls" style="display:none">
-        <div class="row">
-          <label>Grid Unit</label>
-          <input type="range" id="sGridUnit" min="10" max="500" step="1" value="50">
-          <input type="number" class="val" id="vGridUnit" value="50">
-        </div>
-      </div>
-      <div id="fast-controls" style="display:none">
-        <div class="row">
-          <label>Resolution</label>
-          <input type="range" id="sRenderRes" min="1" max="16" step="1" value="2">
-          <span class="val" id="vRenderRes">1/2</span>
-        </div>
-      </div>
-      <div id="precompute-controls" style="display:none">
-        <div class="row">
-          <label>Frames</label>
-          <input type="range" id="sPrecomputeFrames" min="1" max="10" step="1" value="3">
-          <input type="number" class="val" id="vPrecomputeFrames" value="3">
-        </div>
-      </div>
-
 
       <div class="divider"></div>
       <div class="section-title">Display</div>
@@ -1253,7 +1310,7 @@
         </div>
         <div class="row">
           <label>Blend</label>
-          <select id="selBandBlend" onchange="window.shaderParams.bandBlendMode=parseInt(this.value);window.shaderDirty=true">
+          <select id="selBandBlend" onchange="window.shaderParams.bandBlendMode=parseInt(this.value);document.getElementById('bandHueOffRow').style.display=this.value==='9'?'':'none';window.shaderDirty=true">
             <option value="0" selected>Overlay</option>
             <option value="1">Multiply</option>
             <option value="2">Screen</option>
@@ -1263,7 +1320,13 @@
             <option value="6">Color Burn</option>
             <option value="7">Linear Light</option>
             <option value="8">Normal</option>
+            <option value="9">Hue Shift</option>
           </select>
+        </div>
+        <div class="row" id="bandHueOffRow" style="display:none">
+          <label>Hue Offset</label>
+          <input type="range" id="sBandHueOffset" min="0" max="1" step="0.001" value="0">
+          <input type="number" class="val" id="vBandHueOffset" value="0.000" min="0" max="1" step="0.001">
         </div>
         <div class="row">
           <label>Hue Strength</label>
@@ -1371,9 +1434,10 @@
       flowScale: 2.0, flowSpeed: 1.0, flowDistort1: 8.1, flowDistort2: 4.13,
       flowSmoothLo: 0.15, flowSmoothHi: 0.85,
       flowType: 0,
-      flow1Style: 0, flowHueOffset: 0.0, flowHueRadius: 1.0,
+      flow1Style: 0, flowHueOffset: 0.0, flowHueRadius: 1.0, flowHueEnabled: false,
       f2Scale: 6.0, f2VelX: 0.1, f2VelY: 0.2, f2Speed: 2.5,
       f2Detail: 200.0, f2Twist: 50.0, f2Iter1: 20, f2Iter2: 20, f2Mode: 0,
+      f2HueOffset: 0.0, f2HueRadius: 1.0, f2HueEnabled: false,
       imageScale: 1.0,
       rot: 117, dx: 0, dy: 0,
       sx: 1, sy: 1,
@@ -1464,6 +1528,7 @@
       bandStrength: 1.0,
       bandRandomize: false,
       bandBlendMode: 0,
+      bandHueOffset: 0,
       bandAngleMode: 0,
       bandAngleSeed: 0,
       bandRandCount: false,
@@ -1856,6 +1921,26 @@
       window.shaderDirty = true;
     }
 
+    function toggleFlow1Hue() {
+      var p = window.shaderParams;
+      p.flowHueEnabled = !p.flowHueEnabled;
+      var btn = document.getElementById('btn-flow1-hue-toggle');
+      if(btn) btn.classList.toggle('on', p.flowHueEnabled);
+      var ctrl = document.getElementById('flow1-hue-controls');
+      if(ctrl) ctrl.style.display = p.flowHueEnabled ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
+    function toggleF2Hue() {
+      var p = window.shaderParams;
+      p.f2HueEnabled = !p.f2HueEnabled;
+      var btn = document.getElementById('btn-f2-hue-toggle');
+      if(btn) btn.classList.toggle('on', p.f2HueEnabled);
+      var ctrl = document.getElementById('f2-hue-controls');
+      if(ctrl) ctrl.style.display = p.f2HueEnabled ? '' : 'none';
+      window.shaderDirty = true;
+    }
+
     function setMode(m) {
       window.shaderParams.mode = m;
       document.getElementById('btn-chebyshev').classList.toggle('active', m === 0);
@@ -2066,6 +2151,7 @@
         tileGradEnabled: true,
         radialCenterX: 0, radialCenterY: 0, radialScale: 1,
         embossBlendMode: 8,
+        embossHueOff: 0,
         shapeGradStops: [
           { pos: 0.0, r: 0,   g: 0,   b: 0,   hex: '#000000' },
           { pos: 0.5, r: 255, g: 255, b: 255, hex: '#ffffff' },
@@ -2084,7 +2170,7 @@
         opPatternMode: 0,
         imgPixelEnabled: false,
         imgPixelCols: 5, imgPixelRows: 5,
-        imgPixelBlend: 8, imgPixelOpacity: 1.0,
+        imgPixelBlend: 8, imgPixelOpacity: 1.0, imgPixelHueOff: 0,
         imgPixelAffectScale: false, imgPixelMinScale: -4.0, imgPixelMaxScale: 4.0,
         imgPixelAffectRotate: false, imgPixelMinRotate: -90.0, imgPixelMaxRotate: 90.0,
         imgPixelAffectOffset: false, imgPixelMinOffset: -0.5, imgPixelMaxOffset: 0.5,
@@ -2094,7 +2180,7 @@
         // Oct diamond layer 2 image pixel
         imgPixel2Enabled: false,
         imgPixel2Cols: 5, imgPixel2Rows: 5,
-        imgPixel2Blend: 8, imgPixel2Opacity: 1.0,
+        imgPixel2Blend: 8, imgPixel2Opacity: 1.0, imgPixel2HueOff: 0,
         imgPixel2AffectScale: false, imgPixel2MinScale: -4.0, imgPixel2MaxScale: 4.0,
         imgPixel2AffectRotate: false, imgPixel2MinRotate: -90.0, imgPixel2MaxRotate: 90.0,
         imgPixel2AffectOffset: false, imgPixel2MinOffset: -0.5, imgPixel2MaxOffset: 0.5,
@@ -2249,15 +2335,18 @@
         return '<button id="'+s('btn-shape-'+d[0])+'" class="shape-icon'+(ps===m?' active':'')+'" onclick="setPixShape('+i+','+m+')" title="'+d[1]+'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+d[2]+'</svg></button>';
       }).join('');
 
-      var embossOpts = ['Overlay','Multiply','Screen','Soft Light','Hard Light','Color Dodge','Color Burn','Linear Light','Normal'];
+      var embossOpts = ['Overlay','Multiply','Screen','Soft Light','Hard Light','Color Dodge','Color Burn','Linear Light','Normal','Hue Shift'];
       var embossHTML = embossOpts.map(function(n,v){
         return '<option value="'+v+'"'+(inst.embossBlendMode===v?' selected':'')+'>'+n+'</option>';
       }).join('');
 
       var opOn = inst.opPatternsEnabled !== false;
-      var imgBlendOpts = [['Normal',8],['Overlay',0],['Multiply',1],['Screen',2],['Soft Light',3],['Hard Light',4],['Color Dodge',5],['Color Burn',6],['Linear Light',7]];
+      var imgBlendOpts = [['Normal',8],['Overlay',0],['Multiply',1],['Screen',2],['Soft Light',3],['Hard Light',4],['Color Dodge',5],['Color Burn',6],['Linear Light',7],['Hue Shift',9]];
       var imgBlendHTML = imgBlendOpts.map(function(x){
         return '<option value="'+x[1]+'"'+(inst.imgPixelBlend===x[1]?' selected':'')+'>'+x[0]+'</option>';
+      }).join('');
+      var imgBlend2HTML = imgBlendOpts.map(function(x){
+        return '<option value="'+x[1]+'"'+(inst.imgPixel2Blend===x[1]?' selected':'')+'>'+x[0]+'</option>';
       }).join('');
 
       return [
@@ -2344,11 +2433,13 @@
 '    <input type="number" class="val" id="'+s('vShapeGradOpacity')+'" value="'+inst.shapeGradOpacity.toFixed(2)+'" min="0" max="1" step="0.01">',
 '  </div>',
 '  <div class="seg-bar">',
-'    <button id="'+s('btn-sgdir-h')+'" class="'+(inst.shapeGradDir===0?'active':'')+'" onclick="setPixSGDir('+i+',0)">Horizontal</button>',
-'    <button id="'+s('btn-sgdir-v')+'" class="'+(inst.shapeGradDir===1?'active':'')+'" onclick="setPixSGDir('+i+',1)">Vertical</button>',
-'    <button id="'+s('btn-sgdir-r')+'" class="'+(inst.shapeGradDir===2?'active':'')+'" onclick="setPixSGDir('+i+',2)">Radial</button>',
+'    <button id="'+s('btn-sgdir-0')+'" class="'+(inst.shapeGradDir===0?'active':'')+'" onclick="setPixSGDir('+i+',0)">0°</button>',
+'    <button id="'+s('btn-sgdir-1')+'" class="'+(inst.shapeGradDir===1?'active':'')+'" onclick="setPixSGDir('+i+',1)">45°</button>',
+'    <button id="'+s('btn-sgdir-2')+'" class="'+(inst.shapeGradDir===2?'active':'')+'" onclick="setPixSGDir('+i+',2)">90°</button>',
+'    <button id="'+s('btn-sgdir-3')+'" class="'+(inst.shapeGradDir===3?'active':'')+'" onclick="setPixSGDir('+i+',3)">135°</button>',
+'    <button id="'+s('btn-sgdir-4')+'" class="'+(inst.shapeGradDir===4?'active':'')+'" onclick="setPixSGDir('+i+',4)">Radial</button>',
 '  </div>',
-'  <div id="'+s('radial-controls')+'" style="display:'+(inst.shapeGradDir===2?'':'none')+'">',
+'  <div id="'+s('radial-controls')+'" style="display:'+(inst.shapeGradDir===4?'':'none')+'">',
 '    <div class="row"><label>Center X</label>',
 '      <input type="range" id="'+s('sRadialX')+'" min="-1" max="1" step="0.01" value="'+inst.radialCenterX+'">',
 '      <input type="number" class="val" id="'+s('vRadialX')+'" value="'+inst.radialCenterX.toFixed(2)+'" min="-1" max="1" step="0.01">',
@@ -2358,11 +2449,15 @@
 '      <input type="number" class="val" id="'+s('vRadialY')+'" value="'+inst.radialCenterY.toFixed(2)+'" min="-1" max="1" step="0.01">',
 '    </div>',
 '    <div class="row"><label>Scale</label>',
-'      <input type="range" id="'+s('sRadialScale')+'" min="0" max="2" step="0.01" value="'+(inst.radialScale||1)+'">',
-'      <input type="number" class="val" id="'+s('vRadialScale')+'" value="'+(inst.radialScale||1).toFixed(2)+'" min="0" max="2" step="0.01">',
+'      <input type="range" id="'+s('sRadialScale')+'" min="0" max="4" step="0.01" value="'+(inst.radialScale||1)+'">',
+'      <input type="number" class="val" id="'+s('vRadialScale')+'" value="'+(inst.radialScale||1).toFixed(2)+'" min="0" max="4" step="0.01">',
 '    </div>',
 '  </div>',
 '  <div class="row"><label>Blend</label><select id="'+s('selEmbossBlend')+'">'+embossHTML+'</select></div>',
+'  <div class="row" id="'+s('embossHueOffRow')+'" style="display:'+(inst.embossBlendMode===9?'':'none')+'"><label>Hue Offset</label>',
+'    <input type="range" id="'+s('sEmbossHueOff')+'" min="0" max="1" step="0.001" value="'+(inst.embossHueOff||0)+'">',
+'    <input type="number" class="val" id="'+s('vEmbossHueOff')+'" value="'+((inst.embossHueOff||0).toFixed(3))+'" min="0" max="1" step="0.001">',
+'  </div>',
 '</div>',
 // Opacity Pattern
 '<div class="divider"></div>',
@@ -2449,6 +2544,10 @@
 '    <input type="number" class="val" id="'+s('vImgPixelOpacity')+'" value="'+inst.imgPixelOpacity.toFixed(2)+'" min="0" max="1" step="0.01">',
 '  </div>',
 '  <div class="row"><label>Blend</label><select id="'+s('selImgPixelBlend')+'">'+imgBlendHTML+'</select></div>',
+'  <div class="row" id="'+s('imgPixelHueOffRow')+'" style="display:'+(inst.imgPixelBlend===9?'':'none')+'"><label>Hue Offset</label>',
+'    <input type="range" id="'+s('sImgPixelHueOff')+'" min="0" max="1" step="0.001" value="'+(inst.imgPixelHueOff||0)+'">',
+'    <input type="number" class="val" id="'+s('vImgPixelHueOff')+'" value="'+((inst.imgPixelHueOff||0).toFixed(3))+'" min="0" max="1" step="0.001">',
+'  </div>',
 '  <div class="row"><label>Mask</label>',
 '    <button class="toggle-active'+(inst.imgPixelMask?' on':'')+'" id="'+s('btn-imgpixel-mask')+'" onclick="togglePixImgPixelMask('+i+',1)" style="width:42px;height:20px;min-width:42px"></button>',
 '  </div>',
@@ -2513,7 +2612,11 @@
 '    <input type="range" id="'+s('sImgPixel2Opacity')+'" min="0" max="1" step="0.01" value="'+(inst.imgPixel2Opacity != null ? inst.imgPixel2Opacity : 1)+'">',
 '    <input type="number" class="val" id="'+s('vImgPixel2Opacity')+'" value="'+((inst.imgPixel2Opacity != null ? inst.imgPixel2Opacity : 1).toFixed(2))+'" min="0" max="1" step="0.01">',
 '  </div>',
-'  <div class="row"><label>Blend</label><select id="'+s('selImgPixel2Blend')+'">'+imgBlendHTML+'</select></div>',
+'  <div class="row"><label>Blend</label><select id="'+s('selImgPixel2Blend')+'">'+imgBlend2HTML+'</select></div>',
+'  <div class="row" id="'+s('imgPixel2HueOffRow')+'" style="display:'+(inst.imgPixel2Blend===9?'':'none')+'"><label>Hue Offset</label>',
+'    <input type="range" id="'+s('sImgPixel2HueOff')+'" min="0" max="1" step="0.001" value="'+(inst.imgPixel2HueOff||0)+'">',
+'    <input type="number" class="val" id="'+s('vImgPixel2HueOff')+'" value="'+((inst.imgPixel2HueOff||0).toFixed(3))+'" min="0" max="1" step="0.001">',
+'  </div>',
 '  <div class="row"><label>Mask</label>',
 '    <button class="toggle-active'+(inst.imgPixel2Mask?' on':'')+'" id="'+s('btn-imgpixel2-mask')+'" onclick="togglePixImgPixelMask('+i+',2)" style="width:42px;height:20px;min-width:42px"></button>',
 '  </div>',
@@ -2609,13 +2712,33 @@
       wireInst(s('sImgPixel2MinOffset'), s('vImgPixel2MinOffset'), 'imgPixel2MinOffset', function(v){return v.toFixed(2);});
       wireInst(s('sImgPixel2MaxOffset'), s('vImgPixel2MaxOffset'), 'imgPixel2MaxOffset', function(v){return v.toFixed(2);});
 
-      // Selects
+      // Hue offset sliders for hue-shift blend mode
+      wireInst(s('sEmbossHueOff'),    s('vEmbossHueOff'),    'embossHueOff',    function(v){return v.toFixed(3);});
+      wireInst(s('sImgPixelHueOff'),  s('vImgPixelHueOff'),  'imgPixelHueOff',  function(v){return v.toFixed(3);});
+      wireInst(s('sImgPixel2HueOff'), s('vImgPixel2HueOff'), 'imgPixel2HueOff', function(v){return v.toFixed(3);});
+
+      // Selects — update value and show/hide hue offset row
       var emSel = document.getElementById(s('selEmbossBlend'));
-      if (emSel) emSel.onchange = function(){ inst.embossBlendMode = parseInt(this.value); window.shaderDirty = true; };
+      if (emSel) emSel.onchange = function(){
+        inst.embossBlendMode = parseInt(this.value);
+        var r = document.getElementById(s('embossHueOffRow'));
+        if (r) r.style.display = (inst.embossBlendMode === 9) ? '' : 'none';
+        window.shaderDirty = true;
+      };
       var ibSel = document.getElementById(s('selImgPixelBlend'));
-      if (ibSel) ibSel.onchange = function(){ inst.imgPixelBlend = parseInt(this.value); window.shaderDirty = true; };
+      if (ibSel) ibSel.onchange = function(){
+        inst.imgPixelBlend = parseInt(this.value);
+        var r = document.getElementById(s('imgPixelHueOffRow'));
+        if (r) r.style.display = (inst.imgPixelBlend === 9) ? '' : 'none';
+        window.shaderDirty = true;
+      };
       var ib2Sel = document.getElementById(s('selImgPixel2Blend'));
-      if (ib2Sel) ib2Sel.onchange = function(){ inst.imgPixel2Blend = parseInt(this.value); window.shaderDirty = true; };
+      if (ib2Sel) ib2Sel.onchange = function(){
+        inst.imgPixel2Blend = parseInt(this.value);
+        var r = document.getElementById(s('imgPixel2HueOffRow'));
+        if (r) r.style.display = (inst.imgPixel2Blend === 9) ? '' : 'none';
+        window.shaderDirty = true;
+      };
     }
 
     /* ── Per-instance toggle/set functions ──────────── */
@@ -2729,12 +2852,12 @@
     function setPixSGDir(i, d) {
       var inst = window.shaderParams.pixelateInstances[i];
       inst.shapeGradDir = d;
-      ['h','v','r'].forEach(function(dir,idx) {
-        var btn = document.getElementById('btn-sgdir-'+dir+'_'+i);
+      [0,1,2,3,4].forEach(function(idx) {
+        var btn = document.getElementById('btn-sgdir-'+idx+'_'+i);
         if (btn) btn.classList.toggle('active', idx === d);
       });
       var rc = document.getElementById('radial-controls_'+i);
-      if (rc) rc.style.display = d === 2 ? '' : 'none';
+      if (rc) rc.style.display = d === 4 ? '' : 'none';
       window.shaderDirty = true;
     }
 
@@ -3515,21 +3638,18 @@
       btn.classList.toggle('active', !visible);
     }
 
-    // Wire video sliders
-    document.getElementById('sVideoLen').addEventListener('input', function() {
-      document.getElementById('vVideoLen').textContent = parseFloat(this.value) + ' min';
-    });
     // FPS dropdown handled inline via onchange
 
     function startRecording() {
       const format = document.getElementById('selVideoFmt').value;
       const canvas = document.getElementById('glCanvas');
       const p = window.shaderParams;
-      const lengthMin = parseFloat(document.getElementById('sVideoLen').value);
+      const lengthMin = parseFloat(document.getElementById('selVideoLen').value);
       const fps = p.fps || 30;
       const totalFrames = Math.round(lengthMin * 60 * fps);
       const wasAnimating = p.animating;
       const savedRot = p.rot;
+      const savedFlowTime = window._flowTime || 0;
 
       videoCancelFlag = false;
       videoRecording = true;
@@ -3556,7 +3676,25 @@
         videoRecording = false;
         resetVideoUI();
         p.rot = savedRot;
+        window._flowTimeOverride = savedFlowTime;
         if (!wasAnimating) p.animating = false;
+        window.shaderDirty = true;
+      }
+
+      // Advance all animation state for a given frame index
+      function advanceRecordFrame(frame, dt) {
+        const isFlow = p.mode === 4;
+        // Rotation (used by voronoi/noise modes and as secondary for flow)
+        p.rot = (savedRot + p.animSpeed * frame * dt) % 360;
+        const slider = document.getElementById('sRot');
+        if (slider) slider.value = p.rot;
+        const label = document.getElementById('vRot');
+        if (label) { if (label.tagName === 'INPUT') label.value = Math.round(p.rot); else label.textContent = Math.round(p.rot) + '°'; }
+        // Flow time (used by flow mode — drives iTime uniform via window._flowTimeOverride)
+        if (isFlow) {
+          const flowSpeed = p.flowSpeed != null ? p.flowSpeed : 1.0;
+          window._flowTimeOverride = savedFlowTime + flowSpeed * frame * dt;
+        }
         window.shaderDirty = true;
       }
 
@@ -3584,8 +3722,7 @@
         const dt = 1.0 / fps;
         function renderWebM() {
           if (videoCancelFlag || frame >= totalFrames) { videoRecorder.stop(); return; }
-          p.rot = (savedRot + p.animSpeed * frame * dt) % 360;
-          window.shaderDirty = true;
+          advanceRecordFrame(frame, dt);
           // Double rAF: first rAF triggers the GL draw, second rAF ensures GPU finished
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -3604,16 +3741,16 @@
         if (typeof JSZip === 'undefined') {
           const script = document.createElement('script');
           script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-          script.onload = () => recordPngSequence(canvas, totalFrames, fps, savedRot, p, startTime, updateProgress, finish);
+          script.onload = () => recordPngSequence(canvas, totalFrames, fps, p, savedFlowTime, startTime, advanceRecordFrame, updateProgress, finish);
           script.onerror = () => { alert('Failed to load JSZip library. Check network connection.'); finish(); };
           document.head.appendChild(script);
         } else {
-          recordPngSequence(canvas, totalFrames, fps, savedRot, p, startTime, updateProgress, finish);
+          recordPngSequence(canvas, totalFrames, fps, p, savedFlowTime, startTime, advanceRecordFrame, updateProgress, finish);
         }
       }
     }
 
-    function recordPngSequence(canvas, totalFrames, fps, savedRot, p, startTime, updateProgress, finish) {
+    function recordPngSequence(canvas, totalFrames, fps, p, savedFlowTime, startTime, advanceRecordFrame, updateProgress, finish) {
       const zip = new JSZip();
       const folder = zip.folder('frames');
       const padLen = totalFrames.toString().length;
@@ -3631,8 +3768,7 @@
           return;
         }
 
-        p.rot = (savedRot + p.animSpeed * frame * dt) % 360;
-        window.shaderDirty = true;
+        advanceRecordFrame(frame, dt);
 
         // Double rAF to ensure GPU fully renders before PNG capture
         requestAnimationFrame(() => {
@@ -3738,23 +3874,30 @@
       applyConfigToUI();
       window.shaderDirty = true;
 
-      // Restore image pixel textures from saved dataURLs
+      // Restore image pixel textures from saved dataURLs.
+      // uploadInstanceImgPixelTex is defined inside shader.js which may not have
+      // finished compiling yet. We queue uploads and flush them as soon as the
+      // function becomes available (shader.js calls window._flushTexQueue on ready).
+      function tryUpload(fn, ...args) {
+        if (typeof window[fn] === 'function') {
+          window[fn](...args);
+          window.shaderDirty = true;
+        } else {
+          window._texUploadQueue = window._texUploadQueue || [];
+          window._texUploadQueue.push({ fn, args });
+        }
+      }
+
       var insts = window.shaderParams.pixelateInstances || [];
       insts.forEach(function(inst, idx) {
         if (inst.imgDataURL) {
           var img = new Image();
-          img.onload = function() {
-            if (window.uploadInstanceImgPixelTex) window.uploadInstanceImgPixelTex(idx, img);
-            window.shaderDirty = true;
-          };
+          img.onload = function() { tryUpload('uploadInstanceImgPixelTex', idx, img); };
           img.src = inst.imgDataURL;
         }
         if (inst.imgData2URL) {
           var img2 = new Image();
-          img2.onload = function() {
-            if (window.uploadInstanceImgPixel2Tex) window.uploadInstanceImgPixel2Tex(idx, img2);
-            window.shaderDirty = true;
-          };
+          img2.onload = function() { tryUpload('uploadInstanceImgPixel2Tex', idx, img2); };
           img2.src = inst.imgData2URL;
         }
       });
@@ -3762,10 +3905,7 @@
       // Restore image source texture
       if (window.shaderParams.imageDataURL) {
         var srcImg = new Image();
-        srcImg.onload = function() {
-          if (window.uploadImageSourceTex) window.uploadImageSourceTex(srcImg);
-          window.shaderDirty = true;
-        };
+        srcImg.onload = function() { tryUpload('uploadImageSourceTex', srcImg); };
         srcImg.src = window.shaderParams.imageDataURL;
       }
     }
@@ -3843,6 +3983,12 @@
       setFlow1Style(f1s);
       setSlider('sFlowHueOffset', p.flowHueOffset != null ? p.flowHueOffset : 0.0, 'vFlowHueOffset', v => v.toFixed(3));
       setSlider('sFlowHueRadius', p.flowHueRadius != null ? p.flowHueRadius : 1.0, 'vFlowHueRadius', v => v.toFixed(3));
+      // Flow1 hue toggle
+      var fhe = !!p.flowHueEnabled;
+      var f1hBtn = document.getElementById('btn-flow1-hue-toggle');
+      if(f1hBtn) f1hBtn.classList.toggle('on', fhe);
+      var f1hCtrl = document.getElementById('flow1-hue-controls');
+      if(f1hCtrl) f1hCtrl.style.display = fhe ? '' : 'none';
       var f2m = p.f2Mode != null ? p.f2Mode : 0;
       setFlow2Mode(f2m);
       setSlider('sF2Scale',  p.f2Scale  != null ? p.f2Scale  : 6.0,   'vF2Scale',  v => v.toFixed(1));
@@ -3853,6 +3999,14 @@
       setSlider('sF2Twist',  p.f2Twist  != null ? p.f2Twist  : 50.0,  'vF2Twist',  v => v.toFixed(1));
       setSlider('sF2Iter1',  p.f2Iter1  != null ? p.f2Iter1  : 20,    'vF2Iter1',  v => Math.round(v));
       setSlider('sF2Iter2',  p.f2Iter2  != null ? p.f2Iter2  : 20,    'vF2Iter2',  v => Math.round(v));
+      setSlider('sF2HueOffset', p.f2HueOffset != null ? p.f2HueOffset : 0.0, 'vF2HueOffset', v => v.toFixed(3));
+      setSlider('sF2HueRadius', p.f2HueRadius != null ? p.f2HueRadius : 1.0, 'vF2HueRadius', v => v.toFixed(3));
+      // Flow2 hue toggle
+      var f2he = !!p.f2HueEnabled;
+      var f2hBtn = document.getElementById('btn-f2-hue-toggle');
+      if(f2hBtn) f2hBtn.classList.toggle('on', f2he);
+      var f2hCtrl = document.getElementById('f2-hue-controls');
+      if(f2hCtrl) f2hCtrl.style.display = f2he ? '' : 'none';
       setSlider('sImageScale', p.imageScale != null ? p.imageScale : 1, 'vImageScale', v => v.toFixed(2));
       // Noise type dropdown
       var nts = document.getElementById('selNoiseType');
@@ -4058,16 +4212,20 @@
       setVis('shape-controls', p.pixelShape > 0);
 
       // Shape gradient dir
-      setToggle('btn-sgdir-h', p.shapeGradDir === 0);
-      setToggle('btn-sgdir-v', p.shapeGradDir === 1);
-      setToggle('btn-sgdir-r', p.shapeGradDir === 2);
-      setVis('radial-controls', p.shapeGradDir === 2);
+      setToggle('btn-sgdir-0', p.shapeGradDir === 0);
+      setToggle('btn-sgdir-1', p.shapeGradDir === 1);
+      setToggle('btn-sgdir-2', p.shapeGradDir === 2);
+      setToggle('btn-sgdir-3', p.shapeGradDir === 3);
+      setToggle('btn-sgdir-4', p.shapeGradDir === 4);
+      setVis('radial-controls', p.shapeGradDir === 4);
       setSlider('sRadialX', p.radialCenterX, 'vRadialX', v => v.toFixed(2));
       setSlider('sRadialY', p.radialCenterY, 'vRadialY', v => v.toFixed(2));
       setSlider('sRadialScale', p.radialScale, 'vRadialScale', v => v.toFixed(2));
 
       // Dropdowns (null-safe)
       var sb = el('selBandBlend'); if (sb) sb.value = p.bandBlendMode || 0;
+      var bhor = el('bandHueOffRow'); if (bhor) bhor.style.display = (p.bandBlendMode === 9) ? '' : 'none';
+      setSlider('sBandHueOffset', p.bandHueOffset != null ? p.bandHueOffset : 0, 'vBandHueOffset', v => v.toFixed(3));
       var se = el('selEmbossBlend'); if (se) se.value = p.embossBlendMode || 0;
 
       // Color pickers (null-safe)
@@ -4166,6 +4324,8 @@
     wire('sF2Twist',  'vF2Twist',  'f2Twist',  v => v.toFixed(1));
     wire('sF2Iter1',  'vF2Iter1',  'f2Iter1',  v => Math.round(v));
     wire('sF2Iter2',  'vF2Iter2',  'f2Iter2',  v => Math.round(v));
+    wire('sF2HueOffset', 'vF2HueOffset', 'f2HueOffset', v => v.toFixed(3));
+    wire('sF2HueRadius', 'vF2HueRadius', 'f2HueRadius', v => v.toFixed(3));
 
     // Resolution slider — custom wire with fraction display
     (function() {
@@ -4231,6 +4391,7 @@
     wire('sBandLumMax',  'vBandLumMax',  'bandLumMax',   v => v.toFixed(2));
     wire('sBandHueStrength','vBandHueStrength','bandHueStrength', v => v.toFixed(2));
     wire('sBandHueRadius','vBandHueRadius','bandHueRadius', v => v.toFixed(2));
+    wire('sBandHueOffset','vBandHueOffset','bandHueOffset', v => v.toFixed(3));
     wire('sGradeHue',     'vGradeHue',     'gradeHue',      v => Math.round(v) + '°');
     wire('sGradeSat',     'vGradeSat',     'gradeSat',      v => v.toFixed(2));
     wire('sGradeVal',     'vGradeVal',     'gradeVal',      v => v.toFixed(2));
@@ -4893,15 +5054,24 @@
 
     // Initialize background color
     applyBgColor();
+
+    // Register a callback for shader.js to call once GL programs are compiled.
+    // applyConfigToUI() runs before shader.js initializes so uniform locations
+    // don't exist yet — this re-applies everything once they do.
+    window._pendingApplyConfig = function() {
+      applyConfigToUI();
+      uploadAllOpPatterns();
+    };
     
   </script>
 
   <script src="shader.js"></script>
   <script>
-    // Upload opacity patterns after shader.js creates the texture
+    // uploadAllOpPatterns is now called via _pendingApplyConfig inside shader.js
+    // Keep a short fallback in case shader compiled synchronously (older drivers)
     setTimeout(() => {
-      uploadAllOpPatterns();
-    }, 300);
+      if (typeof uploadAllOpPatterns === 'function') uploadAllOpPatterns();
+    }, 500);
   </script>
 </body>
 </html>

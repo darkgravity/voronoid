@@ -21,6 +21,7 @@
   "flow1Style": 0,
   "flowHueOffset": 0,
   "flowHueRadius": 1,
+  "flowHueEnabled": false,
   "f2Scale": 6,
   "f2VelX": 0.1,
   "f2VelY": 0.2,
@@ -30,8 +31,11 @@
   "f2Iter1": 20,
   "f2Iter2": 20,
   "f2Mode": 0,
+  "f2HueOffset": 0,
+  "f2HueRadius": 1,
+  "f2HueEnabled": false,
   "imageScale": 1,
-  "rot": 2.8383466662175842,
+  "rot": 87.17167999952065,
   "dx": 0.5890602077002306,
   "dy": 0.1298720969275292,
   "sx": 1,
@@ -151,13 +155,13 @@
       "quadSteps": 5,
       "quadEnabled": true,
       "genDiamond": false,
-      "shapeGradOpacity": 0.14,
-      "shapeGradDir": 2,
+      "shapeGradOpacity": 1,
+      "shapeGradDir": 4,
       "tileGradEnabled": true,
-      "radialCenterX": -0.36,
-      "radialCenterY": 0.89,
-      "radialScale": 1.36,
-      "embossBlendMode": 5,
+      "radialCenterX": -0.12,
+      "radialCenterY": 0.12,
+      "radialScale": 2,
+      "embossBlendMode": 9,
       "shapeGradStops": [
         {
           "pos": 1,
@@ -172,13 +176,6 @@
           "g": 255,
           "b": 255,
           "hex": "#ffffff"
-        },
-        {
-          "pos": 0.6757525249798121,
-          "r": 182,
-          "g": 182,
-          "b": 182,
-          "hex": "#b6b6b6"
         }
       ],
       "gapColor": "#290000",
@@ -222,7 +219,8 @@
       "imgPixelName": "tile.png",
       "imgDataURL": null,
       "shapeScale": 1,
-      "forceSquare": true
+      "forceSquare": true,
+      "embossHueOff": 0.502
     },
     {
       "id": 3,
@@ -301,6 +299,7 @@
   "bandStrength": 0.51,
   "bandRandomize": true,
   "bandBlendMode": 5,
+  "bandHueOffset": 0,
   "bandAngleMode": 1,
   "bandAngleSeed": 0,
   "bandRandCount": false,
@@ -310,10 +309,10 @@
   "bandHueStrength": 0.79,
   "bandHueRadius": 0.5,
   "bandOutline": false,
-  "gradeHue": 0,
+  "gradeHue": 360,
   "gradeSat": 1.02,
-  "gradeVal": 1.42,
-  "gradeContrast": 1,
+  "gradeVal": 1.44,
+  "gradeContrast": 1.06,
   "postProcessEnabled": true,
   "gradientStops": [
     {
