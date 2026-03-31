@@ -1145,11 +1145,16 @@
 
       <!-- Pre Process section (always visible, works for both voronoi and camera) -->
       <div class="divider"></div>
-      <div class="section-title">Blur</div>
+      <div class="toggle-header">
+        <span class="toggle-label">Blur</span>
+        <button class="toggle-active on" id="btn-blur-toggle" onclick="toggleBlur()"></button>
+      </div>
+      <div id="blur-controls">
       <div class="row">
         <label>Radius</label>
         <input type="range" id="sBlurRadius" min="0" max="20" step="0.5" value="0">
         <input type="number" class="val" id="vBlurRadius" value="0.0" min="0" max="20" step="0.5">
+      </div>
       </div>
       <div class="divider"></div>
       <div class="toggle-header">
@@ -1471,6 +1476,7 @@
       colorize: true,
       preProcess: false,
       blurRadius: 0,
+      blurEnabled: true,
       camHue: 0, camSat: 1, camVal: 1, camContrast: 1,  // 0=gradient, 1=hue
       gradientSeed: 0,
       imgPixelEnabled: false,
@@ -1980,6 +1986,16 @@
       if (window.shaderParams.bgMode === 'random' && typeof updateBgRandomPreview === 'function') updateBgRandomPreview();
     }
 
+    function toggleBlur() {
+      var p = window.shaderParams;
+      p.blurEnabled = !(p.blurEnabled !== false);
+      var btn = document.getElementById('btn-blur-toggle');
+      if (btn) btn.classList.toggle('on', p.blurEnabled !== false);
+      var ctrl = document.getElementById('blur-controls');
+      if (ctrl) ctrl.classList.toggle('controls-disabled', !p.blurEnabled);
+      window.shaderDirty = true;
+    }
+
     function togglePreProcess() {
       var p = window.shaderParams;
       p.preProcess = !p.preProcess;
@@ -2150,6 +2166,7 @@
         id: ++pixelateInstanceIdCounter,
         enabled: true,
         resolution: 1,
+        overrideResolution: false,
         pixelW: 23, pixelH: 11, pixelScale: 1.0,
         weaveMode: 0, pixelShape: 0,
         shapeMargin: 3, shapeBleed: 0, shapeScale: 1.0,
@@ -2368,6 +2385,10 @@
 '<div class="row" style="margin-top:4px">',
 '  <label style="width:70px;font-size:10px">Resolution</label>',
 '  <div class="seg-bar" style="flex:1;margin-bottom:0">'+resHTML+'</div>',
+'</div>',
+'<div class="toggle-header" style="margin-top:4px;margin-bottom:4px">',
+'  <span class="toggle-label" style="font-size:11px">Override Resolution</span>',
+'  <button class="toggle-active'+(inst.overrideResolution?' on':'')+'" id="'+s('btn-override-res')+'" onclick="setPixOverrideRes('+i+')"></button>',
 '</div>',
 '<div class="row"><label>Pixel Width</label>',
 '  <input type="range" id="'+s('sPixelW')+'" min="1" max="50" step="1" value="'+inst.pixelW+'">',
@@ -2785,6 +2806,16 @@
         var btn = document.getElementById('btn-pix-res-'+rv+'_'+i);
         if (btn) btn.classList.toggle('active', rv === r);
       });
+      window.rebuildInstanceFBOs();
+      window.shaderDirty = true;
+    }
+
+    function setPixOverrideRes(i) {
+      var inst = window.shaderParams.pixelateInstances[i];
+      if (!inst) return;
+      inst.overrideResolution = !inst.overrideResolution;
+      var btn = document.getElementById('btn-override-res_'+i);
+      if (btn) btn.classList.toggle('on', !!inst.overrideResolution);
       window.rebuildInstanceFBOs();
       window.shaderDirty = true;
     }
@@ -4190,12 +4221,18 @@
       setSlider('sImgPixelMinOffset', p.imgPixelMinOffset != null ? p.imgPixelMinOffset : -0.5, 'vImgPixelMinOffset', v => v.toFixed(2));
       setSlider('sImgPixelMaxOffset', p.imgPixelMaxOffset != null ? p.imgPixelMaxOffset : 0.5, 'vImgPixelMaxOffset', v => v.toFixed(2));
 
+      // Blur
+      var blurOn = p.blurEnabled !== false;
+      setToggle('btn-blur-toggle', blurOn);
+      var blurCtrl = el('blur-controls');
+      if (blurCtrl) blurCtrl.classList.toggle('controls-disabled', !blurOn);
+      setSlider('sBlurRadius', p.blurRadius != null ? p.blurRadius : 0, 'vBlurRadius', v => v.toFixed(1));
+
       // Pre Process
       var pp = !!p.preProcess;
       setToggle('btn-preprocess-toggle', pp);
       var pc = el('preprocess-controls');
       if (pc) pc.classList.toggle('controls-disabled', !pp);
-      setSlider('sBlurRadius', p.blurRadius != null ? p.blurRadius : 0, 'vBlurRadius', v => v.toFixed(1));
       setSlider('sCamHue', p.camHue, 'vCamHue', v => Math.round(v) + '°');
       setSlider('sCamSat', p.camSat, 'vCamSat', v => v.toFixed(2));
       setSlider('sCamVal', p.camVal, 'vCamVal', v => v.toFixed(2));
