@@ -6,10 +6,14 @@ const VERT_SRC = `
   void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
 `;
 
-const FRAGMENT_GLSL_SRC = `precision highp float;
+const FRAGMENT_GLSL_SRC = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
 precision highp int;
+#else
+precision mediump float;
+precision mediump int;
+#endif
 
-invariant gl_FragColor;
 
 uniform vec2  iResolution;
 uniform int   uMode;
@@ -928,10 +932,13 @@ void main() {
 }
 `;
 
-const EDGE_GLSL_SRC = `precision highp float;
+const EDGE_GLSL_SRC = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
 precision highp int;
-
-invariant gl_FragColor;
+#else
+precision mediump float;
+precision mediump int;
+#endif
 
 uniform vec2      iResolution;
 uniform sampler2D uSceneTex;
