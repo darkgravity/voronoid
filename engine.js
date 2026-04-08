@@ -37,7 +37,12 @@ let currentRenderScale = renderScale;
 let curW = 0, curH = 0;
 let sceneW = 0, sceneH = 0;
 function syncSize() {
-  const dpr = (window.devicePixelRatio || 1) * currentRenderScale;
+  let dpr = (window.devicePixelRatio || 1) * currentRenderScale;
+  // Mobile: cap effective DPR at 1.0 so the canvas never exceeds CSS-pixel
+  // resolution. Combined with a multi-pass FBO pipeline (blur + chained
+  // pixelation + edge/grading), full DPR on phones turns into 5–10M frag
+  // shader invocations per frame and the page locks up.
+  if (isMobile) dpr = Math.min(dpr, 1.0);
   const w = (canvas.clientWidth  * dpr) | 0;
   const h = (canvas.clientHeight * dpr) | 0;
   if (w === curW && h === curH) return false;
