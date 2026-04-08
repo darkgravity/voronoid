@@ -26,8 +26,6 @@
         forceSquare: false, maintainThickness: false,
         oblique: false,
         quadSteps: 4, quadEnabled: false, genDiamond: false, twoImage: false,
-        quadCurveEnabled: false, quadCurveMin: 0.0, quadCurveMax: 1.0,
-        quadCurvePoints: [{x:0,y:0},{x:1,y:1}],
         shapeGradOpacity: 0.2, shapeGradDir: 0,
         tileGradEnabled: true,
         fillMode: 1,
@@ -368,21 +366,6 @@
 '    <span class="toggle-label" style="font-size:11px">Reverse Sort</span>',
 '    <button class="toggle-active'+(inst.quadReverse?' on':'')+'" id="'+s('btn-quad-reverse')+'" onclick="setPixQuadReverse('+i+')"></button>',
 '  </div>',
-'  <div class="toggle-header" style="margin-top:4px">',
-'    <span class="toggle-label" style="font-size:11px">Remap Curvature</span>',
-'    <button class="toggle-active'+(inst.quadCurveEnabled?' on':'')+'" id="'+s('btn-quad-curve')+'" onclick="togglePixQuadCurve('+i+')"></button>',
-'  </div>',
-'  <div id="'+s('quad-curve-editor')+'" class="quad-curve-editor" style="display:'+(inst.quadCurveEnabled?'':'none')+'">',
-'    <canvas class="quad-curve-canvas" id="quad-curve-canvas-'+i+'" width="280" height="280"></canvas>',
-'    <div class="row" style="margin-top:4px"><label>Min</label>',
-'      <input type="range" id="'+s('sQuadCurveMin')+'" min="0" max="1" step="0.01" value="'+(inst.quadCurveMin!=null?inst.quadCurveMin:0)+'">',
-'      <input type="number" class="val" id="'+s('vQuadCurveMin')+'" value="'+(inst.quadCurveMin!=null?inst.quadCurveMin.toFixed(2):'0.00')+'" min="0" max="1" step="0.01">',
-'    </div>',
-'    <div class="row"><label>Max</label>',
-'      <input type="range" id="'+s('sQuadCurveMax')+'" min="0" max="1" step="0.01" value="'+(inst.quadCurveMax!=null?inst.quadCurveMax:1)+'">',
-'      <input type="number" class="val" id="'+s('vQuadCurveMax')+'" value="'+(inst.quadCurveMax!=null?inst.quadCurveMax.toFixed(2):'1.00')+'" min="0" max="1" step="0.01">',
-'    </div>',
-'  </div>',
 '</div>',
 '</div>',
 '<div class="section-title" style="margin-top:6px;display:flex;align-items:center;gap:4px;cursor:pointer" onclick="toggleSectionCollapse(\''+s('sec-weave')+'\')">',
@@ -447,6 +430,7 @@
 '  <option value="5"'+(inst.blendMode===5?' selected':'')+'>Color Dodge</option>',
 '  <option value="6"'+(inst.blendMode===6?' selected':'')+'>Color Burn</option>',
 '  <option value="7"'+(inst.blendMode===7?' selected':'')+'>Linear Light</option>',
+'  <option value="8"'+(inst.blendMode===8?' selected':'')+'>Normal</option>',
 '  <option value="9"'+(inst.blendMode===9?' selected':'')+'>Hue Shift</option>',
 '</select></div>',
 '<div id="'+s('shape-magnitude-row')+'" style="display:'+(ps===9?'none':'')+'">',
@@ -760,11 +744,6 @@
       // even if user later switches modes. Inits handles + bar regardless of
       // current visibility (works on hidden elements via class-based selector).
       initCellGradEditor(idx);
-      // Initialize quad curve editor if enabled
-      var pInst = window.shaderParams.pixelateInstances[idx];
-      if (pInst && pInst.quadCurveEnabled) {
-        initQuadCurveEditor(idx);
-      }
     }
     function wirePixelateInstance(i) {
       function s(k) { return k + '_' + i; }
@@ -801,8 +780,6 @@
       wireInst(s('sPixelH'),  s('vPixelH'),  'pixelH',  function(v){return Math.round(v);});
       wireInst(s('sPixelScale'), s('vPixelScale'), 'pixelScale', function(v){return v.toFixed(2);});
       wireInst(s('sQuadSteps'), s('vQuadSteps'), 'quadSteps', function(v){return Math.round(v);});
-      wireInst(s('sQuadCurveMin'), s('vQuadCurveMin'), 'quadCurveMin', function(v){return v.toFixed(2);});
-      wireInst(s('sQuadCurveMax'), s('vQuadCurveMax'), 'quadCurveMax', function(v){return v.toFixed(2);});
       wireInst(s('sShapeMargin'), s('vShapeMargin'), 'shapeMargin', function(v){return Math.round(v);});
       var sbSel = document.getElementById(s('selShapeBlend'));
       if (sbSel) sbSel.onchange = function(){
@@ -1632,186 +1609,6 @@
       var btn = document.getElementById('btn-quad-reverse_'+i);
       if (btn) btn.classList.toggle('on', inst.quadReverse);
       window.shaderDirty = true;
-    }
-
-    function togglePixQuadCurve(i) {
-      var inst = window.shaderParams.pixelateInstances[i];
-      if (!inst) return;
-      inst.quadCurveEnabled = !inst.quadCurveEnabled;
-      if (inst.quadCurveEnabled && (!inst.quadCurvePoints || inst.quadCurvePoints.length < 2)) {
-        inst.quadCurvePoints = [{x:0,y:0},{x:1,y:1}];
-      }
-      var btn = document.getElementById('btn-quad-curve_'+i);
-      if (btn) btn.classList.toggle('on', !!inst.quadCurveEnabled);
-      var ed = document.getElementById('quad-curve-editor_'+i);
-      if (ed) ed.style.display = inst.quadCurveEnabled ? '' : 'none';
-      if (inst.quadCurveEnabled) initQuadCurveEditor(i);
-      window.shaderDirty = true;
-    }
-
-    function initQuadCurveEditor(instIdx) {
-      var inst = window.shaderParams.pixelateInstances[instIdx];
-      if (!inst) return;
-      var canvas = document.getElementById('quad-curve-canvas-'+instIdx);
-      if (!canvas) return;
-      if (!inst.quadCurvePoints || inst.quadCurvePoints.length < 2) {
-        inst.quadCurvePoints = [{x:0,y:0},{x:1,y:1}];
-      }
-      var dpr = window.devicePixelRatio || 1;
-      function resize() {
-        var cssW = canvas.clientWidth || 280;
-        canvas.width = Math.round(cssW * dpr);
-        canvas.height = Math.round(cssW * dpr);
-        draw();
-      }
-      function sortedPts() { return inst.quadCurvePoints.slice().sort(function(a,b){return a.x-b.x;}); }
-      function smoothInterp(pts, x) {
-        // Smoothstep interpolation between adjacent points (matches engine bake)
-        var lo = pts[0], hi = pts[pts.length-1];
-        for (var j = 0; j < pts.length-1; j++) {
-          if (x >= pts[j].x && x <= pts[j+1].x) { lo = pts[j]; hi = pts[j+1]; break; }
-        }
-        var range = hi.x - lo.x;
-        var f = range < 0.0001 ? 0 : (x - lo.x) / range;
-        var sm = f * f * (3 - 2 * f);
-        return lo.y + (hi.y - lo.y) * sm;
-      }
-      function draw() {
-        var ctx = canvas.getContext('2d');
-        var w = canvas.width, h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-        // Background
-        ctx.fillStyle = 'rgba(20,20,28,0.0)';
-        ctx.fillRect(0, 0, w, h);
-        // Grid 4x4
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 1 * dpr;
-        for (var i = 1; i < 4; i++) {
-          ctx.beginPath();
-          ctx.moveTo(i * w / 4, 0); ctx.lineTo(i * w / 4, h); ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(0, i * h / 4); ctx.lineTo(w, i * h / 4); ctx.stroke();
-        }
-        // Diagonal reference (input = output)
-        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-        ctx.lineWidth = 1 * dpr;
-        ctx.beginPath();
-        ctx.moveTo(0, h); ctx.lineTo(w, 0); ctx.stroke();
-        // Min/Max clamp regions (shaded)
-        var mn = inst.quadCurveMin != null ? inst.quadCurveMin : 0;
-        var mx = inst.quadCurveMax != null ? inst.quadCurveMax : 1;
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        ctx.fillRect(0, 0, mn * w, h);
-        ctx.fillRect(mx * w, 0, (1 - mx) * w, h);
-        // Curve
-        var pts = sortedPts();
-        ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-        ctx.lineWidth = 2 * dpr;
-        ctx.beginPath();
-        for (var i = 0; i <= 100; i++) {
-          var x = i / 100;
-          var y = smoothInterp(pts, x);
-          var px = x * w, py = (1 - y) * h;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-        // Control point handles
-        pts.forEach(function(p) {
-          var px = p.x * w, py = (1 - p.y) * h;
-          ctx.fillStyle = '#fff';
-          ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-          ctx.lineWidth = 1.5 * dpr;
-          ctx.beginPath();
-          ctx.rect(px - 5*dpr, py - 5*dpr, 10*dpr, 10*dpr);
-          ctx.fill();
-          ctx.stroke();
-        });
-      }
-      function pickPoint(cx, cy) {
-        var rect = canvas.getBoundingClientRect();
-        var px = (cx - rect.left) / rect.width;
-        var py = 1 - (cy - rect.top) / rect.height;
-        var hitIdx = -1;
-        var bestDist = 0.04; // 4% click tolerance
-        for (var i = 0; i < inst.quadCurvePoints.length; i++) {
-          var p = inst.quadCurvePoints[i];
-          var d = Math.max(Math.abs(p.x - px), Math.abs(p.y - py));
-          if (d < bestDist) { bestDist = d; hitIdx = i; }
-        }
-        return { x: px, y: py, idx: hitIdx };
-      }
-      function bakeAndUpdate() {
-        // Engine reads inst.quadCurvePoints directly during render
-        window.shaderDirty = true;
-        draw();
-      }
-      function onDown(e) {
-        e.preventDefault();
-        var cx, cy;
-        if (e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
-        else { cx = e.clientX; cy = e.clientY; }
-        var hit = pickPoint(cx, cy);
-        var idx = hit.idx;
-        if (idx < 0) {
-          // Add new point at click location
-          inst.quadCurvePoints.push({x: Math.max(0,Math.min(1,hit.x)), y: Math.max(0,Math.min(1,hit.y))});
-          idx = inst.quadCurvePoints.length - 1;
-          bakeAndUpdate();
-        }
-        var dragIdx = idx;
-        var startMs = Date.now();
-        var hasMoved = false;
-        function onMove(ev) {
-          ev.preventDefault();
-          var mx, my;
-          if (ev.touches) { mx = ev.touches[0].clientX; my = ev.touches[0].clientY; }
-          else { mx = ev.clientX; my = ev.clientY; }
-          var rect = canvas.getBoundingClientRect();
-          var nx = Math.max(0, Math.min(1, (mx - rect.left) / rect.width));
-          var ny = Math.max(0, Math.min(1, 1 - (my - rect.top) / rect.height));
-          inst.quadCurvePoints[dragIdx].x = nx;
-          inst.quadCurvePoints[dragIdx].y = ny;
-          hasMoved = true;
-          bakeAndUpdate();
-        }
-        function onUp(ev) {
-          ev && ev.preventDefault && ev.preventDefault();
-          window.removeEventListener('mousemove', onMove);
-          window.removeEventListener('mouseup', onUp);
-          window.removeEventListener('touchmove', onMove);
-          window.removeEventListener('touchend', onUp);
-          // Double-click on existing handle (no drag, quick second click): delete
-          if (!hasMoved && (Date.now() - startMs) < 300) {
-            // Could implement double-click delete with timer; for now just no-op
-          }
-        }
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-        window.addEventListener('touchmove', onMove, {passive:false});
-        window.addEventListener('touchend', onUp);
-      }
-      function onDblClick(e) {
-        e.preventDefault();
-        var hit = pickPoint(e.clientX, e.clientY);
-        if (hit.idx >= 0 && inst.quadCurvePoints.length > 2) {
-          inst.quadCurvePoints.splice(hit.idx, 1);
-          bakeAndUpdate();
-        }
-      }
-      canvas.addEventListener('mousedown', onDown);
-      canvas.addEventListener('touchstart', onDown, {passive:false});
-      canvas.addEventListener('dblclick', onDblClick);
-      // Use ResizeObserver to redraw when canvas finally has a size
-      if (!canvas._quadCurveObs && typeof ResizeObserver !== 'undefined') {
-        canvas._quadCurveObs = new ResizeObserver(function() { resize(); });
-        canvas._quadCurveObs.observe(canvas);
-      }
-      resize();
-      // Wire min/max sliders to redraw the editor's clamp shading
-      var sMin = document.getElementById('sQuadCurveMin_'+instIdx);
-      var sMax = document.getElementById('sQuadCurveMax_'+instIdx);
-      if (sMin) sMin.addEventListener('input', function(){ draw(); });
-      if (sMax) sMax.addEventListener('input', function(){ draw(); });
     }
 
     function setPixMaintainThickness(i) {

@@ -1075,20 +1075,6 @@ struct BlockInfo { vec2 uv; vec2 tilePx; vec2 shapePx; bool isWarp; vec2 cell; }
 // Darker pixels get smaller blocks, brighter get larger
 uniform int       uQuadSteps;         // 1=off, 2-5=number of size levels
 uniform int       uQuadEnabled;       // 0=off, 1=on
-uniform int       uQuadCurveEnabled;  // 0=off, 1=remap luminance via curve LUT
-uniform float     uQuadCurveMin;      // input clamp min (0-1)
-uniform float     uQuadCurveMax;      // input clamp max (0-1)
-uniform sampler2D uQuadCurveTex;      // 1D LUT (256 wide) mapping lum 0-1 → remapped 0-1
-
-// Apply quad curve remap to a luminance value (used only for quadtree level decisions)
-float quadCurveLum(float lum) {
-    if(uQuadCurveEnabled == 1) {
-        float range = max(uQuadCurveMax - uQuadCurveMin, 0.001);
-        lum = clamp((lum - uQuadCurveMin) / range, 0.0, 1.0);
-        lum = texture2D(uQuadCurveTex, vec2(lum, 0.5)).r;
-    }
-    return lum;
-}
 uniform int       uGenDiamond;        // 0=off, 1=generate full diamond shapes at oct corners
 
 // Snap a base grid size so every quadtree level halves to exact integers.
@@ -1133,7 +1119,6 @@ vec2 quadtreeGrid(vec2 rawUV, vec2 baseGrid) {
                         vec3(0.299, 0.587, 0.114));
         lum = clamp(lum, 0.0, 1.0);
         if(uQuadReverse==1) lum = 1.0 - lum;
-        lum = quadCurveLum(lum);
 
         float threshold = float(uQuadSteps - 1 - i) / float(uQuadSteps);
         if(lum >= threshold) break;
@@ -1909,7 +1894,6 @@ void main(){
             // Only render if scene luminance at this cell maps to this level
             vec2 octSampleUV = clamp(octCenter, vec2(0.001), vec2(0.999));
             float octLum = dot(texture2D(uOrigSceneTex, octSampleUV).rgb, vec3(0.299, 0.587, 0.114));
-            octLum = quadCurveLum(clamp(octLum, 0.0, 1.0));
             int octLvl = int(floor(clamp(octLum, 0.0, 1.0) * float(steps)));
             if(octLvl >= steps) octLvl = steps - 1;
             vec2 octPos = (obliqueUV - octCenter) * iResolution;
@@ -1940,7 +1924,6 @@ void main(){
             // Only render diamond if scene luminance at diamond center maps to this level
             vec2 diSampleUV = clamp(diCenter, vec2(0.001), vec2(0.999));
             float diLum = dot(texture2D(uOrigSceneTex, diSampleUV).rgb, vec3(0.299, 0.587, 0.114));
-            diLum = quadCurveLum(clamp(diLum, 0.0, 1.0));
             int diLvl = int(floor(clamp(diLum, 0.0, 1.0) * float(steps)));
             if(diLvl >= steps) diLvl = steps - 1;
             vec2 diaPos = (obliqueUV - diCenter) * iResolution;
@@ -2116,12 +2099,9 @@ void main(){
         _gradFillColor=texture2D(uShapeGradTex,vec2(gradT,0.5)).rgb;
     }
 
-    /* ── Filter stack: applied to the CELL COLOR only, before any blending ── */
-    color = grade(color);
-
-    /* ── Shape blend: composite filtered cell color onto accumPixel ─
+    /* ── Shape blend: composite cell color onto accumPixel ─
        pixelMagnitude controls strength:
-         - non-image: magnitude slider directly
+         - non-image: lum(cellColor) × magnitude slider
          - image: lum(imgPixel) × image opacity slider
        blendMode -1 (None) acts as Normal blend (no math, direct mix)        */
     if(uPixelate==1) {
@@ -2131,6 +2111,9 @@ void main(){
             : color;
         color = mix(accum, layer, clamp(pixelMagnitude, 0.0, 1.0));
     }
+
+    /* ── Filter stack (Color Fill, Gradient Fill, Opacity Pattern, PP effects) ── */
+    color = grade(color);
 
     /* ── Final SDF shape mask: shape interior is opaque, outside is transparent ── */
     if(uPixelate==1 && shapeAlpha < 0.999){

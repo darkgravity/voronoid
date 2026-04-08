@@ -1,57 +1,20 @@
-let canvas = document.getElementById('glCanvas');
+const canvas = document.getElementById('glCanvas');
+let gl = canvas.getContext('webgl', {
+  antialias: false,
+  preserveDrawingBuffer: true
+});
 
-// Robust WebGL context creation with retry. Browsers limit total WebGL contexts
-// (usually 8-16) and rapid Live Server reloads can leave orphaned contexts
-// that haven't been GC'd yet. We try several times with different strategies
-// before giving up.
-function tryGetWebGL(c) {
-  const opts = { antialias: false, preserveDrawingBuffer: true, failIfMajorPerformanceCaveat: false };
-  return c.getContext('webgl', opts)
-      || c.getContext('experimental-webgl', opts)
-      || c.getContext('webgl2', opts);
-}
-
-let gl = tryGetWebGL(canvas);
-
-// Retry: force-lose contexts on OTHER canvases on the page (gradient editors etc.)
-// to free up the GPU's context budget, then try again.
+// Retry once if context lost (common during rapid Live Server reloads)
 if (!gl) {
-  document.querySelectorAll('canvas').forEach(c => {
-    if (c === canvas) return;
-    try {
-      const g = c.getContext('webgl') || c.getContext('experimental-webgl') || c.getContext('webgl2');
-      if (g) {
-        const lc = g.getExtension('WEBGL_lose_context');
-        if (lc) lc.loseContext();
-      }
-    } catch(e){}
-  });
-  gl = tryGetWebGL(canvas);
-}
-
-// Last resort: replace the canvas element entirely. This forces the browser
-// to drop any cached state associated with the old canvas DOM node.
-if (!gl) {
-  const fresh = canvas.cloneNode(false);
-  canvas.parentNode.replaceChild(fresh, canvas);
-  canvas = fresh;
-  gl = tryGetWebGL(canvas);
+  const lostCtx = document.querySelectorAll('canvas');
+  lostCtx.forEach(c => { const g = c.getContext('webgl'); if (g) { g.getExtension('WEBGL_lose_context')?.loseContext(); } });
+  gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
 }
 
 if (!gl) {
   var overlay = document.getElementById('shader-loading-overlay');
-  var msg = 'WebGL context unavailable.\n\n' +
-            'This usually happens when:\n' +
-            '  • Browser extensions are blocking WebGL (MetaMask, Adobe Acrobat, etc.)\n' +
-            '  • Too many tabs/pages are using WebGL\n' +
-            '  • Rapid page reloads orphaned previous contexts\n\n' +
-            'Try:\n' +
-            '  1. Hard reload: Ctrl+Shift+R\n' +
-            '  2. Close other browser tabs\n' +
-            '  3. Open in Incognito (no extensions)\n' +
-            '  4. Disable wallet/PDF browser extensions';
-  if (overlay) overlay.innerHTML = '<pre style="color:#f66;padding:2rem;margin:0;font-size:12px;line-height:1.6">' + msg + '</pre>';
-  throw new Error('No WebGL — see overlay for recovery steps');
+  if (overlay) overlay.innerHTML = '<pre style="color:#f66;padding:2rem;margin:0">WebGL context unavailable.\nTry refreshing the page (Ctrl+Shift+R).</pre>';
+  throw new Error('No WebGL');
 }
 window._glRef = gl;
 
@@ -121,13 +84,43 @@ function checkShader(s) {
   }
 }
 
-// Originally polled COMPLETION_STATUS via rAF until shaders were "ready",
-// but on slow drivers / extension-laden browsers / Live Server reloads the
-// poll never completed in reasonable time and the loading overlay sat forever.
-// Reverted: just call onReady() immediately. The GL driver will compile lazily
-// on first draw — slightly slower first frame, but no more "stuck on compile".
+// Poll until all programs are linked (non-blocking via rAF), then call onReady()
 function waitForPrograms(programs, shaders, onReady) {
-  onReady();
+  // If the parallel compile extension is available, poll non-blocking via rAF.
+  // Otherwise (mobile, older drivers) just check synchronously — the brief stall
+  // is unavoidable without the extension and is better than an infinite loop.
+  if (COMPLETION_STATUS === null) {
+    // Synchronous path: check compile/link status immediately
+    for (const s of shaders) { try { checkShader(s); } catch(e) { return; } }
+    for (const prog of programs) {
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        const err = gl.getProgramInfoLog(prog);
+        var _o=document.getElementById('shader-loading-overlay'); if(_o){_o.innerHTML='<pre style="color:#f66;padding:2rem;font-size:13px;margin:0">Shader link error:\n'+err+'</pre>';} else { console.error('Shader link error:', err); }
+        return;
+      }
+    }
+    onReady();
+    return;
+  }
+  function check() {
+    for (const prog of programs) {
+      if (!gl.getProgramParameter(prog, COMPLETION_STATUS)) {
+        requestAnimationFrame(check);
+        return; // not ready yet — come back next frame
+      }
+    }
+    // All done compiling — check shaders FIRST so real compile errors surface
+    for (const s of shaders) { try { checkShader(s); } catch(e) { return; } }
+    for (const prog of programs) {
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        const err = gl.getProgramInfoLog(prog);
+        var _o=document.getElementById('shader-loading-overlay'); if(_o){_o.innerHTML='<pre style="color:#f66;padding:2rem;font-size:13px;margin:0">Shader link error:\n'+err+'</pre>';} else { console.error('Shader link error:', err); }
+        return;
+      }
+    }
+    onReady();
+  }
+  requestAnimationFrame(check);
 }
 
 
@@ -402,7 +395,6 @@ window.uploadGradient = function(stops) {
 // ── Shape gradient 1D texture ──
 let shapeGradTex = null;
 let cellGradTex = null;
-let quadCurveTex = null;
 
 function createShapeGradTex() {
   shapeGradTex = gl.createTexture();
@@ -426,16 +418,6 @@ function createShapeGradTex() {
     const v = Math.round((x / (GRAD_WIDTH - 1)) * 255);
     initData[x*4+0] = v; initData[x*4+1] = v; initData[x*4+2] = v; initData[x*4+3] = 255;
   }
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, initData);
-  gl.bindTexture(gl.TEXTURE_2D, null);
-
-  // Quad curve LUT texture (256 wide, identity ramp by default)
-  quadCurveTex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, quadCurveTex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, initData);
   gl.bindTexture(gl.TEXTURE_2D, null);
 }
@@ -678,10 +660,6 @@ window.uploadShapeGradient = function(stops) {
   const eBandOutline  = gl.getUniformLocation(edgeProg, 'uBandOutline');
   const eQuadSteps    = gl.getUniformLocation(edgeProg, 'uQuadSteps');
   const eQuadEnabled  = gl.getUniformLocation(edgeProg, 'uQuadEnabled');
-  const eQuadCurveEnabled = gl.getUniformLocation(edgeProg, 'uQuadCurveEnabled');
-  const eQuadCurveMin = gl.getUniformLocation(edgeProg, 'uQuadCurveMin');
-  const eQuadCurveMax = gl.getUniformLocation(edgeProg, 'uQuadCurveMax');
-  const eQuadCurveTex = gl.getUniformLocation(edgeProg, 'uQuadCurveTex');
   const eGenDiamond   = gl.getUniformLocation(edgeProg, 'uGenDiamond');
   const eShapeGradTex = gl.getUniformLocation(edgeProg, 'uShapeGradTex');
   const eShapeGradOpacity = gl.getUniformLocation(edgeProg, 'uShapeGradOpacity');
@@ -1479,12 +1457,6 @@ window.uploadShapeGradient = function(stops) {
       gl.activeTexture(gl.TEXTURE8);
       gl.bindTexture(gl.TEXTURE_2D, cellGradTex);
       gl.uniform1i(eCellGradTex, 8);
-      gl.uniform1i(eQuadCurveEnabled, 0);
-      gl.uniform1f(eQuadCurveMin, 0.0);
-      gl.uniform1f(eQuadCurveMax, 1.0);
-      gl.activeTexture(gl.TEXTURE9);
-      gl.bindTexture(gl.TEXTURE_2D, quadCurveTex);
-      gl.uniform1i(eQuadCurveTex, 9);
       gl.uniform1i(eFinalPass, 1);
       gl.uniform1i(eBanding, 0);
       gl.uniform1f(eOutlineWidth, 0.0);
@@ -1750,35 +1722,6 @@ window.uploadShapeGradient = function(stops) {
       gl.uniform1i(eBandOutline, p.bandOutline    ? 1 : 0);
       gl.uniform1i(eQuadSteps,   inst.quadEnabled ? (inst.quadSteps || 1) : 1);
       gl.uniform1i(eQuadEnabled, inst.quadEnabled ? 1 : 0);
-      // Quad curve LUT — bake from points only when enabled (avoids per-frame work)
-      const quadCurveOn = inst.quadEnabled && inst.quadCurveEnabled;
-      gl.uniform1i(eQuadCurveEnabled, quadCurveOn ? 1 : 0);
-      gl.uniform1f(eQuadCurveMin, inst.quadCurveMin != null ? inst.quadCurveMin : 0.0);
-      gl.uniform1f(eQuadCurveMax, inst.quadCurveMax != null ? inst.quadCurveMax : 1.0);
-      if (quadCurveOn && inst.quadCurvePoints && inst.quadCurvePoints.length >= 2) {
-        const pts = inst.quadCurvePoints.slice().sort(function(a,b){ return a.x - b.x; });
-        const qcd = new Uint8Array(GRAD_WIDTH * 4);
-        for (let xi = 0; xi < GRAD_WIDTH; xi++) {
-          const xv = xi / (GRAD_WIDTH - 1);
-          let lo = pts[0], hi = pts[pts.length - 1];
-          for (let j = 0; j < pts.length - 1; j++) {
-            if (xv >= pts[j].x && xv <= pts[j+1].x) { lo = pts[j]; hi = pts[j+1]; break; }
-          }
-          const range = hi.x - lo.x;
-          const f = range < 0.0001 ? 0 : (xv - lo.x) / range;
-          // Smoothstep for nicer curve interpolation than linear
-          const sm = f * f * (3 - 2 * f);
-          const yv = Math.max(0, Math.min(1, lo.y + (hi.y - lo.y) * sm));
-          const v = Math.round(yv * 255);
-          qcd[xi*4+0] = v; qcd[xi*4+1] = v; qcd[xi*4+2] = v; qcd[xi*4+3] = 255;
-        }
-        gl.activeTexture(gl.TEXTURE9);
-        gl.bindTexture(gl.TEXTURE_2D, quadCurveTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, qcd);
-      }
-      gl.activeTexture(gl.TEXTURE9);
-      gl.bindTexture(gl.TEXTURE_2D, quadCurveTex);
-      gl.uniform1i(eQuadCurveTex, 9);
       gl.uniform1i(eGenDiamond,  inst.genDiamond  ? 1 : 0);
       const gc = hexToRgb01(inst.gapColor || p.gapColor || '#000000');
       gl.uniform3f(eGapColor,    gc[0], gc[1], gc[2]);
@@ -2020,10 +1963,7 @@ window.uploadShapeGradient = function(stops) {
       gl.uniform1i(blitTex, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       precomputeBuffer[writeIdx].ready = true;
-      // NOTE: do NOT call gl.finish() here. Forcing CPU↔GPU sync every frame
-      // defeats the entire point of double-buffered precompute — the read swap
-      // happens a frame later, which gives the GPU plenty of time to finish
-      // naturally without blocking the main thread.
+      gl.finish();
       const displayIdx = (precomputePlayIdx + 1) % pcFrames;
       if (precomputeBuffer[displayIdx] && precomputeBuffer[displayIdx].ready) {
         blitToScreen(precomputeBuffer[displayIdx].tex, W, H);
