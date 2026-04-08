@@ -143,6 +143,7 @@ let fbo = null;
 let sceneTex = null;
 // ── Blur FBOs (ping-pong for separable Gaussian) ─────────────────
 let blurFBO_H = null, blurTex_H = null; // after horizontal pass
+let prePPFBO = null, prePPTex = null;
 let blurFBO_V = null, blurTex_V = null; // after vertical pass (final blur result)
 
 function rebuildFBO() {
@@ -215,8 +216,8 @@ function makeFBOSlot(w, h) {
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   const fb = gl.createFramebuffer();
@@ -239,17 +240,21 @@ function rebuildInstanceFBOs() {
   const W = canvas.width, H = canvas.height;
   const insts = (window.shaderParams && window.shaderParams.pixelateInstances) || [];
   const N = insts.length;
-  // One FBO per instance (including last — final blit handles screen output)
-  const needed = N;
+  const pxOn = window.shaderParams && window.shaderParams.pixelate;
 
   // Free surplus
-  while (instanceFBOs.length > needed) destroyFBOSlot(instanceFBOs.pop());
+  while (instanceFBOs.length > N) destroyFBOSlot(instanceFBOs.pop());
 
-  // Create / resize
-  for (let i = 0; i < needed; i++) {
-    // Override instances remap to canvas (full) dims; others use scene dims
-    const baseW = insts[i].overrideResolution ? W : (sceneW || W);
-    const baseH = insts[i].overrideResolution ? H : (sceneH || H);
+  // Create / resize — disabled instances get null (no FBO, no rendering)
+  for (let i = 0; i < N; i++) {
+    if (!pxOn || insts[i].enabled === false) {
+      destroyFBOSlot(instanceFBOs[i]);
+      instanceFBOs[i] = null;
+      continue;
+    }
+    const ovr = insts[i].overrideResolution;
+    const baseW = ovr ? W : (sceneW || W);
+    const baseH = ovr ? H : (sceneH || H);
     const [fw, fh] = resolveFBOSize(baseW, baseH, insts[i].resolution);
     if (!instanceFBOs[i] || instanceFBOs[i].w !== fw || instanceFBOs[i].h !== fh) {
       destroyFBOSlot(instanceFBOs[i]);
@@ -259,6 +264,7 @@ function rebuildInstanceFBOs() {
 }
 
 window.rebuildInstanceFBOs = rebuildInstanceFBOs;
+window.forceResize = function() { curW = 0; curH = 0; };
 
 // ── Per-instance image-pixel textures ───────────────────────────
 // imgPixelTexes[i] is the GL texture for pixelate instance i.
@@ -457,6 +463,9 @@ uniform float     uCamVal;
 uniform float     uCamContrast;
 uniform sampler2D uGradientTex;
 uniform float uSnapGrid;  // 0=off, >0 = grid cell size in pixels
+uniform int   uMergeEnabled;
+uniform float uMergeDist;   // merge threshold in pixels
+uniform float uSmoothEdge;  // 0=off, >0 = edge AA width in pixels
 
 // Banding (applied here, before pixelation)
 uniform int   uBanding;
@@ -487,11 +496,17 @@ float manhattan(vec2 a, vec2 b) { return abs(a.x-b.x)+abs(a.y-b.y); }
 float chebyshev(vec2 a, vec2 b) { return max(abs(a.x-b.x),abs(a.y-b.y)); }
 float euclidean(vec2 a, vec2 b) { return length(a-b); }
 float hash(float n) { return fract(sin(mod(n, 6283.0))*43758.5453); }
+float hashBand(float n) { n=fract(n*0.1031); n*=n+33.33; n*=n+n; return fract(n); }
 
 float dist(vec2 a, vec2 b) {
-    if(uMode==0) return chebyshev(a,b);
-    if(uMode==1) return manhattan(a,b);
-    return euclidean(a,b);
+    if(uMode==2) return euclidean(a,b);
+    float metric = (uMode==0) ? chebyshev(a,b) : manhattan(a,b);
+    // Smooth edge: blend metric with Euclidean to eliminate staircase cell boundaries
+    if(uSmoothEdge > 0.0) {
+        float t = uSmoothEdge * 0.01; // 0-100 → 0-1
+        return mix(metric, euclidean(a,b), t);
+    }
+    return metric;
 }
 
 /* ── Noise uniforms ───────────────────────────────────────── */
@@ -865,15 +880,17 @@ void queryScene(vec2 q,vec2 piv,vec2 fL,vec2 fH,inout Hit hit) {
         if(i>=uNumPoints)break;
         vec2 p=randomPoint(i);
         if(asp>=1.0)p.x*=asp; else p.y/=asp;
-        p=piv+(p-piv)*uScale; p=rotatePoint(p,piv,uRotation); p+=uDisplace;
-        p=applySpring(p,fL,fH,uSpring);
-        // Snap to grid (grid cell = uSnapGrid pixels, same W and H)
+        p=piv+(p-piv)*uScale;
+        // Snap to grid BEFORE rotation/displacement so positions are stable during animation
         if(uSnapGrid>0.0){
             vec2 gridUV=vec2(uSnapGrid)/iResolution;
             p=floor(p/gridUV+0.5)*gridUV;
         }
+        vec2 pBase = p; // snapped but unrotated — used for group derivation
+        p=rotatePoint(p,piv,uRotation); p+=uDisplace;
+        p=applySpring(p,fL,fH,uSpring);
         testPtMirror(q,flipSrc(p,piv),i,piv,hit);
-        #define GRP(G,N) if(uGroupCount>G&&uGroupActive[G]==1&&!isRemoved(i,uGroupThreshold[G],uGroupSeed[G])){vec2 gp=(piv+uGroupDisplace[G])+(p-piv)*uGroupScale[G];gp=applySpring(gp,fL,fH,uSpring);if(uSnapGrid>0.0){vec2 gg=vec2(uSnapGrid)/iResolution;gp=floor(gp/gg+0.5)*gg;}testPtMirror(q,flipSrc(gp,piv),i+N*67,piv,hit);}
+        #define GRP(G,N) if(uGroupCount>G&&uGroupActive[G]==1&&!isRemoved(i,uGroupThreshold[G],uGroupSeed[G])){vec2 gp=(piv+uGroupDisplace[G])+(pBase-piv)*uGroupScale[G];if(uSnapGrid>0.0){vec2 gg=vec2(uSnapGrid)/iResolution;gp=floor(gp/gg+0.5)*gg;}gp=rotatePoint(gp,piv,uRotation);gp+=uDisplace;gp=applySpring(gp,fL,fH,uSpring);testPtMirror(q,flipSrc(gp,piv),i+N*67,piv,hit);}
         GRP(0,1)GRP(1,2)GRP(2,3)GRP(3,4)GRP(4,5)GRP(5,6)GRP(6,7)GRP(7,8)
     }
     addSentinels(q,fL,fH,uSpring,hit);
@@ -1146,14 +1163,14 @@ void main() {
             if(lum >= uBandLumMin && lum <= uBandLumMax) {
                 float effectiveCount = uBandCount;
                 if(uBandRandCount==1) {
-                    float countRand = hash(floor(nv*32.0) * 197.3 + mod(uBandRandCountSeed * 53.1, 6283.0) + 11.7);
+                    float countRand = hashBand(floor(nv*32.0) * 197.0 + uBandRandCountSeed * 53.0 + 11.0);
                     float t = mix(uBandRandCountMin, uBandRandCountMax, countRand);
                     effectiveCount = max(floor(uBandCount * t), 1.0);
                 }
                 float bandDist = nv; // use raw noise value as band distance
                 float bi = floor(bandDist * effectiveCount);
                 bi = min(bi, effectiveCount-1.0);
-                float bv = (uBandRandomize==1) ? hash(bi*127.1+311.7) : bi/max(effectiveCount-1.0,1.0);
+                float bv = (uBandRandomize==1) ? hashBand(bi*127.0+311.0) : bi/max(effectiveCount-1.0,1.0);
                 vec3 blended = applyBlendH(col.rgb, vec3(bv), uBandBlendMode, uBandHueOffset);
                 col.rgb = mix(col.rgb, blended, uBandStrength);
 
@@ -1223,34 +1240,60 @@ void main() {
         Hit hit; hit.d=1e9; hit.d2=1e9; hit.ci=0; hit.ci2=0; hit.dotCol=vec4(0); hit.nearPt=vec2(0); hit.nearPt2=vec2(0);
         queryScene(uvW,piv,fL,fH,hit);
 
+        // ── Merge close seed points (eliminates sawtooth from near-coincident seeds) ──
+        if(uMergeEnabled==1 && hit.d<1e8 && hit.d2<1e8) {
+            float seedSep = length(hit.nearPt - hit.nearPt2);
+            float mergeThresh = uMergeDist / min(iResolution.x, iResolution.y);
+            if(seedSep < mergeThresh) {
+                // Always keep lower ci for global consistency across all pixels
+                if(hit.ci > hit.ci2) {
+                    hit.ci = hit.ci2;
+                    hit.nearPt = hit.nearPt2;
+                    hit.d = hit.d2;
+                    hit.dotCol = dotColor(hit.ci);
+                }
+                hit.d2 = hit.d + 999.0;
+                hit.ci2 = 9999;
+                hit.nearPt2 = hit.nearPt;
+            }
+        }
+
         col = computeCellFinalColor(hit.ci);
 
         if(uShowDots==1 && hit.d<uDotRadius) col=mix(col,hit.dotCol,smoothstep(uDotRadius,uDotRadius*0.4,hit.d));
 
-        float borderDist = clamp((hit.d2-hit.d)*0.5/0.15, 0.0, 1.0);
+        // borderDist: 0 at cell center, 1 at cell edge.
+        // Use (d2-d1)/dist(s1,s2) in the active metric so contour lines
+        // stay piecewise-linear for Manhattan/Chebyshev (no sawtooth).
+        float seedSep = dist(hit.nearPt, hit.nearPt2);
+        float borderDist = (seedSep > 0.001) ? clamp((hit.d2 - hit.d) / seedSep, 0.0, 1.0) : 0.0;
+        borderDist = 1.0 - borderDist; // invert: 0 at center, 1 at edge
         cellIdNorm = float(hit.ci) / 64.0;
 
         // ── Banding (before pixelation — mirrors already applied) ──
         if(uBanding==1 && uBandCount>0.0 && hit.ci!=9999) {
             float bandDist = borderDist;
 
-            if(uBandAngleMode==1) {
+            if(uBandAngleMode>=1) {
                 vec2 bandUV = uvW;
                 if(uMirrorX==1 && bandUV.x > piv.x) bandUV.x = 2.0*piv.x - bandUV.x;
                 if(uMirrorY==1 && bandUV.y > piv.y) bandUV.y = 2.0*piv.y - bandUV.y;
                 if(uFlipX==1 && uvW.x > piv.x) bandUV.x = 2.0*piv.x - bandUV.x;
                 if(uFlipY==1 && uvW.y > piv.y) bandUV.y = 2.0*piv.y - bandUV.y;
                 
-                float cellRand = hash(float(hit.ci) * 73.17 + mod(uBandAngleSeed * 31.7, 6283.0) + 19.3);
+                float cellRand = hashBand(float(hit.ci) * 73.0 + uBandAngleSeed * 31.0 + 19.0);
                 
-                if(cellRand < 0.66) {
+                // Mode 1 (Random): 33% cells get all-sides fallback
+                // Mode 2 (Random Sides): every cell gets a directional angle
+                bool useDir = (uBandAngleMode==2) ? true : (cellRand < 0.66);
+                if(useDir) {
                     int angleIdx;
                     bool twoAngles = cellRand >= 0.33;
                     
                     if(twoAngles) {
-                        angleIdx = int(floor(hash(float(hit.ci)*251.3 + mod(uBandAngleSeed*17.3, 6283.0) + 41.7) * 8.0));
+                        angleIdx = int(floor(hashBand(float(hit.ci)*251.0 + uBandAngleSeed*17.0 + 41.0) * 8.0));
                     } else {
-                        angleIdx = int(floor(hash(float(hit.ci)*137.9 + mod(uBandAngleSeed*23.1, 6283.0) + 7.1) * 8.0));
+                        angleIdx = int(floor(hashBand(float(hit.ci)*137.0 + uBandAngleSeed*23.0 + 7.0) * 8.0));
                     }
                     if(angleIdx >= 8) angleIdx = 7;
                     
@@ -1277,14 +1320,14 @@ void main() {
             if(lum >= uBandLumMin && lum <= uBandLumMax) {
                 float effectiveCount = uBandCount;
                 if(uBandRandCount==1) {
-                    float countRand = hash(float(hit.ci) * 197.3 + mod(uBandRandCountSeed * 53.1, 6283.0) + 11.7);
+                    float countRand = hashBand(float(hit.ci) * 197.0 + uBandRandCountSeed * 53.0 + 11.0);
                     float t = mix(uBandRandCountMin, uBandRandCountMax, countRand);
                     effectiveCount = max(floor(uBandCount * t), 1.0);
                 }
                 
                 float bi = floor(bandDist * effectiveCount);
                 bi = min(bi, effectiveCount-1.0);
-                float bv = (uBandRandomize==1) ? hash(bi*127.1+311.7) : bi/max(effectiveCount-1.0,1.0);
+                float bv = (uBandRandomize==1) ? hashBand(bi*127.0+311.0) : bi/max(effectiveCount-1.0,1.0);
                 vec3 blended = applyBlendH(col.rgb, vec3(bv), uBandBlendMode, uBandHueOffset);
                 col.rgb = mix(col.rgb, blended, uBandStrength);
 
@@ -1310,6 +1353,7 @@ invariant gl_FragColor;
 
 uniform vec2      iResolution;
 uniform sampler2D uSceneTex;
+uniform sampler2D uAccumTex;  // accumulated result from previous instances (for gap/blend base)
 uniform float     uOutlineWidth;
 uniform vec3      uOutlineColor;
 uniform int       uPixelate;
@@ -1318,14 +1362,31 @@ uniform int       uWeaveMode;
 uniform int       uPixelShape;
 uniform float     uShapeMargin;
 uniform float     uShapeBleed;
+uniform float     uShapeSmoothness; // 0-1 fraction of cell half-size for edge softness
+// SDF luminance effectors
+uniform int       uSdfAffectScale;
+uniform float     uSdfMinScale;
+uniform float     uSdfMaxScale;
+uniform int       uSdfAffectRotate;
+uniform float     uSdfMinRotate;
+uniform float     uSdfMaxRotate;
+uniform int       uSdfAffectOffset;
+uniform float     uSdfMinOffset;
+uniform float     uSdfMaxOffset;
 uniform float     uPixelScale;
 uniform float     uShapeScale;
 uniform int       uForceSquare;       // 0=off, 1=parent shape to square frame
-uniform int       uMaintainThickness; // 0=off, 1=keep arm thickness optically constant across quadtree
+uniform int       uMaintainThickness;
+uniform int       uQuadReverse; // 0=off, 1=keep arm thickness optically constant across quadtree
 uniform int       uOblique;
 uniform int       uBandOutline;
 uniform vec3      uGapColor;
 uniform float     uGapOpacity;
+uniform int       uGapEnabled;
+uniform int       uGapFiltered;     // 0=gap unaffected by filters, 1=gap gets filtered
+uniform int       uInstanceBlendMode; // -1=off, 0-9=blend with un-pixelated input
+uniform float     uInstBlendHueOff;   // hue offset for hue-shift blend (mode 9)
+uniform float     uInstanceOpacity;   // 0-1 overall instance opacity
 uniform sampler2D uShapeGradTex;
 uniform float     uShapeGradOpacity;
 uniform int       uShapeGradDir;
@@ -1334,12 +1395,23 @@ uniform vec2      uRadialCenter;      // radial gradient center offset (-1 to 1)
 uniform float     uRadialScale;       // radial gradient scale (0-2)
 uniform int       uEmbossBlendMode; // same blend mode set as banding
 uniform float     uEmbossHueOff;    // hue offset for emboss hue-shift blend (mode 9)
+uniform int       uFillMode;        // 0=color, 1=gradient
+uniform vec3      uFillColor;       // solid fill color (mode 0)
+uniform int       uPassthrough;     // 0=off, 1=cell color is accumulated result
+uniform int       uTwoImage;        // oct weave: 0=both cells use L1, 1=diamond uses L2
 
 uniform float     uGradeHue;
 uniform float     uGradeSat;
 uniform float     uGradeVal;
 uniform float     uGradeContrast;
 uniform int       uPostProcess;
+
+/* ── Post-processing stack uniforms ──────────────────────── */
+uniform int       uPPCount;
+uniform int       uPPType[16];
+uniform vec4      uPPParams[16];
+uniform int       uPPBlend[16];  // blend mode per filter slot (-1=N/A)
+uniform float     uPPExtra[16];  // hue offset per filter slot
 
 /* ── Image Pixel uniforms ──────────────────────────────────── */
 uniform int       uImgPixelEnabled;
@@ -1442,10 +1514,18 @@ vec2 quadtreeGrid(vec2 rawUV, vec2 baseGrid) {
         vec2 ci = floor((pixPos - canvasCenter) / cellPx);
         vec2 centerUV = (canvasCenter + (ci + 0.5) * cellPx) / iResolution;
 
+        // When oblique, centerUV is in rotated space — unrotate for scene sampling
+        vec2 sampleCenter = centerUV;
+        if(uOblique==1) {
+            vec2 px = centerUV * iResolution - iResolution * 0.5;
+            float oc = 0.7071, os = 0.7071;
+            sampleCenter = (vec2(px.x*oc + px.y*os, -px.x*os + px.y*oc) + iResolution * 0.5) / iResolution;
+        }
         float lum = dot(texture2D(uSceneTex,
-                        clamp(centerUV, vec2(0.001), vec2(0.999))).rgb,
+                        clamp(sampleCenter, vec2(0.001), vec2(0.999))).rgb,
                         vec3(0.299, 0.587, 0.114));
         lum = clamp(lum, 0.0, 1.0);
+        if(uQuadReverse==1) lum = 1.0 - lum;
 
         float threshold = float(uQuadSteps - 1 - i) / float(uQuadSteps);
         if(lum >= threshold) break;
@@ -1729,12 +1809,6 @@ bool diffCellOnly(vec4 a,vec4 b){
     float satDiff=abs(ha.y-hb.y);
     return hueDiff>0.05 || satDiff>0.15;
 }
-vec3 grade(vec3 c){
-    if(uPostProcess==0) return c;
-    vec3 h=rgb2hsv(c);h.x=fract(h.x+uGradeHue/360.0);
-    h.y=clamp(h.y*uGradeSat,0.0,1.0);h.z=clamp(h.z*uGradeVal,0.0,1.0);
-    vec3 r=hsv2rgb(h);return clamp((r-0.5)*uGradeContrast+0.5,0.0,1.0);
-}
 // Mode 9: hue-shift — factor = luminance of layer, shift = factor * hueOff (wraps)
 vec3 blendVH(vec3 base, vec3 layer, int m, float hueOff) {
     if(m == 9) {
@@ -1746,6 +1820,99 @@ vec3 blendVH(vec3 base, vec3 layer, int m, float hueOff) {
     return blendV(base, layer, m);
 }
 
+// Pre-computed fill values (set in main, read in grade)
+vec3 _gradFillColor = vec3(0.5);
+float _opPatValue = 0.0;
+float _opPatOpacity = 0.0;
+
+vec3 grade(vec3 c){
+    // Legacy grading (backward compat — only when PP stack empty AND values non-neutral)
+    if(uPostProcess==1 && uPPCount==0 &&
+       (uGradeHue!=0.0 || uGradeSat!=1.0 || uGradeVal!=1.0 || uGradeContrast!=1.0)){
+        vec3 h=rgb2hsv(c);h.x=fract(h.x+uGradeHue/360.0);
+        h.y=clamp(h.y*uGradeSat,0.0,1.0);h.z=clamp(h.z*uGradeVal,0.0,1.0);
+        c=hsv2rgb(h);c=clamp((c-0.5)*uGradeContrast+0.5,0.0,1.0);
+    }
+    // Post-processing stack
+    for(int i=0;i<16;i++){
+        if(i>=uPPCount) break;
+        int t=uPPType[i]; vec4 pp=uPPParams[i];
+        if(t==0){ // Brightness/Contrast
+            c=(c-0.5)*max(pp.y,0.0)+0.5+vec3(pp.x);
+            c=clamp(c,0.0,1.0);
+        }
+        if(t==1){ // Levels
+            c=clamp((c-vec3(pp.x))/max(vec3(pp.y-pp.x),vec3(0.001)),0.0,1.0);
+            c=pow(c,vec3(1.0/max(pp.z,0.01)));
+        }
+        if(t==2){ // Exposure
+            c=clamp(c*pow(2.0,pp.x)+vec3(pp.y),0.0,1.0);
+            c=pow(c,vec3(1.0/max(pp.z,0.01)));
+        }
+        if(t==3){ // Vibrance
+            float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b));
+            float sat2=(mx>0.001)?(mx-mn)/mx:0.0;
+            float lv=dot(c,vec3(0.299,0.587,0.114));
+            c=clamp(mix(vec3(lv),c,1.0+pp.x*(1.0-sat2)),0.0,1.0);
+        }
+        if(t==4){ // Hue/Saturation
+            vec3 hh=rgb2hsv(c);
+            hh.x=fract(hh.x+pp.x/360.0);
+            hh.y=clamp(hh.y*(1.0+pp.y),0.0,1.0);
+            hh.z=clamp(hh.z+pp.z,0.0,1.0);
+            c=hsv2rgb(hh);
+        }
+        if(t==5){ // Color Balance
+            float lb=dot(c,vec3(0.299,0.587,0.114));
+            float mw=1.0-abs(lb-0.5)*2.0;
+            c=clamp(c+vec3(pp.x,pp.y,pp.z)*mw*0.5,0.0,1.0);
+        }
+        if(t==6){ // Black & White
+            float bwl=c.r*pp.x+c.g*pp.y+c.b*pp.z;
+            c=vec3(clamp(bwl*pp.w,0.0,1.0));
+        }
+        if(t==7){ // Photo Filter
+            c=clamp(mix(c,c*vec3(pp.x,pp.y,pp.z),pp.w),0.0,1.0);
+        }
+        if(t==8){ c=1.0-c; } // Invert
+        if(t==9){ // Posterize
+            float lvls=max(pp.x,2.0);
+            c=floor(c*lvls+0.5)/lvls;
+        }
+        if(t==10){ // Threshold
+            c=vec3(step(pp.x,dot(c,vec3(0.299,0.587,0.114))));
+        }
+        if(t==11){ // Shadows/Highlights
+            float sl=dot(c,vec3(0.299,0.587,0.114));
+            c=clamp(c+vec3(pp.x*(1.0-smoothstep(0.0,0.5,sl)))+vec3(pp.y*smoothstep(0.5,1.0,sl)),0.0,1.0);
+        }
+        if(t==12){ // Desaturate
+            float dl=dot(c,vec3(0.299,0.587,0.114));
+            c=mix(c,vec3(dl),pp.x);
+        }
+        if(t==13){ // Curves (S-curve contrast)
+            c=clamp(c+(c*(1.0-c))*vec3(pp.x*4.0*(c-vec3(0.5))),0.0,1.0);
+        }
+        if(t==14){ // Color Fill
+            vec3 fc = vec3(pp.x, pp.y, pp.z);
+            int bm = uPPBlend[i]; float ho = uPPExtra[i];
+            c = mix(c, blendVH(c, fc, bm, ho), pp.w);
+        }
+        if(t==15){ // Gradient Fill
+            int bm = uPPBlend[i]; float ho = uPPExtra[i];
+            c = mix(c, blendVH(c, _gradFillColor, bm, ho), pp.x);
+        }
+        if(t==16){ // Opacity Pattern
+            if(_opPatOpacity > 0.001){
+                vec3 hsv = rgb2hsv(c);
+                hsv.x = fract(hsv.x + _opPatValue);
+                vec3 shifted = hsv2rgb(hsv);
+                c = mix(c, shifted, _opPatOpacity);
+            }
+        }
+    }
+    return c;
+}
 // Compute gradient t from normalised position (-0.5..0.5 per axis):
 // dir 0=0° (horizontal), 1=45°, 2=90° (vertical), 3=135°, 4=radial
 float gradientT(vec2 norm) {
@@ -1795,18 +1962,19 @@ void main(){
 
     vec4 scene=texture2D(uSceneTex,uv);
     vec3 rawColor=scene.rgb;
-    vec3 color=scene.rgb;
+    vec3 color = (uPassthrough==1) ? texture2D(uAccumTex, rawUV).rgb : scene.rgb;
 
     /* ── Shape masking + emboss gradient ──────────────────────── */
-    // For hex/oct weave, auto-select shape regardless of uPixelShape
+    // Shape: user-selected, with fallback defaults for hex/oct weave when None
     int effectiveShape = uPixelShape;
-    if(uWeaveMode==3) effectiveShape = 5; // hex weave → hex shape
-    if(uWeaveMode==4) {
-        effectiveShape = (uGenDiamond==0 && blk.isWarp) ? 2 : 6;
+    if(uPixelShape==0 && uWeaveMode==3) effectiveShape = 5; // hex weave default
+    if(uPixelShape==0 && uWeaveMode==4) {
+        effectiveShape = (uGenDiamond==0 && blk.isWarp) ? 2 : 6; // oct weave default
     }
 
     bool isOctGap = false;
     bool isDiamondPixel = false;  // set by genDiamond overlay so image pixel can route to L2
+    float shapeAlpha = 1.0;      // 1.0 = fully inside shape, <1.0 in smooth transition zone
 
     if(uPixelate==1 && effectiveShape>0){
         // posInTile in PIXEL space — DO NOT scale this
@@ -1840,23 +2008,37 @@ void main(){
 
         float d = -1.0;
 
+        // Shape Scale: scale sdfPos around center (before luminance effectors)
+        vec2 sdfPos = posInTile / max(sc, 0.01);
+        float cellLum = dot(color, vec3(0.299, 0.587, 0.114));
+        if(uSdfAffectOffset==1) sdfPos += vec2(mix(uSdfMinOffset, uSdfMaxOffset, cellLum)) * min(cellHalf.x, cellHalf.y);
+        if(uSdfAffectRotate==1) {
+            float sra = radians(mix(uSdfMinRotate, uSdfMaxRotate, cellLum));
+            float src = cos(sra), srs = sin(sra);
+            sdfPos = vec2(sdfPos.x*src - sdfPos.y*srs, sdfPos.x*srs + sdfPos.y*src);
+        }
+        if(uSdfAffectScale==1) {
+            float ssc = mix(uSdfMinScale, uSdfMaxScale, cellLum);
+            if(abs(ssc) > 0.001) sdfPos /= ssc;
+        }
+
         if(effectiveShape==1){
             // Pill: oriented along longer axis
             if(cellHalf.x >= cellHalf.y){
                 float rCap = min(r, content.y);   // can't exceed content short axis
-                float armLen = max(content.x * sc - rCap, 0.0);
-                d = capsuleH(posInTile, armLen, rCap);
+                float armLen = max(content.x - rCap, 0.0);
+                d = capsuleH(sdfPos, armLen, rCap);
             } else {
                 float rCap = min(r, content.x);
-                float armLen = max(content.y * sc - rCap, 0.0);
-                d = capsuleV(posInTile, armLen, rCap);
+                float armLen = max(content.y - rCap, 0.0);
+                d = capsuleV(sdfPos, armLen, rCap);
             }
         }
-        if(effectiveShape==2) d=diamondSDF(posInTile, cellHalf, uShapeMargin);
-        if(effectiveShape==3) d=squareSDF(posInTile,  cellHalf, uShapeMargin);
-        if(effectiveShape==4) d=chevronSDF(posInTile, cellHalf, uShapeMargin);
-        if(effectiveShape==5) d=hexSDF(posInTile,     cellHalf, uShapeMargin);
-        if(effectiveShape==6) d=octSDF(posInTile,     cellHalf, uShapeMargin);
+        if(effectiveShape==2) d=diamondSDF(sdfPos, cellHalf, uShapeMargin);
+        if(effectiveShape==3) d=squareSDF(sdfPos,  cellHalf, uShapeMargin);
+        if(effectiveShape==4) d=chevronSDF(sdfPos, cellHalf, uShapeMargin);
+        if(effectiveShape==5) d=hexSDF(sdfPos,     cellHalf, uShapeMargin);
+        if(effectiveShape==6) d=octSDF(sdfPos,     cellHalf, uShapeMargin);
 
         if(effectiveShape==7){
             // Cross "+": horizontal arm along X, vertical arm along Y
@@ -1864,33 +2046,126 @@ void main(){
             float rX = min(r, content.y);   // horizontal arm: perp = Y axis
             float rY = min(r, content.x);   // vertical arm:   perp = X axis
             float rUse = min(rX, rY);        // single consistent r across both arms
-            float lX = max(content.x * sc - rUse, 0.0);
-            float lY = max(content.y * sc - rUse, 0.0);
-            d = min(capsuleH(posInTile, lX, rUse),
-                    capsuleV(posInTile, lY, rUse));
+            float lX = max(content.x - rUse, 0.0);
+            float lY = max(content.y - rUse, 0.0);
+            d = min(capsuleH(sdfPos, lX, rUse),
+                    capsuleV(sdfPos, lY, rUse));
         }
 
         if(effectiveShape==8){
             // Cross "×": same arms rotated 45°
             float c45 = 0.7071068; float s45 = 0.7071068;
-            vec2 pr = vec2(posInTile.x*c45 + posInTile.y*s45,
-                          -posInTile.x*s45 + posInTile.y*c45);
+            vec2 pr = vec2(sdfPos.x*c45 + sdfPos.y*s45,
+                          -sdfPos.x*s45 + sdfPos.y*c45);
             // In the 45° frame the cell half-extent along each arm axis
             float diagHalf = min(content.x, content.y) * 0.7071;
             float rUse = min(r, diagHalf);
-            float l = max(diagHalf * sc - rUse, 0.0);
+            float l = max(diagHalf - rUse, 0.0);
             d = min(capsuleH(pr, l, rUse), capsuleV(pr, l, rUse));
         }
 
+        // Image shape (9): use imgPixelTex alpha as shape mask
+        if(effectiveShape==9 && uImgPixelEnabled==1){
+            // Oct weave 2-image: diamond cells use L2 texture + params
+            bool useDiaImg = uTwoImage==1 && uWeaveMode==4 && blk.isWarp && uImgPixel2Enabled==1;
+
+            // Select grid params based on which image layer
+            float ipCols = useDiaImg ? uImgPixel2Cols : uImgPixelCols;
+            float ipRows = useDiaImg ? uImgPixel2Rows : uImgPixelRows;
+
+            // Position within tile (0→1)
+            vec2 tUV = blk.tilePx / iResolution;
+            vec2 pib = (obliqueUV - blk.uv) / tUV + 0.5;
+            pib = clamp(pib, 0.001, 0.999);
+            pib.y = 1.0 - pib.y;
+
+            // Diamond cells: swap axes + scale to inner 66% visible frame
+            if(blk.isWarp) {
+                pib = vec2(1.0 - pib.y, pib.x);
+                pib = (pib - 0.5) / 0.66 + 0.5;
+                if(pib.x < 0.005 || pib.x > 0.995 || pib.y < 0.005 || pib.y > 0.995) {
+                    // Outside visible diamond frame → gap
+                    vec3 earlyGap = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
+                    gl_FragColor = vec4(uGapFiltered==1 ? grade(earlyGap) : earlyGap, 1.0);
+                    return;
+                }
+            }
+
+            // Luminance-based grid cell lookup
+            float lum = dot(color, vec3(0.299, 0.587, 0.114));
+            float totCells = ipCols * ipRows;
+            float cIdx = clamp(floor(lum * totCells), 0.0, totCells - 1.0);
+            float iCol = mod(cIdx, ipCols);
+            float iRow = floor(cIdx / ipCols);
+            float cW = 1.0 / ipCols;
+            float cH = 1.0 / ipRows;
+
+            // Scale posInBlock by shapeScale
+            vec2 centered = pib - 0.5;
+            if(sc < 1.99) centered /= max(sc, 0.01);
+            pib = clamp(centered + 0.5, 0.0, 1.0);
+
+            // Luminance effectors for image shape
+            if(useDiaImg) {
+                // L2 effectors
+                if(uImgPixel2AffectOffset==1) { float off2 = mix(uImgPixel2MinOffset, uImgPixel2MaxOffset, lum); pib += vec2(off2); pib = clamp(pib, 0.0, 1.0); }
+                if(uImgPixel2AffectRotate==1) { float ra2 = radians(mix(uImgPixel2MinRotate, uImgPixel2MaxRotate, lum)); vec2 c2 = pib-0.5; pib = vec2(c2.x*cos(ra2)-c2.y*sin(ra2), c2.x*sin(ra2)+c2.y*cos(ra2))+0.5; pib = clamp(pib, 0.0, 1.0); }
+                if(uImgPixel2AffectScale==1) { float ss2 = mix(uImgPixel2MinScale, uImgPixel2MaxScale, lum); if(abs(ss2)>0.001) { pib = (pib-0.5)/ss2+0.5; pib = clamp(pib, 0.0, 1.0); } }
+            } else {
+                // L1 effectors
+                if(uImgPixelAffectScale==1) { float ss1 = mix(uImgPixelMinScale, uImgPixelMaxScale, lum); if(abs(ss1)>0.001) { pib = (pib-0.5)/ss1+0.5; pib = clamp(pib, 0.0, 1.0); } }
+                if(uImgPixelAffectRotate==1) { float ra1 = radians(mix(uImgPixelMinRotate, uImgPixelMaxRotate, lum)); vec2 c1 = pib-0.5; pib = vec2(c1.x*cos(ra1)-c1.y*sin(ra1), c1.x*sin(ra1)+c1.y*cos(ra1))+0.5; pib = clamp(pib, 0.0, 1.0); }
+                if(uImgPixelAffectOffset==1) { float off1 = mix(uImgPixelMinOffset, uImgPixelMaxOffset, lum); pib += vec2(off1); pib = clamp(pib, 0.0, 1.0); }
+            }
+
+            vec2 iUV = vec2((iCol + pib.x) * cW, (iRow + pib.y) * cH);
+            iUV.x = clamp(iUV.x, iCol * cW + 0.001, (iCol + 1.0) * cW - 0.001);
+            iUV.y = clamp(iUV.y, iRow * cH + 0.001, (iRow + 1.0) * cH - 0.001);
+
+            vec4 imgSample = useDiaImg ? texture2D(uImgPixel2Tex, iUV) : texture2D(uImgPixelTex, iUV);
+            float ipOp2 = useDiaImg ? uImgPixel2Opacity : uImgPixelOpacity;
+            int ipMsk2 = useDiaImg ? uImgPixel2Mask : uImgPixelMask;
+            int ipBld2 = useDiaImg ? uImgPixel2Blend : uImgPixelBlend;
+            float ipHue2 = useDiaImg ? uImgPixel2HueOff : uImgPixelHueOff;
+
+            // Use image alpha as shape mask (for PNGs with transparency)
+            if(ipMsk2==1){
+                shapeAlpha = imgSample.a * ipOp2;
+            } else {
+                // Normal mode: blend image color, use alpha as mask
+                vec3 blended = blendVH(color, imgSample.rgb, ipBld2, ipHue2);
+                color = mix(color, blended, ipOp2);
+                shapeAlpha = imgSample.a;
+            }
+
+            // Skip SDF path
+            if(shapeAlpha < 0.001){
+                if(uWeaveMode==4 && uGenDiamond==1){
+                    isOctGap = true;
+                } else {
+                    vec3 earlyGap = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
+                    gl_FragColor = vec4(uGapFiltered==1 ? grade(earlyGap) : earlyGap, 1.0);
+                    return;
+                }
+            }
+        } else if(effectiveShape!=9) {
         d -= uShapeBleed;
-        if(d > 0.0){
+        // Edge smoothness: based on BASE pixel size (uPixelSize), not actual tile —
+        // keeps absolute smooth width constant across quadtree levels
+        float smoothW = uShapeSmoothness * min(uPixelSize.x, uPixelSize.y) * 0.5;
+        shapeAlpha = (smoothW > 0.001) ? (1.0 - smoothstep(-smoothW, smoothW, d)) : (d <= 0.0 ? 1.0 : 0.0);
+
+        if(shapeAlpha < 0.001){
             if(uWeaveMode==4 && uGenDiamond==1){
                 isOctGap = true;
             } else {
-                gl_FragColor = vec4(grade(mix(color, uGapColor, uGapOpacity)), 1.0);
+                vec3 earlyGap = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
+                gl_FragColor = vec4(uGapFiltered==1 ? grade(earlyGap) : earlyGap, 1.0);
                 return;
             }
         }
+        } // end SDF path
+        // shapeAlpha blend deferred to after all decorations (gradient, image pixel, etc.)
     }
 
     /* ── Outline ───────────────────────────────────────────────── */
@@ -1954,54 +2229,28 @@ void main(){
         }
     }
 
-    /* ── Opacity Pattern Hue Shift ─────────────────────────────── */
+    /* ── Pre-compute opacity pattern value for filter system ─── */
     if(uPixelate==1 && uOpPatternCount>0){
         float colorId;
-        if(uOpPatternMode==1){
-            // By Shape — use cell ID from alpha, groups entire Voronoi cell as one mask
-            colorId = scene.a;
-        } else {
-            // By Color — quantize the rendered pixel color, each unique color is its own mask
-            vec3 qc = floor(rawColor * 64.0 + 0.5) / 64.0;
-            colorId = fract(qc.r * 0.299 + qc.g * 0.587 + qc.b * 0.114);
-        }
-
-        // Hash with seed for randomized but stable pattern assignment
+        if(uOpPatternMode==1){ colorId = scene.a; }
+        else { vec3 qc = floor(rawColor * 64.0 + 0.5) / 64.0; colorId = fract(qc.r * 0.299 + qc.g * 0.587 + qc.b * 0.114); }
         float hashed = fract(sin(colorId * 78.233 + uOpPatternSeed * 43.17) * 43758.5453);
-
-        // Each unique color gets exactly one pattern — no overlap
         int patIdx = int(floor(hashed * float(uOpPatternCount)));
         if(patIdx >= uOpPatternCount) patIdx = uOpPatternCount - 1;
         if(patIdx < 0) patIdx = 0;
-
-        // Get pattern dimensions
         vec4 dims = uOpPatternDims[0];
         if(patIdx==1) dims = uOpPatternDims[1];
         if(patIdx==2) dims = uOpPatternDims[2];
         if(patIdx==3) dims = uOpPatternDims[3];
-
-        float pCols = dims.x;
-        float pRows = dims.y;
-        float pHueShift = dims.z;
-        float pHueOp = dims.w;
-
-        if(pCols > 0.0 && pRows > 0.0 && pHueOp > 0.0){
-            // Tile pattern across the pixelated grid
+        float pCols = dims.x, pRows = dims.y;
+        if(pCols > 0.0 && pRows > 0.0 && dims.w > 0.0){
             float pcol = mod(blk.cell.x, pCols);
             float prow = mod(blk.cell.y, pRows);
-
-            // Sample pattern texture
             float texX = (float(patIdx) * 16.0 + pcol + 0.5) / 64.0;
             float texY = (prow + 0.5) / 16.0;
             float opacity = texture2D(uOpPatternTex, vec2(texX, texY)).r;
-
-            // Apply hue shift based on opacity
-            if(opacity > 0.001){
-                vec3 hsv = rgb2hsv(color);
-                hsv.x = fract(hsv.x + pHueShift * opacity);
-                vec3 shifted = hsv2rgb(hsv);
-                color = mix(color, shifted, pHueOp * opacity);
-            }
+            _opPatValue = dims.z * opacity; // hueShift * opacity
+            _opPatOpacity = dims.w * opacity; // hueOpacity * opacity
         }
     }
 
@@ -2038,7 +2287,9 @@ void main(){
             vec2 octPos = (obliqueUV - octCenter) * iResolution;
             vec2 octHalf = lvlPx * 0.5;
             float octD = octSDF(octPos, octHalf, uShapeMargin) - uShapeBleed;
-            if(octD <= 0.0 && octLvl == lvl) {
+            float octSW = uShapeSmoothness * min(uPixelSize.x, uPixelSize.y) * 0.5;
+            float octAlpha = (octSW > 0.001) ? (1.0 - smoothstep(-octSW, octSW, octD)) : (octD <= 0.0 ? 1.0 : 0.0);
+            if(octAlpha > 0.001 && octLvl == lvl) {
                 vec2 sUV = octCenter;
                 if(uOblique==1){
                     vec2 rp = sUV * iResolution; vec2 ct = iResolution * 0.5; vec2 dp = rp - ct;
@@ -2047,14 +2298,10 @@ void main(){
                 sUV = clamp(sUV, vec2(0.001), vec2(0.999));
                 vec3 octCol = texture2D(uSceneTex, sUV).rgb;
                 // Emboss gradient
-                if(uTileGradEnabled==1 && uShapeGradOpacity > 0.0){
-                    vec2 onorm = octPos / lvlPx;
-                    float gT = gradientT(onorm);
-                    gT = clamp(gT, 0.0, 1.0);
-                    vec3 gC = texture2D(uShapeGradTex, vec2(gT,0.5)).rgb;
-                    octCol = mix(octCol, blendVH(octCol, gC, uEmbossBlendMode, uEmbossHueOff), uShapeGradOpacity);
+                // Fill is now handled by filter system — skip legacy fill in genDiamond
+                if(false){
                 }
-                color = octCol;
+                color = (octAlpha >= 0.999) ? octCol : mix(color, octCol, octAlpha);
             }
 
             // --- Diamond at this level (offset grid) ---
@@ -2072,7 +2319,9 @@ void main(){
             float diaR = diaHalf - uShapeMargin;
             if(diaR > 0.0 && diLvl == lvl){
                 float dd = (abs(diaPos.x) + abs(diaPos.y)) / diaR - 1.0 - uShapeBleed;
-                if(dd <= 0.0){
+                float diaSW = uShapeSmoothness * min(uPixelSize.x, uPixelSize.y) * 0.2929 * 0.5;
+                float diaAlpha = (diaSW > 0.001) ? (1.0 - smoothstep(-diaSW, diaSW, dd)) : (dd <= 0.0 ? 1.0 : 0.0);
+                if(diaAlpha > 0.001){
                     vec2 sUV = diCenter;
                     if(uOblique==1){
                         vec2 rp = sUV * iResolution; vec2 ct = iResolution * 0.5; vec2 dp = rp - ct;
@@ -2080,14 +2329,10 @@ void main(){
                     }
                     sUV = clamp(sUV, vec2(0.001), vec2(0.999));
                     vec3 diaCol = texture2D(uSceneTex, sUV).rgb;
-                    if(uTileGradEnabled==1 && uShapeGradOpacity > 0.0){
-                        vec2 dn = diaPos / vec2(diaHalf);
-                        float gT = gradientT(dn * 0.5);
-                        gT = clamp(gT, 0.0, 1.0);
-                        vec3 gC = texture2D(uShapeGradTex, vec2(gT,0.5)).rgb;
-                        diaCol = mix(diaCol, blendVH(diaCol, gC, uEmbossBlendMode, uEmbossHueOff), uShapeGradOpacity);
+                    // Fill is now handled by filter system — skip legacy fill in genDiamond
+                    if(false){
                     }
-                    color = diaCol;
+                    color = (diaAlpha >= 0.999) ? diaCol : mix(color, diaCol, diaAlpha);
                     isDiamondPixel = true;
 
                     // ── Inline diamond image pixel (applied immediately per diamond) ──
@@ -2120,7 +2365,8 @@ void main(){
                             vec3 dImgC = texture2D(uImgPixel2Tex, dIUV).rgb;
                             if(uImgPixel2Mask==1){
                                 float dMV = dot(dImgC, vec3(0.299,0.587,0.114));
-                                color = mix(mix(color,uGapColor,uGapOpacity), color, dMV*uImgPixel2Opacity);
+                                vec3 dMaskBase = (uGapEnabled==1) ? mix(color,uGapColor,uGapOpacity) : color;
+                                color = mix(dMaskBase, color, dMV*uImgPixel2Opacity);
                             } else {
                                 color = mix(color, blendVH(color,dImgC,uImgPixel2Blend,uImgPixel2HueOff), uImgPixel2Opacity);
                             }
@@ -2135,9 +2381,10 @@ void main(){
     // Overlay diamonds (isDiamondPixel) already handled inline above — skip here.
     // getBlock diamonds (isWarp, genDiamond=0) use L2 settings.
     // All other cells use L1.
+    // Image Pixel is now part of the Image shape (9) — standalone pass disabled
     bool isDiaCell = blk.isWarp && !isDiamondPixel;
-    bool useL2 = uWeaveMode==4 && isDiaCell && uImgPixel2Enabled==1;
-    bool useL1 = uImgPixelEnabled==1 && !useL2 && !isDiamondPixel;
+    bool useL2 = false;
+    bool useL1 = false;
 
     if((useL1 || useL2) && uPixelate==1){
         // Select which set of params to use
@@ -2187,7 +2434,7 @@ void main(){
         }
 
         if(!diaTexVisible){
-            color=mix(color,uGapColor,uGapOpacity);
+            if(uGapEnabled==1) color=mix(color,uGapColor,uGapOpacity);
         } else {
             float cellW=1.0/ipCols;
             float cellH=1.0/ipRows;
@@ -2221,7 +2468,8 @@ void main(){
                                    : texture2D(uImgPixelTex,imgUV).rgb;
             if(ipMask==1){
                 float maskVal=dot(imgColor,vec3(0.299,0.587,0.114));
-                color=mix(mix(color,uGapColor,uGapOpacity), color, maskVal*ipOp);
+                vec3 maskBase = (uGapEnabled==1) ? mix(color,uGapColor,uGapOpacity) : color;
+                color=mix(maskBase, color, maskVal*ipOp);
             } else {
                 vec3 blended=blendVH(color,imgColor,ipBlend,ipHueOff);
                 color=mix(color,blended,ipOp);
@@ -2229,16 +2477,36 @@ void main(){
         }
     }
 
-    /* ── Tile Gradient (after image pixel) ─────────────────────── */
-    if(uTileGradEnabled==1 && uPixelate==1 && uShapeGradOpacity>0.0){
+    /* ── Pre-compute gradient fill color for filter system ─── */
+    if(uPixelate==1){
         vec2 posInTile2=(obliqueUV-blk.uv)*iResolution;
         vec2 ss=blk.shapePx;
         vec2 norm2 = posInTile2 / ss;
-        // isWarp (diamond) cells swap axes so the gradient reads correctly
         if(blk.isWarp) norm2 = vec2(norm2.y, norm2.x);
         float gradT = gradientT(norm2);
-        vec3 gCol=texture2D(uShapeGradTex,vec2(gradT,0.5)).rgb;
-        color=mix(color,blendVH(color,gCol,uEmbossBlendMode,uEmbossHueOff),uShapeGradOpacity);
+        _gradFillColor=texture2D(uShapeGradTex,vec2(gradT,0.5)).rgb;
+    }
+
+    /* ── Filter stack (Color Fill, Gradient Fill, Opacity Pattern, PP effects) ── */
+    color = grade(color);
+
+    /* ── Final SDF shape mask: applied AFTER filters ── */
+    if(uPixelate==1 && shapeAlpha < 0.999){
+        vec3 gapCol = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
+        if(uGapFiltered==1) gapCol = grade(gapCol);
+        color = mix(gapCol, color, shapeAlpha);
+    }
+
+    /* ── Instance blend: composite onto un-pixelated input ──── */
+    if(uInstanceBlendMode >= 0) {
+        vec3 base = texture2D(uAccumTex, rawUV).rgb;
+        color = blendVH(base, color, uInstanceBlendMode, uInstBlendHueOff);
+    }
+
+    /* ── Instance opacity ──── */
+    if(uInstanceOpacity < 0.999) {
+        vec3 behind = texture2D(uAccumTex, rawUV).rgb;
+        color = mix(behind, color, uInstanceOpacity);
     }
 
     // Dither to break 8-bit banding
@@ -2246,7 +2514,7 @@ void main(){
     float d1 = fract(sin(dot(ditherUV, vec2(12.9898,78.233))) * 43758.5453);
     float d2 = fract(sin(dot(ditherUV, vec2(63.7264,10.873))) * 43758.5453);
     float dither = (d1 + d2 - 1.0) / 255.0;
-    vec3 finalColor = grade(color) + vec3(dither);
+    vec3 finalColor = color + vec3(dither);
 
     gl_FragColor=vec4(finalColor,1.0);
 }
@@ -2321,6 +2589,9 @@ void main(){
   const sSpring         = gl.getUniformLocation(sceneProg, 'uSpring');
   const sBgColor        = gl.getUniformLocation(sceneProg, 'uBgColor');
   const sSnapGrid       = gl.getUniformLocation(sceneProg, 'uSnapGrid');
+  const sMergeEnabled   = gl.getUniformLocation(sceneProg, 'uMergeEnabled');
+  const sMergeDist      = gl.getUniformLocation(sceneProg, 'uMergeDist');
+  const sSmoothEdge     = gl.getUniformLocation(sceneProg, 'uSmoothEdge');
   const sPreProcess     = gl.getUniformLocation(sceneProg, 'uPreProcess');
   const sCamHue         = gl.getUniformLocation(sceneProg, 'uCamHue');
   const sCamSat         = gl.getUniformLocation(sceneProg, 'uCamSat');
@@ -2425,6 +2696,7 @@ void main(){
 
   const eRes          = gl.getUniformLocation(edgeProg, 'iResolution');
   const eSceneTex     = gl.getUniformLocation(edgeProg, 'uSceneTex');
+  const eAccumTex     = gl.getUniformLocation(edgeProg, 'uAccumTex');
   const eOutlineWidth = gl.getUniformLocation(edgeProg, 'uOutlineWidth');
   const eOutlineColor = gl.getUniformLocation(edgeProg, 'uOutlineColor');
   const ePixelate     = gl.getUniformLocation(edgeProg, 'uPixelate');
@@ -2433,10 +2705,26 @@ void main(){
   const ePixelShape   = gl.getUniformLocation(edgeProg, 'uPixelShape');
   const eShapeMargin  = gl.getUniformLocation(edgeProg, 'uShapeMargin');
   const eShapeBleed   = gl.getUniformLocation(edgeProg, 'uShapeBleed');
+  const eGapEnabled   = gl.getUniformLocation(edgeProg, 'uGapEnabled');
+  const eGapFiltered  = gl.getUniformLocation(edgeProg, 'uGapFiltered');
+  const eInstBlendMode = gl.getUniformLocation(edgeProg, 'uInstanceBlendMode');
+  const eInstBlendHueOff = gl.getUniformLocation(edgeProg, 'uInstBlendHueOff');
+  const eInstanceOpacity = gl.getUniformLocation(edgeProg, 'uInstanceOpacity');
+  const eShapeSmoothness = gl.getUniformLocation(edgeProg, 'uShapeSmoothness');
+  const eSdfAffectScale  = gl.getUniformLocation(edgeProg, 'uSdfAffectScale');
+  const eSdfMinScale     = gl.getUniformLocation(edgeProg, 'uSdfMinScale');
+  const eSdfMaxScale     = gl.getUniformLocation(edgeProg, 'uSdfMaxScale');
+  const eSdfAffectRotate = gl.getUniformLocation(edgeProg, 'uSdfAffectRotate');
+  const eSdfMinRotate    = gl.getUniformLocation(edgeProg, 'uSdfMinRotate');
+  const eSdfMaxRotate    = gl.getUniformLocation(edgeProg, 'uSdfMaxRotate');
+  const eSdfAffectOffset = gl.getUniformLocation(edgeProg, 'uSdfAffectOffset');
+  const eSdfMinOffset    = gl.getUniformLocation(edgeProg, 'uSdfMinOffset');
+  const eSdfMaxOffset    = gl.getUniformLocation(edgeProg, 'uSdfMaxOffset');
   const ePixelScale   = gl.getUniformLocation(edgeProg, 'uPixelScale');
   const eShapeScale   = gl.getUniformLocation(edgeProg, 'uShapeScale');
   const eForceSquare  = gl.getUniformLocation(edgeProg, 'uForceSquare');
   const eMaintainThickness = gl.getUniformLocation(edgeProg, 'uMaintainThickness');
+  const eQuadReverse = gl.getUniformLocation(edgeProg, 'uQuadReverse');
   const eOblique      = gl.getUniformLocation(edgeProg, 'uOblique');
   const eBandOutline  = gl.getUniformLocation(edgeProg, 'uBandOutline');
   const eQuadSteps    = gl.getUniformLocation(edgeProg, 'uQuadSteps');
@@ -2458,6 +2746,10 @@ void main(){
   const eBandStrength = gl.getUniformLocation(edgeProg, 'uBandStrength');
   const eBandRandomize= gl.getUniformLocation(edgeProg, 'uBandRandomize');
   const eEmbossHueOff    = gl.getUniformLocation(edgeProg, 'uEmbossHueOff');
+  const eFillMode     = gl.getUniformLocation(edgeProg, 'uFillMode');
+  const eFillColor    = gl.getUniformLocation(edgeProg, 'uFillColor');
+  const ePassthrough  = gl.getUniformLocation(edgeProg, 'uPassthrough');
+  const eTwoImage     = gl.getUniformLocation(edgeProg, 'uTwoImage');
   const eImgPixelHueOff  = gl.getUniformLocation(edgeProg, 'uImgPixelHueOff');
   const eImgPixel2HueOff = gl.getUniformLocation(edgeProg, 'uImgPixel2HueOff');
   const eGradeHue     = gl.getUniformLocation(edgeProg, 'uGradeHue');
@@ -2465,6 +2757,14 @@ void main(){
   const eGradeVal     = gl.getUniformLocation(edgeProg, 'uGradeVal');
   const eGradeContrast= gl.getUniformLocation(edgeProg, 'uGradeContrast');
   const ePostProcess  = gl.getUniformLocation(edgeProg, 'uPostProcess');
+  const ePPCount = gl.getUniformLocation(edgeProg, 'uPPCount');
+  const ePPType = []; const ePPParams = []; const ePPBlend = []; const ePPExtra = [];
+  for (let k = 0; k < 16; k++) {
+    ePPType.push(gl.getUniformLocation(edgeProg, 'uPPType['+k+']'));
+    ePPParams.push(gl.getUniformLocation(edgeProg, 'uPPParams['+k+']'));
+    ePPBlend.push(gl.getUniformLocation(edgeProg, 'uPPBlend['+k+']'));
+    ePPExtra.push(gl.getUniformLocation(edgeProg, 'uPPExtra['+k+']'));
+  }
   const eOpPatternCount = gl.getUniformLocation(edgeProg, 'uOpPatternCount');
   const eOpPatternTex = gl.getUniformLocation(edgeProg, 'uOpPatternTex');
   const eOpPatternDims = [];
@@ -2785,23 +3085,15 @@ void main(){
     // Check if fast mode changed — force resize to update resolution
     const p = window.shaderParams;
     const resDivisor = isFast() ? (p.renderRes || 2) : 1;
-
-    // Check if any enabled instance wants override resolution
     const hasOverride = isFast() && p.pixelate && p.pixelateInstances &&
       p.pixelateInstances.some(function(inst) { return inst.enabled !== false && inst.overrideResolution; });
-
-    // Canvas at full resolution when override is active, else reduced by fast mode
     const wantScale = hasOverride ? 1.0 : (1.0 / resDivisor);
     if (wantScale !== currentRenderScale) {
       currentRenderScale = wantScale;
       curW = 0; curH = 0;
     }
-
-    // resize check
     const resized = syncSize();
     if (resized) gl.viewport(0, 0, canvas.width, canvas.height);
-
-    // Scene FBO dims: always at fast-mode resolution even when canvas is full
     const newSceneW = hasOverride ? Math.max(1, (canvas.width / resDivisor) | 0) : canvas.width;
     const newSceneH = hasOverride ? Math.max(1, (canvas.height / resDivisor) | 0) : canvas.height;
     if (resized || newSceneW !== sceneW || newSceneH !== sceneH) {
@@ -3052,6 +3344,9 @@ void main(){
       const bgc = hexToRgb01(p.bgColor || '#000000');
       gl.uniform3f(sBgColor, bgc[0], bgc[1], bgc[2]);
       gl.uniform1f(sSnapGrid,  p.snapGrid ? p.gridUnit : 0);
+      gl.uniform1i(sMergeEnabled, p.mergeEnabled ? 1 : 0);
+      gl.uniform1f(sMergeDist,    p.mergeDist || 1);
+      gl.uniform1f(sSmoothEdge,   p.smoothEnabled ? (p.smoothEdge || 2) : 0);
       gl.uniform1i(sPreProcess, p.preProcess ? 1 : 0);
       gl.uniform1f(sCamHue, p.camHue || 0);
       gl.uniform1f(sCamSat, p.camSat != null ? p.camSat : 1);
@@ -3171,9 +3466,76 @@ void main(){
     const blurR = (p.blurEnabled !== false) ? (p.blurRadius || 0) : 0;
     let blurredSceneTex = sceneTex;
     if (blurR > 0) {
-      doBlurPass(sceneTex, blurFBO_H, 1.0/sceneW, 0,          blurR, sceneW, sceneH);
-      doBlurPass(blurTex_H, blurFBO_V, 0,          1.0/sceneH, blurR, sceneW, sceneH);
+      doBlurPass(sceneTex, blurFBO_H, 1.0/sceneW, 0, blurR, sceneW, sceneH);
+      doBlurPass(blurTex_H, blurFBO_V, 0, 1.0/sceneH, blurR, sceneW, sceneH);
       blurredSceneTex = blurTex_V;
+    }
+
+    // --- pre-process filter pass ---
+    const prePPStack = (p.preProcess && p.prePPStack && p.prePPStack.length > 0) ? p.prePPStack.filter(function(f){ return f.enabled !== false; }) : [];
+    if (prePPStack.length > 0) {
+      if (!prePPFBO) {
+        prePPTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, prePPTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        prePPFBO = gl.createFramebuffer();
+      }
+      gl.bindTexture(gl.TEXTURE_2D, prePPTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prePPFBO);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, prePPTex, 0);
+      gl.viewport(0, 0, W, H);
+
+      gl.useProgram(edgeProg);
+      bindQuad(edgeProg);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, blurredSceneTex);
+      gl.uniform1i(eSceneTex, 0);
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_2D, blurredSceneTex);
+      gl.uniform1i(eAccumTex, 6);
+      gl.uniform2f(eRes, W, H);
+      gl.uniform1i(ePixelate, 0);
+      gl.uniform1i(ePassthrough, 1);
+      gl.uniform1i(ePostProcess, 1);
+      gl.uniform1i(eGapEnabled, 0);
+      gl.uniform1i(ePixelShape, 0);
+      gl.uniform1f(eGradeHue, 0); gl.uniform1f(eGradeSat, 1);
+      gl.uniform1f(eGradeVal, 1); gl.uniform1f(eGradeContrast, 1);
+      gl.uniform1i(eInstBlendMode, -1);
+      gl.uniform1f(eInstanceOpacity, 1.0);
+      gl.uniform1i(eBanding, 0);
+      gl.uniform1f(eOutlineWidth, 0.0);
+      // Load prePP filters
+      var ppCount = Math.min(prePPStack.length, 16);
+      gl.uniform1i(ePPCount, ppCount);
+      for (var pi = 0; pi < 16; pi++) {
+        if (pi < ppCount) {
+          var f = prePPStack[pi];
+          var fp = f.params || [0,0,0,0];
+          // Color Fill: pack color into params xyz, opacity into w
+          if (f.type === 14 && f.color) {
+            var cc = hexToRgb01(f.color);
+            gl.uniform1i(ePPType[pi], 14);
+            gl.uniform4f(ePPParams[pi], cc[0], cc[1], cc[2], f.opacity != null ? f.opacity : 1);
+            gl.uniform1i(ePPBlend[pi], f.blend != null ? f.blend : 8);
+            gl.uniform4f(ePPExtra[pi], 0, 0, 0, 0);
+          } else {
+            gl.uniform1i(ePPType[pi], f.type);
+            gl.uniform4f(ePPParams[pi], fp[0]||0, fp[1]||0, fp[2]||0, fp[3]||0);
+            gl.uniform1i(ePPBlend[pi], f.blend != null ? f.blend : 0);
+            gl.uniform4f(ePPExtra[pi], f.opacity != null ? f.opacity : 1, 0, 0, 0);
+          }
+        } else {
+          gl.uniform1i(ePPType[pi], -1);
+        }
+      }
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      blurredSceneTex = prePPTex;
     }
 
     // --- pass 2: edge / pixelate chain ---
@@ -3182,7 +3544,8 @@ void main(){
     const usePrecompute = p.precompute && p.animating;
     const pcFrames = Math.max(1, Math.min(10, p.precomputeFrames || 3));
 
-    const insts = (p.pixelate && p.pixelateInstances && p.pixelateInstances.length > 0)
+    const usingRealInsts = !!(p.pixelate && p.pixelateInstances && p.pixelateInstances.length > 0);
+    const insts = usingRealInsts
       ? p.pixelateInstances
       : [{
           // legacy / single-instance fallback
@@ -3213,37 +3576,135 @@ void main(){
     const N = insts.length;
 
     // Filter to only enabled instances (inst.enabled !== false)
-    const activeInsts = insts.filter(function(inst) { return inst.enabled !== false; });
+    // Expand shapes: each shape in an instance becomes a virtual sub-instance
+    // sharing the parent's grid config but with its own shape/filter params
+    const SHAPE_KEYS = ['pixelShape','shapeMargin','shapeBleed','shapeSmoothness','shapeScale','forceSquare',
+      'sdfAffectScale','sdfMinScale','sdfMaxScale','sdfAffectRotate','sdfMinRotate','sdfMaxRotate',
+      'sdfAffectOffset','sdfMinOffset','sdfMaxOffset',
+      'imgPixelEnabled','imgPixelCols','imgPixelRows','imgPixelOpacity','imgPixelBlend','imgPixelHueOff','imgPixelMask',
+      'imgPixelAffectScale','imgPixelMinScale','imgPixelMaxScale',
+      'imgPixelAffectRotate','imgPixelMinRotate','imgPixelMaxRotate',
+      'imgPixelAffectOffset','imgPixelMinOffset','imgPixelMaxOffset',
+      'twoImage','imgPixel2Enabled','imgPixel2Cols','imgPixel2Rows',
+      'imgPixel2Opacity','imgPixel2Blend','imgPixel2HueOff','imgPixel2Mask',
+      'imgPixel2AffectScale','imgPixel2AffectRotate','imgPixel2AffectOffset',
+      'imgPixel2MinScale','imgPixel2MaxScale','imgPixel2MinRotate','imgPixel2MaxRotate',
+      'imgPixel2MinOffset','imgPixel2MaxOffset',
+      'filters','filtersEnabled','blendMode','blendHueOff','blendOpacity'];
+
+    // Sync any pending inst-level changes to active shapes before expansion
+    insts.forEach(function(inst, idx) {
+      if (inst.enabled === false || !inst.shapes || !inst.shapes.length) return;
+      var sh = inst.shapes[inst.activeShapeIdx || 0];
+      if (!sh) return;
+      var SK = SHAPE_KEYS;
+      for (var ki = 0; ki < SK.length; ki++) {
+        var k = SK[ki];
+        if (inst[k] !== undefined) sh[k] = inst[k];
+      }
+    });
+
+    const expandedInsts = [];
+    insts.forEach(function(inst) {
+      if (inst.enabled === false) return;
+      const shapes = (inst.shapes && inst.shapes.length > 0) ? inst.shapes : [inst];
+      const enabledShapes = shapes.filter(function(s) { return s.enabled !== false; });
+      var hasMultiShapes = enabledShapes.length > 1;
+      enabledShapes.forEach(function(sh, si) {
+        var merged = {};
+        for (var k in inst) { if (inst.hasOwnProperty(k)) merged[k] = inst[k]; }
+        SHAPE_KEYS.forEach(function(k) { if (sh[k] !== undefined) merged[k] = sh[k]; });
+        if (si > 0 || insts.indexOf(inst) > 0) {
+          merged.gapEnabled = false;
+        }
+        if (hasMultiShapes) {
+          if (si === 0) {
+            merged.instanceBlendMode = -1;  // first shape: no blend (base)
+          } else {
+            // shapes 1+: use their own blend mode for compositing
+            merged.instanceBlendMode = sh.blendMode != null ? sh.blendMode : 8;
+            merged.instanceBlendHueOff = sh.blendHueOff || 0;
+          }
+          merged.instanceOpacity = si > 0 ? (sh.blendOpacity != null ? sh.blendOpacity : 1.0) : 1.0;
+          merged._gradeNeutral = true;
+        } else {
+          merged._gradeNeutral = false;
+        }
+        merged._isFirstShape = (si === 0);
+        merged._isLastShape = (si === enabledShapes.length - 1);
+        merged._isFinisher = false;
+        merged._parentInst = inst;
+        merged._origIdx = insts.indexOf(inst);
+        expandedInsts.push(merged);
+      });
+      // Add finisher pass only if needed (blend, opacity, or grading)
+      if (hasMultiShapes) {
+        var needsFinisher = (inst.instanceBlendMode != null && inst.instanceBlendMode >= 0)
+            || (inst.instanceOpacity != null && inst.instanceOpacity < 1.0);
+        if (needsFinisher) {
+          var fin = {};
+          for (var k in inst) { if (inst.hasOwnProperty(k)) fin[k] = inst[k]; }
+          fin.passthrough = true;
+          fin.pixelShape = 0;
+          fin._isFirstShape = false;
+          fin._isLastShape = true;
+          fin._isFinisher = true;
+          fin._gradeNeutral = false;
+          fin._parentInst = inst;
+          fin._origIdx = insts.indexOf(inst);
+          fin.instanceBlendMode = inst.instanceBlendMode != null ? inst.instanceBlendMode : -1;
+          fin.instanceBlendHueOff = inst.instanceBlendHueOff || 0;
+          fin.instanceOpacity = inst.instanceOpacity != null ? inst.instanceOpacity : 1.0;
+          expandedInsts.push(fin);
+        } else {
+          // No finisher: let last shape handle grading directly
+          var lastExp = expandedInsts[expandedInsts.length - 1];
+          if (lastExp) { lastExp._gradeNeutral = false; lastExp._isLastShape = true; }
+        }
+      }
+    });
+
+    const activeInsts = expandedInsts;
     const NA = activeInsts.length;
     if (NA === 0) {
-      // Nothing to do — blit scene directly to screen
+      // Nothing to do — blit scene (with blur if active) directly to screen
       if (usePrecompute) {
         ensurePrecomputeFBOs(pcFrames, W, H);
         const writeIdx = precomputePlayIdx % pcFrames;
-        blitToScreen(sceneTex, W, H);
+        blitToScreen(blurredSceneTex, W, H);
         precomputeBuffer[writeIdx].ready = true;
         precomputePlayIdx = (precomputePlayIdx + 1) % pcFrames;
       } else {
-        blitToScreen(sceneTex, W, H);
+        blitToScreen(blurredSceneTex, W, H);
       }
       return;
     }
 
     // Ensure intermediary FBOs are current (based on full instance list for consistency)
     rebuildInstanceFBOs();
+    // Ensure enough FBOs for expanded shape instances (resolution-aware)
+    while (instanceFBOs.length < NA) instanceFBOs.push(null);
+    for (let ei = 0; ei < NA; ei++) {
+      const eiRes = activeInsts[ei].overrideResolution ? activeInsts[ei].resolution : 'full';
+      const [eiW, eiH] = resolveFBOSize(canvas.width, canvas.height, eiRes);
+      if (!instanceFBOs[ei] || instanceFBOs[ei].w !== eiW || instanceFBOs[ei].h !== eiH) {
+        if (instanceFBOs[ei]) destroyFBOSlot(instanceFBOs[ei]);
+        instanceFBOs[ei] = makeFBOSlot(eiW, eiH);
+      }
+    }
 
     // Keep track of the texture that is the input to each pass
     let inputTex = blurredSceneTex;
 
+    let parentInputTex = inputTex;
     for (let instIdx = 0; instIdx < NA; instIdx++) {
       const inst = activeInsts[instIdx];
       const isLast = instIdx === NA - 1;
 
       // Map active instance index back to original index for FBO slot
-      const origIdx = insts.indexOf(inst);
+      const origIdx = inst._origIdx != null ? inst._origIdx : insts.indexOf(inst);
 
-      // All instances render to their own FBO; final blit handles screen output
-      const slot = instanceFBOs[origIdx];
+      const slot = usingRealInsts ? instanceFBOs[instIdx] : null;
       const iW = slot ? slot.w : W;
       const iH = slot ? slot.h : H;
 
@@ -3252,14 +3713,22 @@ void main(){
       gl.useProgram(edgeProg);
       bindQuad(edgeProg);
 
-      // Scene texture input
+      // Scene texture input — sampleFromGeneral overrides to scene FBO
+      // First shape of a group saves the parent's input; siblings reuse it
+      if (inst._isFirstShape) { parentInputTex = inputTex; }
+      const effectiveInput = inst.sampleFromGeneral ? blurredSceneTex : parentInputTex;
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, inputTex);
+      gl.bindTexture(gl.TEXTURE_2D, effectiveInput);
       gl.uniform1i(eSceneTex, 0);
+      // Accumulated result: always the chain input (for gap fallback and blend base)
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_2D, inputTex);
+      gl.uniform1i(eAccumTex, 6);
       gl.uniform2f(eRes, iW, iH);
 
-      // Outline — only on the last instance
-      gl.uniform1f(eOutlineWidth, isLast && p.showOutline ? p.outlineWidth : 0.0);
+      const gradeNeutral = !!inst._gradeNeutral;
+      // Outline — only on the last shape of last parent
+      gl.uniform1f(eOutlineWidth, !gradeNeutral && inst._isLastShape && p.showOutline ? p.outlineWidth : 0.0);
       const oc = hexToRgb01(p.outlineColor || '#000000');
       gl.uniform3f(eOutlineColor, oc[0], oc[1], oc[2]);
 
@@ -3269,13 +3738,27 @@ void main(){
       const ph = (inst.pixelH || 8) * (inst.pixelScale || 1);
       gl.uniform2f(ePixelSize, pw, ph);
       gl.uniform1i(eWeaveMode,   inst.weaveMode  || 0);
+      // ── Multi-shape loop ──
+      // Shape properties are already merged into inst by expandShapes
+
       gl.uniform1i(ePixelShape,  inst.pixelShape || 0);
       gl.uniform1f(eShapeMargin, inst.shapeMargin != null ? inst.shapeMargin : 0);
       gl.uniform1f(eShapeBleed,  inst.shapeBleed  != null ? inst.shapeBleed  : 0);
+      gl.uniform1f(eShapeSmoothness, inst.shapeSmoothness != null ? inst.shapeSmoothness : 0);
+      gl.uniform1i(eSdfAffectScale,  inst.sdfAffectScale  ? 1 : 0);
+      gl.uniform1f(eSdfMinScale,     inst.sdfMinScale     != null ? inst.sdfMinScale     : 0.5);
+      gl.uniform1f(eSdfMaxScale,     inst.sdfMaxScale     != null ? inst.sdfMaxScale     : 2.0);
+      gl.uniform1i(eSdfAffectRotate, inst.sdfAffectRotate ? 1 : 0);
+      gl.uniform1f(eSdfMinRotate,    inst.sdfMinRotate    != null ? inst.sdfMinRotate    : -45);
+      gl.uniform1f(eSdfMaxRotate,    inst.sdfMaxRotate    != null ? inst.sdfMaxRotate    : 45);
+      gl.uniform1i(eSdfAffectOffset, inst.sdfAffectOffset ? 1 : 0);
+      gl.uniform1f(eSdfMinOffset,    inst.sdfMinOffset    != null ? inst.sdfMinOffset    : -0.3);
+      gl.uniform1f(eSdfMaxOffset,    inst.sdfMaxOffset    != null ? inst.sdfMaxOffset    : 0.3);
       gl.uniform1f(ePixelScale,  inst.pixelScale  || 1);
       gl.uniform1f(eShapeScale,  inst.shapeScale  != null ? inst.shapeScale  : 1.0);
       gl.uniform1i(eForceSquare, inst.forceSquare ? 1 : 0);
       gl.uniform1i(eMaintainThickness, inst.maintainThickness ? 1 : 0);
+      gl.uniform1i(eQuadReverse, inst.quadReverse ? 1 : 0);
       gl.uniform1i(eOblique,     inst.oblique     ? 1 : 0);
       gl.uniform1i(eBandOutline, p.bandOutline    ? 1 : 0);
       gl.uniform1i(eQuadSteps,   inst.quadEnabled ? (inst.quadSteps || 1) : 1);
@@ -3284,40 +3767,123 @@ void main(){
       const gc = hexToRgb01(inst.gapColor || p.gapColor || '#000000');
       gl.uniform3f(eGapColor,    gc[0], gc[1], gc[2]);
       gl.uniform1f(eGapOpacity,  inst.gapOpacity != null ? inst.gapOpacity : (p.gapOpacity || 0));
+      gl.uniform1i(eGapFiltered,    inst.gapFiltered ? 1 : 0);
+      const gapOn = inst.gapEnabled !== false;
+      gl.uniform1i(eGapEnabled, gapOn ? 1 : 0);
+      gl.uniform1i(eInstBlendMode, inst.instanceBlendMode != null ? inst.instanceBlendMode : -1);
+      gl.uniform1f(eInstBlendHueOff, inst.instanceBlendHueOff != null ? inst.instanceBlendHueOff : 0);
+      // Instance opacity: only on last shape (or single shape)
+      gl.uniform1f(eInstanceOpacity, inst.instanceOpacity != null ? inst.instanceOpacity : 1.0);
 
-      // Shape gradient (shared texture, per-instance params)
+      // Shape gradient — upload from first Gradient Fill filter or instance fallback
+      gl.activeTexture(gl.TEXTURE2);
+      const gradFilter = (inst.filters || []).find(f => f.type === 15 && f.enabled !== false);
+      const gradStopsSource = gradFilter ? gradFilter.gradStops : (inst.shapeGradStops || null);
+      if (gradStopsSource && gradStopsSource.length >= 2) {
+        const stops = gradStopsSource.slice().sort((a,b) => a.pos - b.pos);
+        const gd = new Uint8Array(GRAD_WIDTH * 4);
+        for (let x = 0; x < GRAD_WIDTH; x++) {
+          const t = x / (GRAD_WIDTH - 1);
+          let lo = stops[0], hi = stops[stops.length - 1];
+          for (let j = 0; j < stops.length - 1; j++) {
+            if (t >= stops[j].pos && t <= stops[j+1].pos) { lo = stops[j]; hi = stops[j+1]; break; }
+          }
+          const range = hi.pos - lo.pos;
+          const f = range < 0.0001 ? 0 : (t - lo.pos) / range;
+          gd[x*4+0] = Math.round(lo.r + (hi.r - lo.r) * f);
+          gd[x*4+1] = Math.round(lo.g + (hi.g - lo.g) * f);
+          gd[x*4+2] = Math.round(lo.b + (hi.b - lo.b) * f);
+          gd[x*4+3] = 255;
+        }
+        gl.bindTexture(gl.TEXTURE_2D, shapeGradTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, gd);
+      }
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, shapeGradTex);
       gl.uniform1i(eShapeGradTex, 2);
-      gl.uniform1f(eShapeGradOpacity, inst.shapeGradOpacity != null ? inst.shapeGradOpacity : (p.shapeGradOpacity || 0));
-      gl.uniform1i(eShapeGradDir,     inst.shapeGradDir     != null ? inst.shapeGradDir     : (p.shapeGradDir || 0));
-      gl.uniform1i(eTileGradEnabled,  inst.tileGradEnabled  !== false ? 1 : 0);
-      gl.uniform2f(eRadialCenter,     inst.radialCenterX || 0, inst.radialCenterY || 0);
-      gl.uniform1f(eRadialScale,      inst.radialScale    != null ? inst.radialScale : 1.0);
-      gl.uniform1i(eEmbossBlendMode,  inst.embossBlendMode || 0);
-      gl.uniform1f(eEmbossHueOff,     inst.embossHueOff    != null ? inst.embossHueOff : 0);
+      gl.uniform1f(eShapeGradOpacity, inst.shapeGradOpacity != null ? inst.shapeGradOpacity : 0);
+      const gfDir = gradFilter ? (gradFilter.gradDir || 0) : (inst.shapeGradDir != null ? inst.shapeGradDir : 0);
+      gl.uniform1i(eShapeGradDir, gfDir);
+      gl.uniform1i(eTileGradEnabled,  gradFilter ? 1 : (inst.tileGradEnabled !== false ? 1 : 0));
+      const gfRC = gradFilter || inst;
+      gl.uniform2f(eRadialCenter, gfRC.radialCenterX || 0, gfRC.radialCenterY || 0);
+      gl.uniform1f(eRadialScale, gfRC.radialScale != null ? gfRC.radialScale : 1.0);
+      gl.uniform1i(eEmbossBlendMode, gradFilter ? (gradFilter.blendMode || 0) : (inst.embossBlendMode || 0));
+      gl.uniform1f(eEmbossHueOff, gradFilter ? (gradFilter.hueOff || 0) : (inst.embossHueOff != null ? inst.embossHueOff : 0));
+      gl.uniform1i(eFillMode, 1);
+      const fc = hexToRgb01(inst.fillColor || '#ffffff');
+      gl.uniform3f(eFillColor, fc[0], fc[1], fc[2]);
+      gl.uniform1i(ePassthrough,     inst.passthrough ? 1 : 0);
+      gl.uniform1i(eTwoImage,        inst.twoImage ? 1 : 0);
 
       // Banding + grading + post-process — only on last instance
-      gl.uniform1i(eBanding,      isLast && p.banding     ? 1 : 0);
+      gl.uniform1i(eBanding,      !gradeNeutral && inst._isLastShape && p.banding ? 1 : 0);
       gl.uniform1f(eBandCount,    p.bandCount);
       gl.uniform1f(eBandLumMin,   p.bandLumMin);
       gl.uniform1f(eBandLumMax,   p.bandLumMax);
       gl.uniform1f(eBandStrength, p.bandStrength);
       gl.uniform1i(eBandRandomize, p.bandRandomize ? 1 : 0);
-      gl.uniform1f(eGradeHue,     isLast ? p.gradeHue     : 0);
-      gl.uniform1f(eGradeSat,     isLast ? p.gradeSat     : 1);
-      gl.uniform1f(eGradeVal,     isLast ? p.gradeVal     : 1);
-      gl.uniform1f(eGradeContrast,isLast ? p.gradeContrast: 1);
-      gl.uniform1i(ePostProcess,  isLast && p.postProcessEnabled !== false ? 1 : 0);
+      gl.uniform1f(eGradeHue,     gradeNeutral ? 0 : p.gradeHue);
+      gl.uniform1f(eGradeSat,     gradeNeutral ? 1 : p.gradeSat);
+      gl.uniform1f(eGradeVal,     gradeNeutral ? 1 : p.gradeVal);
+      gl.uniform1f(eGradeContrast,gradeNeutral ? 1 : p.gradeContrast);
+      // For gradeNeutral shapes: only enable PP if shape has real filters (avoid legacy rgb>hsv>rgb drift)
+      var shapeHasFilters = inst.filtersEnabled !== false && (inst.filters || []).length > 0;
+      gl.uniform1i(ePostProcess, gradeNeutral ? (shapeHasFilters ? 1 : 0) : ((inst.filtersEnabled !== false) || (p.postProcessEnabled !== false) ? 1 : 0));
 
-      // Opacity patterns (per-instance)
-      const opPatsEnabled = inst.opPatternsEnabled !== false;
-      const opPats = inst.opPatterns || [];
+      // Filter stack: per-instance filters + global post-process on last instance
+      const instFilters = (inst.filtersEnabled !== false && inst.filters && inst.filters.length > 0)
+        ? inst.filters.filter(function(e) { return e.enabled !== false; }) : [];
+      const globalPP = (isLast && !gradeNeutral && p.postProcessEnabled !== false && p.ppStack)
+        ? p.ppStack.filter(function(e) { return e.enabled !== false; }) : [];
+      const ppStack = instFilters.concat(globalPP).slice(0, 16);
+      gl.uniform1i(ePPCount, ppStack.length);
+      for (let k = 0; k < 16; k++) {
+        if (k < ppStack.length) {
+          const ppe = ppStack[k];
+          gl.uniform1i(ePPType[k], ppe.type);
+          const pr = window._ppGetParams ? window._ppGetParams(ppe) : [0,0,0,0];
+          gl.uniform4f(ePPParams[k], pr[0], pr[1], pr[2], pr[3]);
+          gl.uniform1i(ePPBlend[k], ppe.blendMode != null ? ppe.blendMode : -1);
+          gl.uniform1f(ePPExtra[k], ppe.hueOff != null ? ppe.hueOff : 0);
+        } else {
+          gl.uniform1i(ePPType[k], -1);
+          gl.uniform4f(ePPParams[k], 0, 0, 0, 0);
+          gl.uniform1i(ePPBlend[k], -1);
+          gl.uniform1f(ePPExtra[k], 0);
+        }
+      }
+
+      // (shape loop continues — draw after all uniforms set below)
+
+      // Opacity patterns — from first enabled OpPattern filter or instance fallback
+      const opFilter = (inst.filters || []).find(f => f.type === 16 && f.enabled !== false);
+      const opPatsSource = opFilter ? (opFilter.patterns || []) : (inst.opPatterns || []);
+      const opPatsEnabled = opFilter ? true : (inst.opPatternsEnabled !== false);
+      const opPats = opPatsSource;
       const opCount = opPatsEnabled ? opPats.filter(op => op.active !== false).length : 0;
       gl.uniform1i(eOpPatternCount, opCount);
-      gl.uniform1f(eOpPatternSeed,  inst.opPatternSeed || 0);
-      gl.uniform1i(eOpPatternMode,  inst.opPatternMode || 0);
+      gl.uniform1f(eOpPatternSeed, opFilter ? (opFilter.patternSeed || 0) : (inst.opPatternSeed || 0));
+      gl.uniform1i(eOpPatternMode, opFilter ? (opFilter.patternMode || 0) : (inst.opPatternMode || 0));
       for (let k = 0; k < 4; k++) gl.uniform4f(eOpPatternDims[k], 0, 0, 0, 0);
+      // Opacity patterns — upload per-instance patterns to shared texture
+      if (opCount > 0) {
+        gl.activeTexture(gl.TEXTURE3);
+        const opData = new Uint8Array(64 * 16);
+        let opIdx = 0;
+        for (let k = 0; k < opPats.length && opIdx < 4; k++) {
+          if (opPats[k].active === false) continue;
+          const rows = opPats[k].grid || [];
+          for (let r = 0; r < rows.length && r < 16; r++) {
+            for (let c = 0; c < rows[r].length && c < 16; c++) {
+              opData[(r * 64) + (opIdx * 16) + c] = Math.round(Math.max(0, Math.min(1, rows[r][c])) * 255);
+            }
+          }
+          opIdx++;
+        }
+        gl.bindTexture(gl.TEXTURE_2D, opPatternTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, opData);
+      }
       if (opCount > 0) {
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_2D, opPatternTex);
@@ -3376,24 +3942,28 @@ void main(){
       gl.uniform1f(eImgPixel2MaxOffset,    inst.imgPixel2MaxOffset    != null ? inst.imgPixel2MaxOffset    :  0.5);
       gl.uniform1i(eImgPixel2Mask,         inst.imgPixel2Mask ? 1 : 0);
 
+      // Ensure scene texture stays bound — sibling shapes use same parent input
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, effectiveInput);
+
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-      // The output of this instance becomes the input of the next
+
+
+      // inputTex chains normally so uAccumTex gets previous shape's output
       if (!isLast && slot) {
         inputTex = slot.tex;
       }
     }
 
-    // Blit last instance FBO → screen (or precompute buffer)
-    const lastOrigIdx = insts.indexOf(activeInsts[NA - 1]);
-    const lastSlot = instanceFBOs[lastOrigIdx];
+    const lastSlot = usingRealInsts ? instanceFBOs[NA - 1] : null;
     const lastTex = lastSlot ? lastSlot.tex : blurredSceneTex;
 
-    if (usePrecompute) {
+    if (!usingRealInsts) {
+      // Legacy path rendered directly to screen
+    } else if (usePrecompute) {
       ensurePrecomputeFBOs(pcFrames, W, H);
       const writeIdx = precomputePlayIdx % pcFrames;
-
-      // Blit last instance result → precompute buffer (upscales if needed)
       gl.bindFramebuffer(gl.FRAMEBUFFER, precomputeBuffer[writeIdx].fbo);
       gl.viewport(0, 0, W, H);
       gl.useProgram(blitProg);
@@ -3402,10 +3972,8 @@ void main(){
       gl.bindTexture(gl.TEXTURE_2D, lastTex);
       gl.uniform1i(blitTex, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
-
       precomputeBuffer[writeIdx].ready = true;
       gl.finish();
-
       const displayIdx = (precomputePlayIdx + 1) % pcFrames;
       if (precomputeBuffer[displayIdx] && precomputeBuffer[displayIdx].ready) {
         blitToScreen(precomputeBuffer[displayIdx].tex, W, H);
