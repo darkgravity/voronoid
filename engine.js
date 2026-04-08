@@ -61,8 +61,10 @@ gl.viewport(0, 0, canvas.width, canvas.height);
 const parallelExt = gl.getExtension('KHR_parallel_shader_compile');
 const COMPLETION_STATUS = parallelExt ? parallelExt.COMPLETION_STATUS_KHR : null;
 
-function compileShader(type, src) {
+function compileShader(type, src, tag) {
   const s = gl.createShader(type);
+  s._tag = tag || (type === gl.VERTEX_SHADER ? 'vertex?' : 'fragment?');
+  s._src = src;
   gl.shaderSource(s, src);
   gl.compileShader(s);
   // Don't check status here — defer to checkProgram to avoid blocking
@@ -78,14 +80,44 @@ function buildProgram(vert, frag) {
   return p;
 }
 
+// Escape HTML so error messages render verbatim in the overlay
+function _escHtml(s) {
+  return String(s).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
+}
+// Show a fatal shader error in the overlay (scrollable, wraps long lines, mobile-friendly)
+function _showShaderError(title, body, src) {
+  var html = '<pre style="color:#f66;padding:12px;font-size:11px;line-height:1.4;margin:0;'
+           + 'white-space:pre-wrap;word-break:break-word;'
+           + 'position:fixed;inset:0;overflow:auto;background:#000;'
+           + 'font-family:ui-monospace,Menlo,Consolas,monospace;z-index:9999">'
+           + _escHtml(title) + '\n\n' + _escHtml(body);
+  // If we have the source and the error references a line number, show that line in context
+  if (src) {
+    var m = /(?:^|\b)\d+:(\d+)/.exec(body);
+    if (m) {
+      var ln = parseInt(m[1], 10);
+      var lines = src.split('\n');
+      var from = Math.max(0, ln - 4), to = Math.min(lines.length, ln + 3);
+      html += '\n\n--- source (lines ' + (from+1) + '-' + to + ') ---\n';
+      for (var i = from; i < to; i++) {
+        html += _escHtml((i+1) + (i+1===ln ? ' >> ' : '    ') + lines[i]) + '\n';
+      }
+    }
+  }
+  html += '</pre>';
+  var overlay = document.getElementById('shader-loading-overlay');
+  if (overlay) overlay.innerHTML = html;
+  else { var d = document.createElement('div'); d.innerHTML = html; document.body.appendChild(d); }
+  console.error(title, body);
+}
+
 // Check a compiled shader for errors (called after parallel compile finishes)
 function checkShader(s) {
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    const err = gl.getShaderInfoLog(s);
-    var overlay = document.getElementById('shader-loading-overlay');
-    if (overlay) { overlay.innerHTML = '<pre style="color:#f66;padding:2rem;font-size:13px;margin:0">Shader compile error:\n' + err + '</pre>'; }
-    else { console.error('Shader compile error:', err); }
-    throw new Error(err);
+    var log = gl.getShaderInfoLog(s);
+    if (!log || !log.trim()) log = '(driver returned empty info log — check desktop console / remote-debug for details)';
+    _showShaderError('Shader compile error [' + (s._tag || '?') + ']', log, s._src);
+    throw new Error(log);
   }
 }
 
@@ -99,8 +131,7 @@ function waitForPrograms(programs, shaders, onReady) {
     for (const s of shaders) { try { checkShader(s); } catch(e) { return; } }
     for (const prog of programs) {
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-        const err = gl.getProgramInfoLog(prog);
-        var _o=document.getElementById('shader-loading-overlay'); if(_o){_o.innerHTML='<pre style="color:#f66;padding:2rem;font-size:13px;margin:0">Shader link error:\n'+err+'</pre>';} else { console.error('Shader link error:', err); }
+        _showShaderError('Shader link error [' + (prog._tag || '?') + ']', gl.getProgramInfoLog(prog) || '(empty link log)', null);
         return;
       }
     }
@@ -118,8 +149,7 @@ function waitForPrograms(programs, shaders, onReady) {
     for (const s of shaders) { try { checkShader(s); } catch(e) { return; } }
     for (const prog of programs) {
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-        const err = gl.getProgramInfoLog(prog);
-        var _o=document.getElementById('shader-loading-overlay'); if(_o){_o.innerHTML='<pre style="color:#f66;padding:2rem;font-size:13px;margin:0">Shader link error:\n'+err+'</pre>';} else { console.error('Shader link error:', err); }
+        _showShaderError('Shader link error [' + (prog._tag || '?') + ']', gl.getProgramInfoLog(prog) || '(empty link log)', null);
         return;
       }
     }
@@ -457,22 +487,22 @@ window.uploadShapeGradient = function(stops) {
   const sceneSrc = FRAGMENT_GLSL_SRC;
   const edgeSrc  = EDGE_GLSL_SRC;
 
-  const vert = compileShader(gl.VERTEX_SHADER, VERT_SRC);
-  const sceneFrag = compileShader(gl.FRAGMENT_SHADER, sceneSrc);
-  const edgeFrag  = compileShader(gl.FRAGMENT_SHADER, edgeSrc);
+  const vert = compileShader(gl.VERTEX_SHADER, VERT_SRC, 'main vertex');
+  const sceneFrag = compileShader(gl.FRAGMENT_SHADER, sceneSrc, 'scene fragment');
+  const edgeFrag  = compileShader(gl.FRAGMENT_SHADER, edgeSrc, 'edge fragment');
 
   // Build programs immediately so GPU can compile in parallel
-  const sceneProg = buildProgram(vert, sceneFrag);
-  const edgeProg  = buildProgram(vert, edgeFrag);
+  const sceneProg = buildProgram(vert, sceneFrag); sceneProg._tag = 'scene';
+  const edgeProg  = buildProgram(vert, edgeFrag);  edgeProg._tag  = 'edge';
 
   // Blit is tiny — compile inline too
   const blitFS = `precision mediump float; uniform sampler2D uTex; varying vec2 vUV;
     void main(){ gl_FragColor = texture2D(uTex, vUV); }`;
   const blitVS = `attribute vec2 aPos; varying vec2 vUV;
     void main(){ vUV = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0, 1); }`;
-  const blitFrag = compileShader(gl.FRAGMENT_SHADER, blitFS);
-  const blitVertShader = compileShader(gl.VERTEX_SHADER, blitVS);
-  const blitProg = buildProgram(blitVertShader, blitFrag);
+  const blitFrag = compileShader(gl.FRAGMENT_SHADER, blitFS, 'blit fragment');
+  const blitVertShader = compileShader(gl.VERTEX_SHADER, blitVS, 'blit vertex');
+  const blitProg = buildProgram(blitVertShader, blitFrag); blitProg._tag = 'blit';
 
   // ── Gaussian blur shader (separable, 9-tap) ──────────────────────
   const BLUR_VS = `attribute vec2 aPos; varying vec2 vUV;
@@ -496,8 +526,8 @@ window.uploadShapeGradient = function(stops) {
       }
       gl_FragColor = col / wsum;
     }`;
-  const blurFrag_s  = compileShader(gl.FRAGMENT_SHADER, BLUR_FS);
-  const blurProg    = buildProgram(blitVertShader, blurFrag_s);
+  const blurFrag_s  = compileShader(gl.FRAGMENT_SHADER, BLUR_FS, 'blur fragment');
+  const blurProg    = buildProgram(blitVertShader, blurFrag_s); blurProg._tag = 'blur';
 
   // Signal to the HTML overlay that compilation has started
   window._shaderCompiling = true;
