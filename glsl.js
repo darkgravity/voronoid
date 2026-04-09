@@ -14,7 +14,6 @@ precision mediump float;
 precision mediump int;
 #endif
 
-
 uniform vec2  iResolution;
 uniform int   uMode;
 uniform int   uNumPoints;
