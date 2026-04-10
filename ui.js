@@ -301,20 +301,46 @@
         video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
       };
+      console.log('[camera] startCamera facing=' + facing, 'secure=' + window.isSecureContext, 'protocol=' + location.protocol);
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const msg = 'getUserMedia unavailable. mediaDevices=' + !!navigator.mediaDevices + ' secureContext=' + window.isSecureContext + ' protocol=' + location.protocol;
+        console.error('[camera] ' + msg);
+        alert('Camera not available: ' + msg + '\n\nMobile browsers require HTTPS (or localhost) for camera access.');
+        return;
+      }
       navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+        console.log('[camera] got stream, tracks=' + stream.getVideoTracks().length);
         cameraStream = stream;
         const video = document.getElementById('cameraVideo');
+        // iOS Safari: must set these explicitly even though they're on the tag
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
+        video.muted = true;
+        video.autoplay = true;
         video.srcObject = stream;
-        video.play();
         window.cameraVideo = video;
-        // Wait for video to actually have frames before rendering
+        const playPromise = video.play();
+        if (playPromise && playPromise.then) {
+          playPromise.then(() => {
+            console.log('[camera] video.play() resolved, readyState=' + video.readyState + ' size=' + video.videoWidth + 'x' + video.videoHeight);
+            window.shaderDirty = true;
+          }).catch(err => {
+            console.error('[camera] video.play() rejected:', err.name, err.message);
+            alert('Camera video.play() failed: ' + err.name + ' — ' + err.message);
+          });
+        }
         video.addEventListener('loadeddata', () => {
+          console.log('[camera] loadeddata, size=' + video.videoWidth + 'x' + video.videoHeight + ' readyState=' + video.readyState);
+          window.shaderDirty = true;
+        }, { once: true });
+        video.addEventListener('playing', () => {
+          console.log('[camera] playing event, readyState=' + video.readyState);
           window.shaderDirty = true;
         }, { once: true });
         window.shaderDirty = true;
       }).catch(err => {
-        console.error('Camera error:', err);
-        alert('Could not access camera. Check permissions.');
+        console.error('[camera] getUserMedia rejected:', err.name, err.message);
+        alert('Camera error: ' + err.name + ' — ' + err.message + '\n\nCheck that the page is served over HTTPS and that camera permission is granted.');
         setSource('pattern');
       });
     }
