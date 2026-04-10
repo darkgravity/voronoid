@@ -64,7 +64,7 @@ if (!gl) {
 window._glRef = gl;
 
 // Version marker — bump on every fix so we can verify new code is loaded
-console.log('%c[engine.js v20.4 — 2026-04-09 mobile recording fix: bypass dirty-flag during recording]', 'background:#0a0;color:#fff;padding:2px 6px;border-radius:3px');
+console.log('%c[engine.js v20.6 — 2026-04-10 mobile camera fix: precision conditional + shader error reporting]', 'background:#0a0;color:#fff;padding:2px 6px;border-radius:3px');
 
 // ── GPU capability logging ──────────────────────────────────────
 // Print actual hardware limits at startup. If the shader still fails to
@@ -1421,19 +1421,19 @@ window.uploadShapeGradient = function(stops) {
     }
 
     // Dirty-flag early-out: skip the draw if nothing changed.
-    // EXCEPTION: during video recording we MUST draw every frame regardless.
-    // config.js sets p.animating=false during recording so it can drive frames
-    // manually via _flowTimeOverride, which means most rAFs would see
-    // shaderDirty=false and early-return here. On any device where the WebGL
-    // context ended up with preserveDrawingBuffer:false (which engine.js's
-    // fallback chain allows), the browser clears the drawing buffer between
-    // composites — so any rAF that returns without drawing leaves a black
-    // canvas on screen AND a black sample for captureStream. Forcing a draw
-    // every frame during recording keeps the buffer continuously refreshed
-    // and the recording captures actual content. Cost is one extra full draw
-    // per rAF for the duration of the recording, which is fine — recording
-    // is an exceptional state, not a steady-state hot path.
-    if (!window.shaderDirty && !window._recordingActive) return;
+    // EXCEPTIONS — must draw every rAF in these cases:
+    //   1. During video recording. config.js sets p.animating=false during
+    //      desktop recording so it can drive frames manually. Most rAFs
+    //      would see shaderDirty=false and early-return; on devices with
+    //      preserveDrawingBuffer:false the buffer would clear and recording
+    //      would sample black.
+    //   2. Camera source. The camera shader uploads a fresh video frame via
+    //      texImage2D on every draw. p.animating is false in camera mode
+    //      (camera isn't "rotating"), so nothing else marks shaderDirty after
+    //      the initial setSource. Without forcing draw, camera shows the
+    //      first frame frozen or never appears at all.
+    var _camActive = p && p.source === 'camera' && window.cameraVideo && window.cameraVideo.readyState >= 2;
+    if (!window.shaderDirty && !window._recordingActive && !_camActive) return;
     window.shaderDirty = false;
     const W = canvas.width;
     const H = canvas.height;
@@ -1467,7 +1467,11 @@ window.uploadShapeGradient = function(stops) {
       // Compile camera shader on first use
       if (!window._camProg) {
         const camVS = `attribute vec2 a_pos;varying vec2 vUV;void main(){vUV=a_pos*0.5+0.5;gl_Position=vec4(a_pos,0,1);}`;
-        const camFS = `precision highp float;
+        const camFS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
           uniform sampler2D uCamTex;
           uniform sampler2D uGradTex;
           uniform vec2 uCanvasSize;
@@ -1548,12 +1552,24 @@ window.uploadShapeGradient = function(stops) {
           }`;
         const vs = gl.createShader(gl.VERTEX_SHADER);
         gl.shaderSource(vs, camVS); gl.compileShader(vs);
+        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+          console.error('[camera VS compile failed]', gl.getShaderInfoLog(vs));
+          if (window.showShaderError) window.showShaderError('camera-vs', gl.getShaderInfoLog(vs), camVS);
+        }
         const fs = gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(fs, camFS); gl.compileShader(fs);
+        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+          console.error('[camera FS compile failed]', gl.getShaderInfoLog(fs));
+          if (window.showShaderError) window.showShaderError('camera-fs', gl.getShaderInfoLog(fs), camFS);
+        }
         window._camProg = gl.createProgram();
         gl.attachShader(window._camProg, vs);
         gl.attachShader(window._camProg, fs);
         gl.linkProgram(window._camProg);
+        if (!gl.getProgramParameter(window._camProg, gl.LINK_STATUS)) {
+          console.error('[camera program link failed]', gl.getProgramInfoLog(window._camProg));
+          if (window.showShaderError) window.showShaderError('camera-link', gl.getProgramInfoLog(window._camProg), camFS);
+        }
         window._camLocs = {
           camTex: gl.getUniformLocation(window._camProg, 'uCamTex'),
           gradTex: gl.getUniformLocation(window._camProg, 'uGradTex'),
