@@ -713,8 +713,28 @@
         <div class="row">
           <label>Format</label>
           <select id="selVideoFmt">
-            <option value="webm-hq" selected>WebM HQ (50 Mbps)</option>
-            <option value="png-zip">PNG Sequence (ZIP)</option>
+            <option value="webm-hq" selected>WebM (VP9)</option>
+            <option value="png-zip">PNG Sequence (lossless)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Resolution</label>
+          <select id="selVideoRes">
+            <option value="screen" selected>Screen Size (native)</option>
+            <option value="1280x720">720p (1280×720)</option>
+            <option value="1920x1080">1080p (1920×1080)</option>
+            <option value="2560x1440">1440p (2560×1440)</option>
+            <option value="3840x2160">4K (3840×2160)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Bitrate</label>
+          <select id="selVideoBitrate">
+            <option value="25000000">25 Mbps</option>
+            <option value="50000000">50 Mbps</option>
+            <option value="100000000" selected>100 Mbps</option>
+            <option value="200000000">200 Mbps</option>
+            <option value="400000000">400 Mbps</option>
           </select>
         </div>
         <div class="btn-row">
@@ -1422,6 +1442,11 @@
         <span class="toggle-label">Pixelate</span>
         <button class="toggle-active" id="btn-pixelate-toggle" onclick="togglePixelate()"></button>
       </div>
+      <div class="row" style="margin:6px 0 8px 0">
+        <label>General Scale</label>
+        <input type="range" id="sGlobalPixelScale" min="0.1" max="10" step="0.01" value="1">
+        <input type="number" class="val" id="vGlobalPixelScale" value="1.00" min="0.1" max="10" step="0.01">
+      </div>
       <div id="pixelate-master-wrap">
         <!-- Instance tab bar -->
         <div class="pix-instance-bar">
@@ -1444,6 +1469,19 @@
       <div id="pp-menu" style="display:none;margin:4px 0 8px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 0;max-height:280px;overflow-y:auto">
       </div>
       <div id="postprocess-controls">
+        <!-- Permanent Smooth Edges control: edge-aware FXAA-lite anti-aliasing.
+             Always shown above user-added PP entries; toggle reveals slider. -->
+        <div style="margin:0 0 8px 0;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px">
+          <div class="toggle-header" style="margin:0">
+            <span class="toggle-label" style="font-size:11px">Smooth Edges</span>
+            <button class="toggle-active" id="btn-smooth-edges-toggle" onclick="toggleSmoothEdges()"></button>
+          </div>
+          <div id="smooth-edges-row" class="row" style="display:none;margin-top:6px">
+            <label>Amount</label>
+            <input type="range" id="sSmoothEdges" min="0" max="1" step="0.01" value="0.5">
+            <input type="number" class="val" id="vSmoothEdges" value="0.50" min="0" max="1" step="0.01">
+          </div>
+        </div>
         <div id="pp-stack-list"></div>
       </div>
       </div><!-- end panel-grading -->

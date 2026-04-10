@@ -965,7 +965,10 @@ uniform int       uSdfAffectAlpha;
 uniform float     uSdfMinAlpha;
 uniform float     uSdfMaxAlpha;
 uniform float     uPixelScale;
+uniform int       uSmoothEdgesEnabled;   // permanent control at top of PP panel
+uniform float     uSmoothEdgesAmount;    // 0..1 strength of edge-aware smoothing
 uniform float     uShapeScale;
+uniform float     uShapeRotation;     // -180..180 degrees, applied to sdfPos before SDF eval
 uniform int       uForceSquare;       // 0=off, 1=parent shape to square frame
 uniform int       uMaintainThickness;
 uniform int       uQuadReverse; // 0=off, 1=keep arm thickness optically constant across quadtree
@@ -1277,11 +1280,8 @@ BlockInfo getBlock(vec2 rawUV) {
 vec2 snapUV(vec2 uv){return getBlock(uv).uv;}
 
 /* ── Shape SDFs ───────────────────────────────────────────────── */
-float pillSDF(vec2 p,vec2 h,float m){
-    vec2 i=h-vec2(m);if(i.x<=0.0||i.y<=0.0)return 1.0;float r=min(i.x,i.y);vec2 a=abs(p);
-    if(i.x>=i.y)return length(vec2(max(a.x-(i.x-r),0.0),a.y))-r;
-    return length(vec2(a.x,max(a.y-(i.y-r),0.0)))-r;
-}
+// Note: pillSDF removed — main()'s inline shape dispatcher uses capsuleH/capsuleV
+// directly for shape 1, no caller for pillSDF after shapeSDF removal.
 float diamondSDF(vec2 p,vec2 h,float m){
     vec2 i=h-vec2(m);if(i.x<=0.0||i.y<=0.0)return 1.0;
     float raw=(abs(p.x)/i.x+abs(p.y)/i.y)-1.0;
@@ -1334,51 +1334,12 @@ float capsuleV(vec2 p, float halfLen, float r) {
 //   - so cap_center = halfExtent - m - r  (= arm half-length)
 //   - degenerate when arm half-length ≤ 0: just a circle at origin
 
-// Cross "+" — two arms along X and Y axes
-float crossPlusSDF(vec2 p, vec2 h, float m, float r) {
-    // r clamped so cap fits inside cell with margin on all sides
-    float rX = min(r, max(h.x - m, 0.001));  // clamp to cell in X
-    float rY = min(r, max(h.y - m, 0.001));  // clamp to cell in Y
-    float rUse = min(rX, rY);                  // single consistent stroke radius
-    // Arm half-lengths (0 = pure circle)
-    float lX = max(h.x - m - rUse, 0.0);
-    float lY = max(h.y - m - rUse, 0.0);
-    float d1 = capsuleH(p, lX, rUse);   // horizontal arm
-    float d2 = capsuleV(p, lY, rUse);   // vertical arm
-    return min(d1, d2);
-}
+// Cross "+" and Cross "×" SDF functions removed — main()'s inline shape
+// dispatcher builds them directly from min(capsuleH, capsuleV), no callers
+// for crossPlusSDF / crossXSDF after shapeSDF removal.
 
-// Cross "×" — same two arms rotated 45°
-float crossXSDF(vec2 p, vec2 h, float m, float r) {
-    float c45 = 0.7071068; float s45 = 0.7071068;
-    vec2 pr = vec2(p.x*c45 + p.y*s45, -p.x*s45 + p.y*c45);
-    // In the 45° frame the effective half-extent = min(h.x,h.y) * 0.7071 (conservative — ensures no cap escapes the cell corner)
-    float sz = min(h.x, h.y) * 0.7071;
-    float rUse = min(r, max(sz - m, 0.001));
-    float l = max(sz - m - rUse, 0.0);
-    float d1 = capsuleH(pr, l, rUse);
-    float d2 = capsuleV(pr, l, rUse);
-    return min(d1, d2);
-}
-
-// Backward-compat wrappers (used by shapeSDF for non-MT path)
-float crossPlusSDFt(vec2 p, vec2 h, float m, float thickH, float thickV) {
-    return crossPlusSDF(p, h, m, min(thickH, thickV));
-}
-float crossXSDFt(vec2 p, vec2 h, float m, float thick) {
-    return crossXSDF(p, h, m, thick);
-}
-float shapeSDF(vec2 p,vec2 h,float m){
-    if(uPixelShape==1)return pillSDF(p,h,m);
-    if(uPixelShape==2)return diamondSDF(p,h,m);
-    if(uPixelShape==3)return squareSDF(p,h,m);
-    if(uPixelShape==4)return chevronSDF(p,h,m);
-    if(uPixelShape==5)return hexSDF(p,h,m);
-    if(uPixelShape==6)return octSDF(p,h,m);
-    if(uPixelShape==7){ float r=min(h.x,h.y)*0.35; return crossPlusSDF(p,h,m,r); }
-    if(uPixelShape==8){ float r=min(h.x,h.y)*0.35; return crossXSDF(p,h,m,r); }
-    return -1.0;
-}
+// Note: shapeSDF, crossPlusSDFt, crossXSDFt removed — verified dead code
+// (zero callers via static analysis). main() uses inline shape dispatch.
 
 bool diffCell(vec4 a,vec4 b){vec3 d=abs(a.rgb-b.rgb);return max(d.r,max(d.g,d.b))>0.015||(d.r+d.g+d.b)>0.03;}
 
@@ -1400,13 +1361,7 @@ vec3 hsv2rgb(vec3 c){
     if(hi==0)return vec3(v,t,p);if(hi==1)return vec3(q,v,p);if(hi==2)return vec3(p,v,t);
     if(hi==3)return vec3(p,q,v);if(hi==4)return vec3(t,p,v);return vec3(v,p,q);
 }
-// Cell-only diff: compares hue+saturation, ignores value changes from banding
-bool diffCellOnly(vec4 a,vec4 b){
-    vec3 ha=rgb2hsv(a.rgb), hb=rgb2hsv(b.rgb);
-    float hueDiff=abs(ha.x-hb.x); if(hueDiff>0.5) hueDiff=1.0-hueDiff;
-    float satDiff=abs(ha.y-hb.y);
-    return hueDiff>0.05 || satDiff>0.15;
-}
+// Note: diffCellOnly removed — verified dead code (zero callers).
 // Mode 9: hue-shift — factor = luminance of layer, shift = factor * hueOff (wraps)
 vec3 blendVH(vec3 base, vec3 layer, int m, float hueOff) {
     if(m == 9) {
@@ -1424,6 +1379,29 @@ float _opPatValue = 0.0;
 float _opPatOpacity = 0.0;
 
 vec3 grade(vec3 c){
+    // Smooth Edges — permanent FXAA-lite anti-aliasing pass.
+    // Samples uAccumTex at 4 neighbors and blends c with the 5-tap average
+    // proportional to local luminance contrast, so flat areas stay sharp
+    // and only sharp-contrast pixels (jagged edges) get smoothed.
+    if(uSmoothEdgesEnabled == 1 && uSmoothEdgesAmount > 0.001){
+        vec2 _seUV = gl_FragCoord.xy / iResolution;
+        vec2 _seTS = 1.0 / iResolution;
+        vec3 _seN = texture2D(uAccumTex, _seUV + vec2(0.0,  _seTS.y)).rgb;
+        vec3 _seS = texture2D(uAccumTex, _seUV + vec2(0.0, -_seTS.y)).rgb;
+        vec3 _seE = texture2D(uAccumTex, _seUV + vec2( _seTS.x, 0.0)).rgb;
+        vec3 _seW = texture2D(uAccumTex, _seUV + vec2(-_seTS.x, 0.0)).rgb;
+        vec3 _luma = vec3(0.299, 0.587, 0.114);
+        float _lC = dot(c,    _luma);
+        float _lN = dot(_seN, _luma);
+        float _lS = dot(_seS, _luma);
+        float _lE = dot(_seE, _luma);
+        float _lW = dot(_seW, _luma);
+        float _lMax = max(max(_lN, _lS), max(_lE, max(_lW, _lC)));
+        float _lMin = min(min(_lN, _lS), min(_lE, min(_lW, _lC)));
+        float _edge = smoothstep(0.05, 0.30, _lMax - _lMin);
+        vec3 _avg = (_seN + _seS + _seE + _seW + c) * 0.2;
+        c = mix(c, _avg, _edge * uSmoothEdgesAmount);
+    }
     // Legacy grading (backward compat — only when PP stack empty AND values non-neutral)
     if(uPostProcess==1 && uPPCount==0 &&
        (uGradeHue!=0.0 || uGradeSat!=1.0 || uGradeVal!=1.0 || uGradeContrast!=1.0)){
@@ -1431,8 +1409,14 @@ vec3 grade(vec3 c){
         h.y=clamp(h.y*uGradeSat,0.0,1.0);h.z=clamp(h.z*uGradeVal,0.0,1.0);
         c=hsv2rgb(h);c=clamp((c-0.5)*uGradeContrast+0.5,0.0,1.0);
     }
-    // Post-processing stack
-    for(int i=0;i<16;i++){
+    // Post-processing stack — capped at 4 on mobile (16 on desktop) so the
+    // unrolled loop body's instruction count is roughly 1/4 on mobile.
+#ifdef MOBILE_ULTRA
+    #define PP_STACK_MAX 4
+#else
+    #define PP_STACK_MAX 16
+#endif
+    for(int i=0;i<PP_STACK_MAX;i++){
         if(i>=uPPCount) break;
         int t=uPPType[i]; vec4 pp=uPPParams[i];
         if(t==0){ // Brightness/Contrast
@@ -1626,6 +1610,14 @@ void main(){
 
         // Shape Scale: scale sdfPos around center (before luminance effectors)
         vec2 sdfPos = posInTile / max(sc, 0.01);
+        // Shape Rotation: per-shape constant rotation, applied to sdfPos.
+        // Runs after scale, before luminance effectors so the user-set rotation
+        // is the base orientation and the effector adds an animated offset.
+        if(abs(uShapeRotation) > 0.001) {
+            float srAng = radians(uShapeRotation);
+            float srC = cos(srAng), srS = sin(srAng);
+            sdfPos = vec2(sdfPos.x*srC - sdfPos.y*srS, sdfPos.x*srS + sdfPos.y*srC);
+        }
         float cellLum = dot(origCellColor, vec3(0.299, 0.587, 0.114));
         if(uSdfAffectOffset==1) sdfPos += vec2(mix(uSdfMinOffset, uSdfMaxOffset, cellLum)) * min(cellHalf.x, cellHalf.y);
         if(uSdfAffectRotate==1) {
@@ -1702,7 +1694,7 @@ void main(){
                 if(pib.x < 0.005 || pib.x > 0.995 || pib.y < 0.005 || pib.y > 0.995) {
                     // Outside visible diamond frame → gap
                     vec3 earlyGap = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
-                    gl_FragColor = vec4(uGapFiltered==1 ? grade(earlyGap) : earlyGap, 1.0);
+                    gl_FragColor = vec4((uGapFiltered==1 || uFinalPass==1) ? grade(earlyGap) : earlyGap, 1.0);
                     return;
                 }
             }
@@ -1719,6 +1711,14 @@ void main(){
             // Scale posInBlock by shapeScale
             vec2 centered = pib - 0.5;
             if(sc < 1.99) centered /= max(sc, 0.01);
+            // Rotation: per-shape constant rotation (same uniform as SDF rotation)
+            // applied to image sampling coordinates so the image content rotates
+            // in place inside each cell. Runs after scale, before luminance effectors.
+            if(abs(uShapeRotation) > 0.001) {
+                float irAng = radians(uShapeRotation);
+                float irC = cos(irAng), irS = sin(irAng);
+                centered = vec2(centered.x*irC - centered.y*irS, centered.x*irS + centered.y*irC);
+            }
             pib = clamp(centered + 0.5, 0.0, 1.0);
 
             // Luminance effectors for image shape
@@ -1758,7 +1758,7 @@ void main(){
                     isOctGap = true;
                 } else {
                     vec3 earlyGap = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
-                    gl_FragColor = vec4(uGapFiltered==1 ? grade(earlyGap) : earlyGap, 1.0);
+                    gl_FragColor = vec4((uGapFiltered==1 || uFinalPass==1) ? grade(earlyGap) : earlyGap, 1.0);
                     return;
                 }
             }
@@ -1778,7 +1778,7 @@ void main(){
                 isOctGap = true;
             } else {
                 vec3 earlyGap = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
-                gl_FragColor = vec4(uGapFiltered==1 ? grade(earlyGap) : earlyGap, 1.0);
+                gl_FragColor = vec4((uGapFiltered==1 || uFinalPass==1) ? grade(earlyGap) : earlyGap, 1.0);
                 return;
             }
         }
@@ -1827,6 +1827,25 @@ void main(){
             }
             if(isEdge) color=mix(color,uOutlineColor,min(uOutlineWidth,1.0));
         } else {
+#ifdef MOBILE_ULTRA
+            // Mobile: 4-sample neighbor test instead of 32-sample disc.
+            // The disc has 32 texture2D calls per pixel — blows mobile
+            // instruction limits. Outline still works, just less smooth at
+            // sub-pixel boundaries on non-pixelated content.
+            vec2 stp4 = vec2(uOutlineWidth) / iResolution;
+            vec4 rc4 = vec4(rawColor, 1.0);
+            bool isEdge4 = false;
+            for(int ni = 0; ni < 4; ni++) {
+                vec2 off4 = vec2(0);
+                if(ni==0) off4 = vec2(stp4.x, 0);
+                if(ni==1) off4 = vec2(-stp4.x, 0);
+                if(ni==2) off4 = vec2(0, stp4.y);
+                if(ni==3) off4 = vec2(0, -stp4.y);
+                vec4 ns4 = texture2D(uSceneTex, uv + off4);
+                if(diffCell(rc4, vec4(ns4.rgb, 1.0))) { isEdge4 = true; }
+            }
+            if(isEdge4) color = mix(color, uOutlineColor, min(uOutlineWidth, 1.0));
+#else
             // Non-pixelated: full disc sampling
             float hw=uOutlineWidth*0.5;
             float sRad=hw;
@@ -1844,9 +1863,11 @@ void main(){
             C(vec2(.195,-.981),hRad)C(vec2(.556,-.831),hRad)C(vec2(.831,-.556),hRad)C(vec2(.981,-.195),hRad)
             float edge=1.0-smoothstep(hw-0.7,hw+0.7,minD);
             color=mix(color,uOutlineColor,edge);
+#endif
         }
     }
 
+#ifndef MOBILE_ULTRA
     /* ── Pre-compute opacity pattern value for filter system ─── */
     if(uPixelate==1 && uOpPatternCount>0){
         float colorId;
@@ -2094,6 +2115,7 @@ void main(){
             }
         }
     }
+#endif // MOBILE_ULTRA — opacity pattern + Layered Oct + Image Pixel stripped on mobile
 
     /* ── Pre-compute gradient fill color for filter system ─── */
     if(uPixelate==1){
@@ -2124,7 +2146,12 @@ void main(){
     /* ── Final SDF shape mask: shape interior is opaque, outside is transparent ── */
     if(uPixelate==1 && shapeAlpha < 0.999){
         vec3 gapCol = (uGapEnabled==1) ? mix(rawColor, uGapColor, uGapOpacity) : texture2D(uAccumTex, rawUV).rgb;
-        if(uGapFiltered==1) gapCol = grade(gapCol);
+        // Apply grade() to gap pixels too on the final pass, so the global PP
+        // stack covers the entire composited image (including pixels showing
+        // through from earlier instances or gap fill), not just the current
+        // shape's interior. uGapFiltered is preserved as a manual override
+        // for non-final instances.
+        if(uGapFiltered==1 || uFinalPass==1) gapCol = grade(gapCol);
         color = mix(gapCol, color, shapeAlpha);
     }
 

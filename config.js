@@ -438,6 +438,197 @@
     // FPS dropdown handled inline via onchange
 
     function startRecording() {
+      // ═══════════════════════════════════════════════════════════════════
+      // MOBILE PATH (Android/iOS) — record what's on screen, do not touch
+      // animation state. The desktop path below sets p.animating=false and
+      // drives frames manually via _flowTimeOverride + track.requestFrame().
+      // That architecture is fundamentally broken on Android Chrome:
+      //   • track.requestFrame is unavailable
+      //   • setting p.animating=false interacts with the mobile budget /
+      //     dirty-flag pipeline in a way that leaves the visible canvas
+      //     black for the duration of the recording
+      //   • the manual frame loop fights with auto-capture
+      // The result was: black canvas, zero-frame video. Detect mobile and
+      // bypass that architecture entirely. Just keep the animation running,
+      // start MediaRecorder with auto-capture at the target fps, and stop
+      // it after the requested duration. The user gets a recording of
+      // exactly what they're seeing on screen.
+      if (window.isMobile) {
+        var canvasM = document.getElementById('glCanvas');
+        var pM = window.shaderParams;
+        if (!canvasM) { alert('Canvas not found.'); return; }
+
+        if (typeof MediaRecorder === 'undefined') {
+          alert('MediaRecorder is not supported in this browser. Cannot record.');
+          return;
+        }
+
+        var lengthMinM = parseFloat(document.getElementById('selVideoLen').value) || 1;
+        var fpsM = pM.fps || 30;
+        var brSelM = document.getElementById('selVideoBitrate');
+        var bitrateM = brSelM ? parseInt(brSelM.value, 10) : 25000000;
+        // Cap mobile bitrate at 25 Mbps regardless of UI choice — Android
+        // hardware encoders refuse to start at very high bitrates and the
+        // recorder silently produces zero frames.
+        if (bitrateM > 25000000) bitrateM = 25000000;
+
+        // Probe codecs. Android Chrome supports webm/vp8 reliably; vp9 is
+        // hit-or-miss; mp4 generally not. iOS Safari only does mp4/h264.
+        var codecsM = [
+          { mime: 'video/webm;codecs=vp8', ext: 'webm' },
+          { mime: 'video/webm;codecs=vp9', ext: 'webm' },
+          { mime: 'video/webm',            ext: 'webm' },
+          { mime: 'video/mp4;codecs=avc1', ext: 'mp4'  },
+          { mime: 'video/mp4',             ext: 'mp4'  }
+        ];
+        var mimeM = '', extM = 'webm';
+        for (var ci = 0; ci < codecsM.length; ci++) {
+          try {
+            if (MediaRecorder.isTypeSupported(codecsM[ci].mime)) {
+              mimeM = codecsM[ci].mime; extM = codecsM[ci].ext; break;
+            }
+          } catch(e) {}
+        }
+        if (!mimeM) {
+          alert('No supported video codec on this device.');
+          return;
+        }
+        console.log('%c[startRecording MOBILE] codec=' + mimeM + ' fps=' + fpsM + ' bitrate=' + bitrateM, 'background:#06a;color:#fff;padding:2px 6px;border-radius:3px');
+
+        // Mark recording active so engine.js v20.4 forces a draw every rAF
+        // (otherwise the dirty-flag early-out can let the buffer go stale
+        // between draws and the recorder samples cleared pixels).
+        window._recordingActive = true;
+        window._recordingSizeOverride = null;
+        // Critically: do NOT touch pM.animating, pM.fastMode, pM.renderRes,
+        // pM.rot, _flowTimeOverride, or anything else. The animation keeps
+        // running on its own.
+
+        var streamM;
+        try {
+          streamM = canvasM.captureStream(fpsM);
+        } catch(e) {
+          window._recordingActive = false;
+          alert('canvas.captureStream() failed: ' + e.message);
+          return;
+        }
+
+        var recorderM;
+        try {
+          recorderM = new MediaRecorder(streamM, {
+            mimeType: mimeM,
+            videoBitsPerSecond: bitrateM
+          });
+        } catch(e) {
+          // Retry without bitrate hint — some Android encoders reject it.
+          try { recorderM = new MediaRecorder(streamM, { mimeType: mimeM }); }
+          catch(e2) {
+            window._recordingActive = false;
+            alert('MediaRecorder init failed: ' + e2.message);
+            return;
+          }
+        }
+
+        var chunksM = [];
+        var startMsM = Date.now();
+        var durMsM = lengthMinM * 60 * 1000;
+        var stopTimerM = null;
+        var progTimerM = null;
+        var stoppedM = false;
+        var cancelledM = false;
+
+        recorderM.ondataavailable = function(ev) {
+          if (ev.data && ev.data.size > 0) chunksM.push(ev.data);
+        };
+        recorderM.onerror = function(ev) {
+          console.error('[rec MOBILE] error', ev);
+        };
+        recorderM.onstop = function() {
+          if (stopTimerM) { clearTimeout(stopTimerM); stopTimerM = null; }
+          if (progTimerM) { clearInterval(progTimerM); progTimerM = null; }
+          window._recordingActive = false;
+          // Stop the stream tracks
+          try {
+            var tracks = streamM.getTracks();
+            for (var ti = 0; ti < tracks.length; ti++) tracks[ti].stop();
+          } catch(e) {}
+          if (!cancelledM && chunksM.length > 0) {
+            var blob = new Blob(chunksM, { type: mimeM });
+            var fname = 'voronoi-mobile-' + canvasM.width + 'x' + canvasM.height + '-' + Date.now() + '.' + extM;
+            downloadBlob(blob, fname);
+            document.getElementById('video-status').textContent = 'Saved (' + (blob.size/1048576).toFixed(1) + ' MB)';
+          } else if (chunksM.length === 0) {
+            document.getElementById('video-status').textContent = 'No frames captured (encoder issue)';
+          } else {
+            document.getElementById('video-status').textContent = 'Cancelled';
+          }
+          chunksM = [];
+          // Restore UI after a short delay so the user can see the status
+          setTimeout(function() {
+            document.getElementById('btn-record').style.display = '';
+            document.getElementById('btn-cancel-record').style.display = 'none';
+            document.getElementById('video-progress').style.display = 'none';
+            document.getElementById('video-bar').style.width = '0%';
+            document.getElementById('video-status').textContent = '';
+            var indi = document.getElementById('rec-indicator');
+            if (indi) indi.classList.remove('visible');
+          }, 3000);
+        };
+
+        // Override window.cancelRecording for the duration of this mobile
+        // recording so the Cancel button stops THIS recorder, not the
+        // desktop manual loop's flag.
+        var prevCancel = window.cancelRecording;
+        window.cancelRecording = function() {
+          cancelledM = true;
+          if (recorderM && recorderM.state !== 'inactive') {
+            try { recorderM.stop(); } catch(e) {}
+          }
+          window.cancelRecording = prevCancel;
+        };
+
+        // Start the recorder. Use a 1s timeslice so chunks accumulate
+        // periodically and a sudden stop/crash doesn't lose everything.
+        try {
+          recorderM.start(1000);
+        } catch(e) {
+          window._recordingActive = false;
+          alert('MediaRecorder.start() failed: ' + e.message);
+          return;
+        }
+
+        // UI
+        document.getElementById('btn-record').style.display = 'none';
+        document.getElementById('btn-cancel-record').style.display = '';
+        document.getElementById('video-progress').style.display = '';
+        var indiM = document.getElementById('rec-indicator');
+        if (indiM) indiM.classList.add('visible');
+
+        progTimerM = setInterval(function() {
+          var elapsed = Date.now() - startMsM;
+          var pct = Math.min(100, (elapsed / durMsM) * 100);
+          document.getElementById('video-bar').style.width = pct.toFixed(1) + '%';
+          var sec = (elapsed / 1000) | 0;
+          var m = (sec / 60) | 0;
+          var s = sec % 60;
+          var status = canvasM.width + '×' + canvasM.height + ' · ' + m + ':' + (s < 10 ? '0' : '') + s + '/' + lengthMinM + ':00 · ' + mimeM.split(';')[0];
+          document.getElementById('video-status').textContent = status;
+          var rt = document.getElementById('rec-text');
+          if (rt) rt.textContent = 'REC ' + m + ':' + (s < 10 ? '0' : '') + s;
+        }, 250);
+
+        stopTimerM = setTimeout(function() {
+          if (recorderM && recorderM.state !== 'inactive' && !stoppedM) {
+            stoppedM = true;
+            try { recorderM.stop(); } catch(e) {}
+          }
+        }, durMsM);
+
+        return; // ← END OF MOBILE PATH
+      }
+      // ═══════════════════════════════════════════════════════════════════
+      // DESKTOP PATH continues below — manual frame loop with full quality
+      // ═══════════════════════════════════════════════════════════════════
       const format = document.getElementById('selVideoFmt').value;
       const canvas = document.getElementById('glCanvas');
       const p = window.shaderParams;
@@ -447,6 +638,179 @@
       const wasAnimating = p.animating;
       const savedRot = p.rot;
       const savedFlowTime = window._flowTime || 0;
+
+      // ── Force highest-quality rendering for the duration of the recording ──
+      // Read target resolution from new dropdown (default 1920x1080); recording
+      // canvas size is independent of the on-screen canvas size. The special
+      // value "screen" means: do NOT override, just use whatever size the
+      // canvas already is. This is the recommended choice on mobile because
+      // overriding to e.g. 1920×1080 on a phone forces the GPU to render
+      // millions more fragments per frame than the mobile budget can handle,
+      // which stalls the render loop and produces black recordings.
+      const resSel = document.getElementById('selVideoRes');
+      const resVal = resSel ? resSel.value : '1920x1080';
+      const screenMode = (resVal === 'screen');
+      let recW, recH;
+      if (screenMode) {
+        recW = canvas.width  | 0;
+        recH = canvas.height | 0;
+      } else {
+        const parts = resVal.split('x').map(function(n){ return parseInt(n,10); });
+        recW = parts[0]; recH = parts[1];
+      }
+      console.log('%c[startRecording] mode=' + (screenMode ? 'screen-native' : 'override') + ' ' + recW + 'x' + recH, 'background:#06a;color:#fff;padding:2px 6px;border-radius:3px');
+      // Read target bitrate (default 100 Mbps)
+      const brSel = document.getElementById('selVideoBitrate');
+      const bitrate = brSel ? parseInt(brSel.value,10) : 100000000;
+
+      // ──────────────────────────────────────────────────────────────────
+      // MOBILE LIVE-CANVAS FAST PATH (v20.5)
+      // The standard recording flow below sets p.animating=false and tries
+      // to drive frames manually via _flowTimeOverride + double rAF + (on
+      // browsers that support it) track.requestFrame(). On Android Chrome
+      // this does not work — track.requestFrame is missing, p.animating=false
+      // pauses the visible canvas, and the recording captures black/0 frames.
+      // Multiple attempts to "fix" this from the engine side failed because
+      // they all relied on the manual drive loop functioning.
+      //
+      // The fundamental insight: on mobile in Screen-Size mode we don't WANT
+      // a manual drive loop. The user wants to record what they see. The
+      // visible animation is already running every frame at the device's
+      // natural rate. Just attach captureStream to it, start MediaRecorder,
+      // and stop after the requested duration. Touch nothing else — no
+      // animating flag, no flow time override, no resize, no fast-mode flip.
+      // ──────────────────────────────────────────────────────────────────
+      if (window.isMobile && screenMode && format === 'webm-hq') {
+        console.log('%c[startRecording] MOBILE LIVE-CANVAS path active', 'background:#fa0;color:#000;padding:2px 6px;border-radius:3px');
+
+        const codecCandidates = [
+          { mime: 'video/webm;codecs=vp9,opus', ext: 'webm' },
+          { mime: 'video/webm;codecs=vp9',      ext: 'webm' },
+          { mime: 'video/webm;codecs=vp8',      ext: 'webm' },
+          { mime: 'video/webm',                 ext: 'webm' },
+          { mime: 'video/mp4;codecs=avc1',      ext: 'mp4'  },
+          { mime: 'video/mp4',                  ext: 'mp4'  }
+        ];
+        let mime = '', fileExt = 'webm';
+        for (const c of codecCandidates) {
+          try { if (MediaRecorder.isTypeSupported(c.mime)) { mime = c.mime; fileExt = c.ext; break; } } catch(e) {}
+        }
+        if (!mime) {
+          alert('No supported video codec found on this device. Try PNG Sequence for lossless export.');
+          return;
+        }
+        console.log('[startRecording] mobile codec=' + mime);
+
+        let stream;
+        try {
+          stream = canvas.captureStream(fps);
+        } catch(e) {
+          alert('canvas.captureStream() failed: ' + e.message);
+          return;
+        }
+
+        let mobileRec;
+        try {
+          mobileRec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+        } catch(e) {
+          try { mobileRec = new MediaRecorder(stream, { mimeType: mime }); }
+          catch(e2) { alert('MediaRecorder init failed: ' + e2.message); return; }
+        }
+
+        const mobileChunks = [];
+        const mobileStartMs = Date.now();
+        const mobileDurMs = lengthMin * 60 * 1000;
+
+        mobileRec.ondataavailable = function(ev) {
+          if (ev.data && ev.data.size > 0) mobileChunks.push(ev.data);
+        };
+        mobileRec.onerror = function(ev) {
+          console.error('[startRecording] mobile rec error', ev);
+        };
+        mobileRec.onstop = function() {
+          const blob = new Blob(mobileChunks, { type: mime });
+          if (blob.size > 0 && !videoCancelFlag) {
+            downloadBlob(blob, 'voronoi-' + recW + 'x' + recH + '-' + Date.now() + '.' + fileExt);
+          }
+          // Reset flags & UI — minimal state was touched
+          videoRecording = false;
+          videoCancelFlag = false;
+          window._recordingActive = false;
+          resetVideoUI();
+        };
+
+        try {
+          mobileRec.start(1000); // emit chunks every 1s so cancellation/crash keeps partial data
+        } catch(e) {
+          alert('MediaRecorder.start() failed: ' + e.message);
+          return;
+        }
+
+        // Minimal state: only flag _recordingActive (so isFast() and engine
+        // can know recording is happening if needed) and the cancel flag.
+        // DO NOT touch p.animating, _recordingSizeOverride, p.fastMode, or
+        // p.renderRes. The visible canvas keeps running on its natural loop.
+        window._recordingActive = true;
+        videoRecording = true;
+        videoCancelFlag = false;
+        videoRecorder = mobileRec; // expose so cancelRecording() can stop it
+
+        document.getElementById('btn-record').style.display = 'none';
+        document.getElementById('btn-cancel-record').style.display = '';
+        document.getElementById('video-progress').style.display = '';
+        document.getElementById('rec-indicator').classList.add('visible');
+
+        const mobileProgTimer = setInterval(function() {
+          if (videoCancelFlag || mobileRec.state === 'inactive') {
+            clearInterval(mobileProgTimer);
+            return;
+          }
+          const el = Date.now() - mobileStartMs;
+          const pct = Math.min(100, (100 * el / mobileDurMs)).toFixed(1);
+          const bar = document.getElementById('video-bar');
+          if (bar) bar.style.width = pct + '%';
+          const status = document.getElementById('video-status');
+          if (status) status.textContent = recW + '×' + recH + ' · ' + formatTime(el/1000) + ' / ' + formatTime(mobileDurMs/1000) + '  (' + pct + '%)';
+          const recTxt = document.getElementById('rec-text');
+          if (recTxt) recTxt.textContent = 'REC ' + formatTime(el/1000);
+        }, 200);
+
+        setTimeout(function() {
+          if (mobileRec.state !== 'inactive') {
+            try { mobileRec.stop(); } catch(e) {}
+          }
+        }, mobileDurMs);
+
+        return; // skip the standard desktop drive-loop path entirely
+      }
+      // ──────────────────────────────────────────────────────────────────
+      // END mobile fast path — fall through to standard desktop path
+      // ──────────────────────────────────────────────────────────────────
+
+      // Save state we're about to clobber so we can restore in finish()
+      const savedFastMode    = p.fastMode;
+      const savedRenderRes   = p.renderRes;
+      const savedCanvasW     = canvas.width;
+      const savedCanvasH     = canvas.height;
+      const savedCanvasCssW  = canvas.style.width;
+      const savedCanvasCssH  = canvas.style.height;
+
+      // Activate recording mode: isFast() now returns false (desktop only —
+      // engine.js v20.3 keeps mobile in fast mode during recording so the GPU
+      // doesn't stall), syncSize() honors override.
+      window._recordingActive     = true;
+      if (!screenMode) {
+        window._recordingSizeOverride = { w: recW, h: recH };
+        p.fastMode  = false;
+        p.renderRes = 1;
+      } else {
+        // Screen mode: leave canvas at native size, do NOT touch fastMode or
+        // renderRes. On mobile this preserves the mobile-budget render path
+        // that the user is actually seeing on screen.
+        window._recordingSizeOverride = null;
+      }
+      // Trigger a resize on the next render frame; engine.js syncSize() picks up the override
+      window.shaderDirty = true;
 
       videoCancelFlag = false;
       videoRecording = true;
@@ -465,12 +829,20 @@
         const elapsedSec = (Date.now() - startTime) / 1000;
         const estTotal = frame > 0 ? (elapsedSec / frame) * totalFrames : 0;
         document.getElementById('video-status').textContent =
-          formatTime(elapsedSec) + ' / ~' + formatTime(estTotal) + '  (' + pct + '%)';
+          recW + '×' + recH + ' · ' + formatTime(elapsedSec) + ' / ~' + formatTime(estTotal) + '  (' + pct + '%)';
         document.getElementById('rec-text').textContent = 'REC ' + formatTime(elapsedSec);
       }
 
       function finish() {
         videoRecording = false;
+        // ── Restore everything we changed ──
+        window._recordingActive       = false;
+        window._recordingSizeOverride = null;
+        p.fastMode  = savedFastMode;
+        p.renderRes = savedRenderRes;
+        canvas.style.width  = savedCanvasCssW;
+        canvas.style.height = savedCanvasCssH;
+        // Force a resize back to on-screen dimensions
         resetVideoUI();
         p.rot = savedRot;
         window._flowTimeOverride = savedFlowTime;
@@ -496,20 +868,59 @@
       }
 
       if (format === 'webm-hq') {
-        // ── WebM HQ via MediaRecorder at 50 Mbps ──
-        const stream = canvas.captureStream(0);
-        const mimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-        let mime = '';
-        for (const m of mimeTypes) { if (MediaRecorder.isTypeSupported(m)) { mime = m; break; } }
-        if (!mime) { alert('WebM recording not supported. Try PNG Sequence or use Chrome.'); finish(); return; }
+        // ── WebM via MediaRecorder ──
+        // Try manual frame mode first: captureStream(0) with explicit
+        // track.requestFrame() per rendered frame. This is the canonical
+        // workflow because frames align exactly with rendered frames.
+        // PROBLEM: on Android Chrome and some other mobile browsers, the
+        // resulting video track has NO requestFrame() method. Without it the
+        // manual loop pushes nothing into the recorder and the video has 0
+        // frames (which is exactly the bug the user reported). Detect this
+        // and fall back to automatic capture at the target fps — slightly
+        // less precise but produces a real, playable video on mobile.
+        let stream = canvas.captureStream(0);
+        let useAutoCapture = false;
+        let _probe = stream.getVideoTracks()[0];
+        if (!_probe || typeof _probe.requestFrame !== 'function') {
+          console.warn('[startRecording] track.requestFrame() unavailable — falling back to auto-capture at ' + fps + 'fps');
+          try { if (_probe) _probe.stop(); } catch(e) {}
+          stream = canvas.captureStream(fps);
+          useAutoCapture = true;
+        }
+        // Codec fallback chain. VP9 first (best quality on Chrome/Edge), then
+        // VP8 (still acceptable), then mp4/h264 for iOS Safari and Android
+        // browsers that lack VP9. Each candidate carries its own file extension.
+        const codecCandidates = [
+          { mime: 'video/webm;codecs=vp9,opus', ext: 'webm' },
+          { mime: 'video/webm;codecs=vp9',      ext: 'webm' },
+          { mime: 'video/webm;codecs="vp9.0"',  ext: 'webm' },
+          { mime: 'video/webm;codecs=vp8',      ext: 'webm' },
+          { mime: 'video/webm',                 ext: 'webm' },
+          { mime: 'video/mp4;codecs=avc1',      ext: 'mp4'  },
+          { mime: 'video/mp4',                  ext: 'mp4'  }
+        ];
+        let mime = '', fileExt = 'webm';
+        for (const c of codecCandidates) {
+          try {
+            if (MediaRecorder.isTypeSupported(c.mime)) { mime = c.mime; fileExt = c.ext; break; }
+          } catch(e) {}
+        }
+        if (!mime) {
+          alert('No supported video codec found on this device. Try PNG Sequence for lossless export.');
+          finish(); return;
+        }
+        console.log('[startRecording] codec=' + mime + ' ext=' + fileExt);
 
         videoChunks = [];
-        videoRecorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 50000000 });
+        videoRecorder = new MediaRecorder(stream, {
+          mimeType: mime,
+          videoBitsPerSecond: bitrate
+        });
         videoRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunks.push(e.data); };
         videoRecorder.onstop = () => {
           if (!videoCancelFlag) {
             const blob = new Blob(videoChunks, { type: mime });
-            downloadBlob(blob, 'voronoi-' + Date.now() + '.webm');
+            downloadBlob(blob, 'voronoi-' + recW + 'x' + recH + '-' + Date.now() + '.' + fileExt);
           }
           finish();
         };
@@ -517,21 +928,62 @@
 
         let frame = 0;
         const dt = 1.0 / fps;
-        function renderWebM() {
-          if (videoCancelFlag || frame >= totalFrames) { videoRecorder.stop(); return; }
-          advanceRecordFrame(frame, dt);
-          // Double rAF: first rAF triggers the GL draw, second rAF ensures GPU finished
-          requestAnimationFrame(() => {
+
+        if (useAutoCapture) {
+          // ── Auto-capture path (mobile / browsers without requestFrame) ──
+          // captureStream(fps) is sampling the canvas on its own timer at the
+          // target fps. We do NOT try to drive frames manually — that path
+          // requires p.animating=false + manual _flowTimeOverride feeding,
+          // which on mobile interacts badly with the budget pipeline / dirty
+          // flag / FBO chain and produces black recordings.
+          //
+          // Instead: restore p.animating to whatever it was, let the engine's
+          // own render loop animate the canvas in real time, and just poll
+          // for cancel + duration. The recording becomes a real-time screen
+          // capture of what is actually visible — which is exactly what the
+          // user expects on mobile and what already works.
+          p.animating = wasAnimating;
+          window._flowTimeOverride = null; // never drive flow time manually
+          const recStartMs = performance.now();
+          const recDurMs   = totalFrames * dt * 1000;
+          function pollAuto() {
+            if (videoCancelFlag) {
+              try { videoRecorder.stop(); } catch(e) {}
+              return;
+            }
+            const elapsedMs = performance.now() - recStartMs;
+            const f = Math.min(totalFrames, Math.floor((elapsedMs / 1000) * fps));
+            if (f !== frame) { frame = f; updateProgress(frame); }
+            if (elapsedMs >= recDurMs) {
+              try { videoRecorder.stop(); } catch(e) {}
+              return;
+            }
+            // Poll at ~20Hz — fast enough to keep the progress bar smooth and
+            // respond to cancel quickly, slow enough not to monopolize the
+            // event loop on mobile.
+            setTimeout(pollAuto, 50);
+          }
+          pollAuto();
+        } else {
+          // ── Manual frame mode (desktop with track.requestFrame()) ──
+          // Drive frames one-by-one for exact frame timing. Each iteration:
+          // advance state → double rAF → requestFrame → next iteration.
+          function renderWebM() {
+            if (videoCancelFlag || frame >= totalFrames) { videoRecorder.stop(); return; }
+            advanceRecordFrame(frame, dt);
+            // Double rAF: first rAF triggers the GL draw, second rAF ensures GPU finished
             requestAnimationFrame(() => {
-              const track = stream.getVideoTracks()[0];
-              if (track.requestFrame) track.requestFrame();
-              frame++;
-              updateProgress(frame);
-              setTimeout(renderWebM, 0);
+              requestAnimationFrame(() => {
+                const track = stream.getVideoTracks()[0];
+                if (track.requestFrame) track.requestFrame();
+                frame++;
+                updateProgress(frame);
+                setTimeout(renderWebM, 0);
+              });
             });
-          });
+          }
+          renderWebM();
         }
-        renderWebM();
 
       } else if (format === 'png-zip') {
         // ── PNG Sequence → ZIP (lossless) ──
@@ -698,6 +1150,23 @@
           img2.onload = function() { tryUpload('uploadInstanceImgPixel2Tex', idx, img2); };
           img2.src = inst.imgData2URL;
         }
+        // Per-shape images: walk inst.shapes and upload each shape's image
+        // to its own texture (multi-shape instances can have unique images
+        // per shape now). Uses uploadShapeImgPixelTex with the shape object.
+        if (inst.shapes && inst.shapes.length > 0) {
+          inst.shapes.forEach(function(sh) {
+            if (sh.imgDataURL) {
+              var sImg = new Image();
+              sImg.onload = function() { tryUpload('uploadShapeImgPixelTex', sh, sImg); };
+              sImg.src = sh.imgDataURL;
+            }
+            if (sh.imgData2URL) {
+              var sImg2 = new Image();
+              sImg2.onload = function() { tryUpload('uploadShapeImgPixel2Tex', sh, sImg2); };
+              sImg2.src = sh.imgData2URL;
+            }
+          });
+        }
       });
 
       // Restore image source texture
@@ -763,6 +1232,7 @@
       setSlider('sSpring', p.spring, 'vSpring', v => v.toFixed(1));
       setSlider('sGridUnit', p.gridUnit, 'vGridUnit', v => Math.round(v));
       setSlider('sNoiseElemSize', p.noiseElementSize || 0.5, 'vNoiseElemSize', v => v.toFixed(2));
+      setSlider('sGlobalPixelScale', p.globalPixelScale != null ? p.globalPixelScale : 1.0, 'vGlobalPixelScale', v => v.toFixed(2));
       setSlider('sNoiseOffsetX', p.noiseOffsetX || 0, 'vNoiseOffsetX', v => v.toFixed(3));
       setSlider('sNoiseOffsetY', p.noiseOffsetY || 0, 'vNoiseOffsetY', v => v.toFixed(3));
       setSlider('sNoiseOctaves', p.noiseOctaves != null ? p.noiseOctaves : 5, 'vNoiseOctaves', v => Math.round(v));
@@ -843,6 +1313,8 @@
       setToggle('btn-postprocess-toggle', ppe);
       var ppc = el('postprocess-controls');
       if (ppc) ppc.classList.toggle('controls-disabled', !ppe);
+      // Smooth Edges (permanent control at top of PP panel)
+      if (window.syncSmoothEdgesUI) window.syncSmoothEdgesUI();
       if (!p.ppStack) p.ppStack = [];
       // Auto-migrate legacy grading to stack if ppStack is empty
       if (p.ppStack.length === 0 && (p.gradeHue || (p.gradeSat != null && p.gradeSat !== 1) || (p.gradeVal != null && p.gradeVal !== 1) || (p.gradeContrast != null && p.gradeContrast !== 1))) {
@@ -1120,6 +1592,8 @@
     wire('sSpring',  'vSpring',  'spring',       v => v.toFixed(1));
     wire('sGridUnit','vGridUnit','gridUnit',     v => Math.round(v));
     wire('sNoiseElemSize', 'vNoiseElemSize', 'noiseElementSize', v => v.toFixed(2));
+    wire('sGlobalPixelScale', 'vGlobalPixelScale', 'globalPixelScale', v => v.toFixed(2));
+    wire('sSmoothEdges', 'vSmoothEdges', 'smoothEdgesAmount', v => v.toFixed(2));
     wire('sNoiseOffsetX', 'vNoiseOffsetX', 'noiseOffsetX', v => v.toFixed(3));
     wire('sNoiseOffsetY', 'vNoiseOffsetY', 'noiseOffsetY', v => v.toFixed(3));
     wire('sNoiseOctaves', 'vNoiseOctaves', 'noiseOctaves', v => Math.round(v));

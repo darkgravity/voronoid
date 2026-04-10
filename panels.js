@@ -14,7 +14,7 @@
         pixelW: 23, pixelH: 11, pixelScale: 1.0,
         weaveMode: 0, pixelShape: 0,
         shapes: null, activeShapeIdx: 0,
-        shapeMargin: 3, shapeBleed: 0, shapeSmoothness: 0, shapeScale: 1.0,
+        shapeMargin: 3, shapeBleed: 0, shapeSmoothness: 0, shapeScale: 1.0, shapeRotation: 0,
         sdfAffectScale: false, sdfMinScale: 0.5, sdfMaxScale: 2.0,
         sdfAffectRotate: false, sdfMinRotate: -45, sdfMaxRotate: 45,
         sdfAffectOffset: false, sdfMinOffset: -0.3, sdfMaxOffset: 0.3,
@@ -86,7 +86,7 @@
           id: 1,
           pixelW: p.pixelW || 23, pixelH: p.pixelH || 11, pixelScale: p.pixelScale || 1,
           weaveMode: p.weaveMode || 0, pixelShape: p.pixelShape || 0,
-          shapeMargin: p.shapeMargin || 3, shapeBleed: p.shapeBleed || 0, shapeSmoothness: p.shapeSmoothness || 0, shapeScale: p.shapeScale != null ? p.shapeScale : 1.0,
+          shapeMargin: p.shapeMargin || 3, shapeBleed: p.shapeBleed || 0, shapeSmoothness: p.shapeSmoothness || 0, shapeScale: p.shapeScale != null ? p.shapeScale : 1.0, shapeRotation: p.shapeRotation != null ? p.shapeRotation : 0,
           forceSquare: false, maintainThickness: false,
           oblique: !!p.oblique,
           quadSteps: p.quadSteps || 4, quadEnabled: !!p.quadEnabled, genDiamond: !!p.genDiamond,
@@ -210,6 +210,7 @@
       inst.pixelShape = activeShape.pixelShape;
       inst.shapeMargin = activeShape.shapeMargin; inst.shapeBleed = activeShape.shapeBleed;
       inst.shapeSmoothness = activeShape.shapeSmoothness; inst.shapeScale = activeShape.shapeScale;
+      inst.shapeRotation = activeShape.shapeRotation;
       inst.forceSquare = activeShape.forceSquare;
       inst.sdfAffectScale = activeShape.sdfAffectScale; inst.sdfMinScale = activeShape.sdfMinScale; inst.sdfMaxScale = activeShape.sdfMaxScale;
       inst.sdfAffectRotate = activeShape.sdfAffectRotate; inst.sdfMinRotate = activeShape.sdfMinRotate; inst.sdfMaxRotate = activeShape.sdfMaxRotate;
@@ -221,6 +222,11 @@
       inst.imgPixelAffectScale = activeShape.imgPixelAffectScale; inst.imgPixelMinScale = activeShape.imgPixelMinScale; inst.imgPixelMaxScale = activeShape.imgPixelMaxScale;
       inst.imgPixelAffectRotate = activeShape.imgPixelAffectRotate; inst.imgPixelMinRotate = activeShape.imgPixelMinRotate; inst.imgPixelMaxRotate = activeShape.imgPixelMaxRotate;
       inst.imgPixelAffectOffset = activeShape.imgPixelAffectOffset; inst.imgPixelMinOffset = activeShape.imgPixelMinOffset; inst.imgPixelMaxOffset = activeShape.imgPixelMaxOffset;
+      // Image data + filename now live on the SHAPE so each shape in a multi-shape
+      // instance can have its own image. Mirror to inst for legacy reads (panel
+      // render uses inst.imgPixelName etc). Active shape wins.
+      if (activeShape.imgDataURL !== undefined) inst.imgDataURL = activeShape.imgDataURL;
+      if (activeShape.imgPixelName !== undefined) inst.imgPixelName = activeShape.imgPixelName;
       inst.twoImage = activeShape.twoImage;
       inst.imgPixel2Enabled = activeShape.imgPixel2Enabled; inst.imgPixel2Cols = activeShape.imgPixel2Cols; inst.imgPixel2Rows = activeShape.imgPixel2Rows;
       inst.imgPixel2Opacity = activeShape.imgPixel2Opacity; inst.imgPixel2Blend = activeShape.imgPixel2Blend;
@@ -229,6 +235,8 @@
       inst.imgPixel2MinScale = activeShape.imgPixel2MinScale; inst.imgPixel2MaxScale = activeShape.imgPixel2MaxScale;
       inst.imgPixel2MinRotate = activeShape.imgPixel2MinRotate; inst.imgPixel2MaxRotate = activeShape.imgPixel2MaxRotate;
       inst.imgPixel2MinOffset = activeShape.imgPixel2MinOffset; inst.imgPixel2MaxOffset = activeShape.imgPixel2MaxOffset;
+      if (activeShape.imgData2URL !== undefined) inst.imgData2URL = activeShape.imgData2URL;
+      if (activeShape.imgPixel2Name !== undefined) inst.imgPixel2Name = activeShape.imgPixel2Name;
       inst.filters = activeShape.filters; inst.filtersEnabled = activeShape.filtersEnabled;
       inst.blendMode = activeShape.blendMode != null ? activeShape.blendMode : -1;
       inst.blendHueOff = activeShape.blendHueOff || 0;
@@ -467,6 +475,12 @@
 '    <input type="range" id="'+s('sShapeScale')+'" min="0" max="2" step="0.01" value="'+(inst.shapeScale!=null?inst.shapeScale:1.0)+'">',
 '    <input type="number" class="val" id="'+s('vShapeScale')+'" value="'+(inst.shapeScale!=null?inst.shapeScale.toFixed(2):'1.00')+'" min="0" max="2" step="0.01">',
 '  </div>',
+'</div>', // close sdf-only-controls early so Rotation stays visible in image mode
+'  <div class="row"><label>Rotation</label>',
+'    <input type="range" id="'+s('sShapeRotation')+'" min="-180" max="180" step="1" value="'+(inst.shapeRotation!=null?inst.shapeRotation:0)+'">',
+'    <input type="number" class="val" id="'+s('vShapeRotation')+'" value="'+(inst.shapeRotation!=null?Math.round(inst.shapeRotation):'0')+'" min="-180" max="180" step="1">',
+'  </div>',
+'<div id="'+s('sdf-only-controls-2')+'" style="display:'+(ps===9?'none':'')+'">',
 '  <div class="section-title sec-hdr" style="margin-top:6px;font-size:10px" onclick="toggleSectionCollapse(\''+s('sec-sdf-lum')+'\')">',
 '<svg class="collapse-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg>',
 '    Luminance Effectors</div>',
@@ -796,6 +810,7 @@
       wireInst(s('sInstBlendHueOff'), s('vInstBlendHueOff'), 'instanceBlendHueOff', function(v){return v.toFixed(2);});
       wireInst(s('sInstOpacity'), s('vInstOpacity'), 'instanceOpacity', function(v){return v.toFixed(2);});
       wireInst(s('sShapeScale'), s('vShapeScale'), 'shapeScale', function(v){return v.toFixed(2);});
+      wireInst(s('sShapeRotation'), s('vShapeRotation'), 'shapeRotation', function(v){return Math.round(v);});
       wireInst(s('sImgShapeScale'), s('vImgShapeScale'), 'shapeScale', function(v){return v.toFixed(2);});
       wireInst(s('sSdfMinScale'), s('vSdfMinScale'), 'sdfMinScale', function(v){return v.toFixed(2);});
       wireInst(s('sSdfMaxScale'), s('vSdfMaxScale'), 'sdfMaxScale', function(v){return v.toFixed(2);});
@@ -1083,6 +1098,14 @@
               {pos:1, r:255, g:255, b:255, hex:'#ffffff'}
             ];
           }
+          // Backfill per-shape image data fields (so existing single-image
+          // configs migrate cleanly to the new per-shape model). On first
+          // backfill, inherit the inst's image so the visual stays the same.
+          if (sh.imgDataURL === undefined) sh.imgDataURL = inst.imgDataURL || null;
+          if (sh.imgPixelName === undefined) sh.imgPixelName = inst.imgPixelName || 'tile.png';
+          if (sh.imgData2URL === undefined) sh.imgData2URL = inst.imgData2URL || null;
+          if (sh.imgPixel2Name === undefined) sh.imgPixel2Name = inst.imgPixel2Name || 'tile2.png';
+          if (sh.shapeRotation == null) sh.shapeRotation = 0;
         });
         return;
       }
@@ -1132,7 +1155,7 @@
       inst.shapes.push({
         id: inst.shapeIdCounter, name: 'Shape ' + inst.shapeIdCounter,
         pixelShape: 1,
-        shapeMargin: 3, shapeBleed: 0, shapeSmoothness: 0, shapeScale: 1.0, forceSquare: false,
+        shapeMargin: 3, shapeBleed: 0, shapeSmoothness: 0, shapeScale: 1.0, shapeRotation: 0, forceSquare: false,
         sdfAffectScale: false, sdfMinScale: 0.5, sdfMaxScale: 2.0,
         sdfAffectRotate: false, sdfMinRotate: -45, sdfMaxRotate: 45,
         sdfAffectOffset: false, sdfMinOffset: -0.3, sdfMaxOffset: 0.3,
@@ -1142,6 +1165,9 @@
         imgPixelAffectScale: false, imgPixelMinScale: -4, imgPixelMaxScale: 4,
         imgPixelAffectRotate: false, imgPixelMinRotate: -180, imgPixelMaxRotate: 180,
         imgPixelAffectOffset: false, imgPixelMinOffset: -1, imgPixelMaxOffset: 1,
+        // Per-shape image data — each shape has its own image (null = blank)
+        imgDataURL: null, imgPixelName: 'tile.png',
+        imgData2URL: null, imgPixel2Name: 'tile2.png',
         twoImage: false,
         imgPixel2Enabled: false, imgPixel2Cols: 5, imgPixel2Rows: 5,
         imgPixel2Opacity: 1, imgPixel2Blend: 8, imgPixel2HueOff: 0, imgPixel2Mask: false,
@@ -1806,6 +1832,8 @@
       if (ctrl) ctrl.style.display = s > 0 ? '' : 'none';
       var sdfCtrl = document.getElementById('sdf-only-controls_'+i);
       if (sdfCtrl) sdfCtrl.style.display = (s > 0 && s !== 9) ? '' : 'none';
+      var sdfCtrl2 = document.getElementById('sdf-only-controls-2_'+i);
+      if (sdfCtrl2) sdfCtrl2.style.display = (s > 0 && s !== 9) ? '' : 'none';
       var imgCtrl = document.getElementById('imgshape-controls_'+i);
       if (imgCtrl) imgCtrl.style.display = s === 9 ? '' : 'none';
       if (s === 9) { inst.imgPixelEnabled = true; }
@@ -1890,15 +1918,21 @@
       var file = event.target.files[0];
       if (!file) return;
       var inst = window.shaderParams.pixelateInstances[i];
+      // Write to the active SHAPE so multi-shape instances can have unique
+      // images per shape. Falls back to inst for legacy single-shape paths.
+      var sh = (inst.shapes && inst.shapes[inst.activeShapeIdx || 0]) || inst;
+      sh.imgPixelName = file.name;
+      // Mirror to inst for backward compat with code that still reads inst.*
       inst.imgPixelName = file.name;
       var nm = document.getElementById('imgPixelName_'+i);
       if (nm) nm.textContent = file.name;
       var reader = new FileReader();
       reader.onload = function(e) {
+        sh.imgDataURL = e.target.result;
         inst.imgDataURL = e.target.result;
         var img = new Image();
         img.onload = function() {
-          if (window.uploadInstanceImgPixelTex) window.uploadInstanceImgPixelTex(i, img);
+          if (window.uploadShapeImgPixelTex) window.uploadShapeImgPixelTex(sh, img);
           window.shaderDirty = true;
         };
         img.src = e.target.result;
@@ -1941,15 +1975,18 @@
       var file = event.target.files[0];
       if (!file) return;
       var inst = window.shaderParams.pixelateInstances[i];
+      var sh = (inst.shapes && inst.shapes[inst.activeShapeIdx || 0]) || inst;
+      sh.imgPixel2Name = file.name;
       inst.imgPixel2Name = file.name;
       var nm = document.getElementById('imgPixel2Name_'+i);
       if (nm) nm.textContent = file.name;
       var reader = new FileReader();
       reader.onload = function(e) {
+        sh.imgData2URL = e.target.result;
         inst.imgData2URL = e.target.result;
         var img = new Image();
         img.onload = function() {
-          if (window.uploadInstanceImgPixel2Tex) window.uploadInstanceImgPixel2Tex(i, img);
+          if (window.uploadShapeImgPixel2Tex) window.uploadShapeImgPixel2Tex(sh, img);
           window.shaderDirty = true;
         };
         img.src = e.target.result;

@@ -44,6 +44,9 @@
       f2Detail: 200.0, f2Twist: 50.0, f2Iter1: 20, f2Iter2: 20, f2Mode: 0,
       f2HueOffset: 0.0, f2HueRadius: 1.0, f2HueEnabled: false,
       imageScale: 1.0,
+      globalPixelScale: 1.0,
+      smoothEdgesEnabled: false,
+      smoothEdgesAmount: 0.5,
       rot: 117, dx: 0, dy: 0,
       sx: 1, sy: 1,
       mirrorX: 1, mirrorY: 1,
@@ -815,6 +818,34 @@
       document.getElementById('postprocess-controls').classList.toggle('controls-disabled', !p.postProcessEnabled);
       window.shaderDirty = true;
     }
+
+    // Smooth Edges — permanent control at top of postprocess panel.
+    // Edge-aware FXAA-lite anti-aliasing applied at the start of grade(),
+    // sampling uAccumTex (the pre-pixelation accumulator) at 4 neighbors
+    // and blending where local luminance contrast is high.
+    window.toggleSmoothEdges = function() {
+      var p = window.shaderParams;
+      p.smoothEdgesEnabled = !p.smoothEdgesEnabled;
+      var btn = document.getElementById('btn-smooth-edges-toggle');
+      if (btn) btn.classList.toggle('on', p.smoothEdgesEnabled);
+      var row = document.getElementById('smooth-edges-row');
+      if (row) row.style.display = p.smoothEdgesEnabled ? '' : 'none';
+      window.shaderDirty = true;
+    };
+    // Sync the toggle button + slider visibility with the current param state
+    // (called on init and after loading a flavor).
+    window.syncSmoothEdgesUI = function() {
+      var p = window.shaderParams;
+      var btn = document.getElementById('btn-smooth-edges-toggle');
+      if (btn) btn.classList.toggle('on', !!p.smoothEdgesEnabled);
+      var row = document.getElementById('smooth-edges-row');
+      if (row) row.style.display = p.smoothEdgesEnabled ? '' : 'none';
+      var sl = document.getElementById('sSmoothEdges');
+      var vl = document.getElementById('vSmoothEdges');
+      var amt = (p.smoothEdgesAmount != null) ? p.smoothEdgesAmount : 0.5;
+      if (sl) sl.value = amt;
+      if (vl) vl.value = amt.toFixed(2);
+    };
 
     function togglePPMenu() {
       var menu = document.getElementById('pp-menu');

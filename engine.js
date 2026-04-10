@@ -1,22 +1,120 @@
 const canvas = document.getElementById('glCanvas');
-let gl = canvas.getContext('webgl', {
-  antialias: false,
-  preserveDrawingBuffer: true
-});
 
-// Retry once if context lost (common during rapid Live Server reloads)
+// ── Robust WebGL context acquisition ───────────────────────────────
+// Mobile drivers can refuse to give a fresh context after a previous
+// shader compile failure or GPU crash, especially if zombie contexts
+// from earlier reloads are still alive. Try several option combinations
+// before giving up so we degrade gracefully instead of dying outright.
+let gl = null;
+const _ctxAttempts = [
+  ['webgl',              { antialias: false, preserveDrawingBuffer: true,  failIfMajorPerformanceCaveat: false, powerPreference: 'high-performance' }],
+  ['webgl',              { antialias: false, preserveDrawingBuffer: true }],
+  ['experimental-webgl', { antialias: false, preserveDrawingBuffer: true }],
+  ['webgl',              { antialias: false, preserveDrawingBuffer: false }], // no preserveDrawingBuffer = no recording, but page works
+  ['experimental-webgl', { antialias: false, preserveDrawingBuffer: false }],
+  ['webgl',              {}],
+  ['experimental-webgl', {}],
+];
+for (var _ai = 0; _ai < _ctxAttempts.length && !gl; _ai++) {
+  try { gl = canvas.getContext(_ctxAttempts[_ai][0], _ctxAttempts[_ai][1]); } catch (e) {}
+}
+
+// One more try: forcibly release any other live contexts on the page
+// (in case the page has stale canvases from reloads), then retry.
 if (!gl) {
-  const lostCtx = document.querySelectorAll('canvas');
-  lostCtx.forEach(c => { const g = c.getContext('webgl'); if (g) { g.getExtension('WEBGL_lose_context')?.loseContext(); } });
-  gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
+  try {
+    document.querySelectorAll('canvas').forEach(function(c) {
+      try { var g = c.getContext('webgl') || c.getContext('experimental-webgl'); if (g) { var ext = g.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } } catch(e) {}
+    });
+  } catch(e) {}
+  for (var _bi = 0; _bi < _ctxAttempts.length && !gl; _bi++) {
+    try { gl = canvas.getContext(_ctxAttempts[_bi][0], _ctxAttempts[_bi][1]); } catch (e) {}
+  }
 }
 
 if (!gl) {
+  // Detect whether WebGL is supported AT ALL on this device, vs just
+  // currently unavailable due to context exhaustion / crash recovery.
+  var probe = document.createElement('canvas');
+  var probeGl = null;
+  try { probeGl = probe.getContext('webgl') || probe.getContext('experimental-webgl'); } catch(e) {}
+  var supported = !!probeGl;
+  if (probeGl) { try { probeGl.getExtension('WEBGL_lose_context')?.loseContext(); } catch(e) {} }
+
+  var msg = supported
+    ? 'WebGL is supported on this device, but the browser refused to give this page a graphics context.\n\n'
+      + 'This usually means a previous render crashed and the GPU process is stuck. Try:\n\n'
+      + '1. Fully close the browser app (not just this tab — swipe it away from app switcher)\n'
+      + '2. Reopen the browser and load the page again\n\n'
+      + 'If that does not help, restart your phone.'
+    : 'WebGL is not available in this browser.\n\n'
+      + 'Make sure hardware acceleration is enabled in your browser settings, or try a different browser (Chrome / Safari).';
+
   var overlay = document.getElementById('shader-loading-overlay');
-  if (overlay) overlay.innerHTML = '<pre style="color:#f66;padding:2rem;margin:0">WebGL context unavailable.\nTry refreshing the page (Ctrl+Shift+R).</pre>';
-  throw new Error('No WebGL');
+  if (overlay) {
+    overlay.style.display = 'flex';
+    overlay.innerHTML = '<div style="color:#fff;padding:24px;max-width:480px;font-family:sans-serif;font-size:13px;line-height:1.55;text-align:center">'
+      + '<div style="font-size:15px;color:#f66;margin-bottom:14px;font-weight:600">Could not initialize graphics</div>'
+      + '<div style="white-space:pre-wrap;text-align:left;opacity:0.85">' + msg.replace(/[<>&]/g, function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}) + '</div>'
+      + '<button onclick="location.reload()" style="margin-top:18px;padding:10px 24px;border-radius:6px;background:#fff;color:#000;border:none;font-size:13px;cursor:pointer">Try again</button>'
+      + '</div>';
+  }
+  throw new Error('No WebGL — supported=' + supported);
 }
 window._glRef = gl;
+
+// Version marker — bump on every fix so we can verify new code is loaded
+console.log('%c[engine.js v20.4 — 2026-04-09 mobile recording fix: bypass dirty-flag during recording]', 'background:#0a0;color:#fff;padding:2px 6px;border-radius:3px');
+
+// ── GPU capability logging ──────────────────────────────────────
+// Print actual hardware limits at startup. If the shader still fails to
+// compile on a particular device, these numbers tell us exactly which
+// limit is being hit (uniforms/varyings/texture units). Look for them in
+// the desktop console via remote-debug.
+(function logGpuCaps() {
+  try {
+    var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    var renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '(unknown)';
+    var vendor   = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)   : '(unknown)';
+    console.log('[GPU]', vendor, '/', renderer);
+    console.log('[GPU] MAX_FRAGMENT_UNIFORM_VECTORS =', gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS));
+    console.log('[GPU] MAX_VERTEX_UNIFORM_VECTORS   =', gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS));
+    console.log('[GPU] MAX_VARYING_VECTORS          =', gl.getParameter(gl.MAX_VARYING_VECTORS));
+    console.log('[GPU] MAX_TEXTURE_IMAGE_UNITS      =', gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
+    console.log('[GPU] MAX_TEXTURE_SIZE             =', gl.getParameter(gl.MAX_TEXTURE_SIZE));
+    var hp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+    console.log('[GPU] FRAGMENT highp range        =', hp ? (hp.rangeMin + '/' + hp.rangeMax + ' precision=' + hp.precision) : 'unsupported');
+  } catch(e) { console.warn('GPU caps query failed:', e); }
+})();
+
+// ── Context loss handling ─────────────────────────────────────────
+// On mobile in particular, the GPU can be killed by the OS (backgrounding,
+// thermal, watchdog timeout) and the WebGL context is lost. Without
+// preventDefault() the browser won't even attempt to restore. Without a
+// restored handler, the app stays in a permanently dead state. Together
+// they let the page recover from a context loss instead of just crashing.
+canvas.addEventListener('webglcontextlost', function(e) {
+  e.preventDefault();
+  console.warn('WebGL context lost — pausing render and waiting for restore');
+  window._contextLost = true;
+  var ov = document.getElementById('shader-loading-overlay');
+  if (ov) {
+    ov.style.display = 'flex';
+    ov.innerHTML = '<div style="color:#fff;padding:2rem;text-align:center;font-family:sans-serif">'
+      + '<div style="font-size:14px;margin-bottom:12px">Graphics context lost</div>'
+      + '<div style="font-size:11px;opacity:0.6;margin-bottom:16px">The GPU dropped the WebGL context.<br>This usually happens after backgrounding or under heavy load.</div>'
+      + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:6px;background:#fff;color:#000;border:none;font-size:13px;cursor:pointer">Reload</button>'
+      + '</div>';
+  }
+}, false);
+canvas.addEventListener('webglcontextrestored', function() {
+  console.warn('WebGL context restored — page reload required to rebuild GL state');
+  // Note: do NOT auto-reload here. If context loss is happening repeatedly
+  // (e.g. shader compile keeps crashing the GPU), an auto-reload creates a
+  // crash → reload → crash loop that exhausts the browser's WebGL context
+  // budget and leaves the page permanently broken. The contextlost handler
+  // already shows a Reload button — let the user click it manually.
+}, false);
 
 /* ── Dirty-flag rendering ─────────────────────────────────────────
    Only re-draw when something actually changed.  The UI sets
@@ -29,7 +127,16 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
                  || (window.innerWidth <= 768 && 'ontouchstart' in window);
 window.isMobile = isMobile;
 
-function isFast() { return isMobile || (window.shaderParams && window.shaderParams.fastMode); }
+function isFast() {
+  // During video recording, force full quality regardless of fast/mobile state.
+  // EXCEPTION: on mobile, never flip out of fast mode. The mobile GPU was
+  // already limited to fast mode for a reason (point/group/resolution caps);
+  // forcing full quality stalls the render loop, the canvas freezes black,
+  // and captureStream records that frozen state. We record what the user
+  // actually sees on mobile, which IS the fast-mode render.
+  if (window._recordingActive && !isMobile) return false;
+  return isMobile || (window.shaderParams && window.shaderParams.fastMode);
+}
 
 const renderScale = isMobile ? 0.5 : 1.0;
 let currentRenderScale = renderScale;
@@ -37,14 +144,24 @@ let currentRenderScale = renderScale;
 let curW = 0, curH = 0;
 let sceneW = 0, sceneH = 0;
 function syncSize() {
-  let dpr = (window.devicePixelRatio || 1) * currentRenderScale;
-  // Mobile: cap effective DPR at 1.0 so the canvas never exceeds CSS-pixel
-  // resolution. Combined with a multi-pass FBO pipeline (blur + chained
-  // pixelation + edge/grading), full DPR on phones turns into 5–10M frag
-  // shader invocations per frame and the page locks up.
-  if (isMobile) dpr = Math.min(dpr, 1.0);
-  const w = (canvas.clientWidth  * dpr) | 0;
-  const h = (canvas.clientHeight * dpr) | 0;
+  let w, h;
+  // Recording override: render at an explicit fixed resolution regardless of
+  // canvas CSS size or device pixel ratio. Used by the video exporter so
+  // exports always come out at e.g. 1920x1080 / 4K instead of whatever the
+  // on-screen canvas happens to be.
+  if (window._recordingSizeOverride) {
+    w = window._recordingSizeOverride.w | 0;
+    h = window._recordingSizeOverride.h | 0;
+  } else {
+    let dpr = (window.devicePixelRatio || 1) * currentRenderScale;
+    // Mobile: cap effective DPR at 1.0 so the canvas never exceeds CSS-pixel
+    // resolution. Combined with a multi-pass FBO pipeline (blur + chained
+    // pixelation + edge/grading), full DPR on phones turns into 5–10M frag
+    // shader invocations per frame and the page locks up.
+    if (isMobile) dpr = Math.min(dpr, 1.0);
+    w = (canvas.clientWidth  * dpr) | 0;
+    h = (canvas.clientHeight * dpr) | 0;
+  }
   if (w === curW && h === curH) return false;
   canvas.width  = w;
   canvas.height = h;
@@ -114,6 +231,12 @@ function _showShaderError(title, body, src) {
 // Check a compiled shader for errors (called after parallel compile finishes)
 function checkShader(s) {
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    // If the context was lost (e.g. GPU crashed during compile), the info log
+    // will be empty and the "compile error" is misleading. The contextlost
+    // event handler has already shown the right overlay — don't overwrite it.
+    if (window._contextLost || gl.isContextLost()) {
+      throw new Error('context lost during compile');
+    }
     var log = gl.getShaderInfoLog(s);
     if (!log || !log.trim()) log = '(driver returned empty info log — check desktop console / remote-debug for details)';
     _showShaderError('Shader compile error [' + (s._tag || '?') + ']', log, s._src);
@@ -312,6 +435,46 @@ window.forceResize = function() { curW = 0; curH = 0; };
 // The global imgPixelTex (below) is kept for backwards compat / single-instance.
 const imgPixelTexes = [];   // lazily allocated
 
+// ── Per-SHAPE image-pixel textures (multi-shape per instance) ──
+// Each shape in a multi-shape instance gets its own image texture so
+// users can set different images for different shapes. Keyed by the
+// shape object itself via WeakMap so storage is automatic when shapes
+// are removed (no manual cleanup needed).
+const _imgPixelTexByShape = new WeakMap();
+const _imgPixel2TexByShape = new WeakMap();
+function getShapeImgPixelTex(shape) {
+  if (!shape) return getImgPixelTex(0);
+  let t = _imgPixelTexByShape.get(shape);
+  if (!t) {
+    t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0,0,0,255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    _imgPixelTexByShape.set(shape, t);
+  }
+  return t;
+}
+function getShapeImgPixel2Tex(shape) {
+  if (!shape) return getImgPixel2Tex(0);
+  let t = _imgPixel2TexByShape.get(shape);
+  if (!t) {
+    t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0,0,0,255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    _imgPixel2TexByShape.set(shape, t);
+  }
+  return t;
+}
+
 function getImgPixelTex(i) {
   if (!imgPixelTexes[i]) {
     const t = gl.createTexture();
@@ -484,8 +647,17 @@ window.uploadShapeGradient = function(stops) {
 
 
 (function() {
-  const sceneSrc = FRAGMENT_GLSL_SRC;
-  const edgeSrc  = EDGE_GLSL_SRC;
+  // On mobile, inject MOBILE_ULTRA so the edge shader strips its heaviest
+  // code paths at compile time: quadtree subdivision loop, 32-sample disc
+  // outline, opacity patterns, Layered Oct+Diamond overlay, Image Pixel
+  // feature, and caps PP filter stack at 4 instead of 16. The shader binary
+  // ends up dramatically smaller and fits within mobile instruction limits.
+  // See glsl.js for the #ifdef MOBILE_ULTRA / #ifndef MOBILE_ULTRA gates.
+  // Layered on top of the v12 mobile budget (which clamps instances/shapes
+  // at the JS level) for belt-and-suspenders mobile survival.
+  const mobileDefine = isMobile ? '#define MOBILE_ULTRA 1\n' : '';
+  const sceneSrc = mobileDefine + FRAGMENT_GLSL_SRC;
+  const edgeSrc  = mobileDefine + EDGE_GLSL_SRC;
 
   const vert = compileShader(gl.VERTEX_SHADER, VERT_SRC, 'main vertex');
   const sceneFrag = compileShader(gl.FRAGMENT_SHADER, sceneSrc, 'scene fragment');
@@ -687,7 +859,10 @@ window.uploadShapeGradient = function(stops) {
   const eSdfMinAlpha     = gl.getUniformLocation(edgeProg, 'uSdfMinAlpha');
   const eSdfMaxAlpha     = gl.getUniformLocation(edgeProg, 'uSdfMaxAlpha');
   const ePixelScale   = gl.getUniformLocation(edgeProg, 'uPixelScale');
+  const eSmoothEdgesEnabled = gl.getUniformLocation(edgeProg, 'uSmoothEdgesEnabled');
+  const eSmoothEdgesAmount  = gl.getUniformLocation(edgeProg, 'uSmoothEdgesAmount');
   const eShapeScale   = gl.getUniformLocation(edgeProg, 'uShapeScale');
+  const eShapeRotation = gl.getUniformLocation(edgeProg, 'uShapeRotation');
   const eForceSquare  = gl.getUniformLocation(edgeProg, 'uForceSquare');
   const eMaintainThickness = gl.getUniformLocation(edgeProg, 'uMaintainThickness');
   const eQuadReverse = gl.getUniformLocation(edgeProg, 'uQuadReverse');
@@ -852,6 +1027,33 @@ window.uploadShapeGradient = function(stops) {
 
   window.uploadInstanceImgPixel2Tex = function(idx, img) {
     const t = getImgPixel2Tex(idx);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    window.shaderDirty = true;
+  };
+
+  // Per-shape upload helpers — write image to a specific shape's texture
+  // (for multi-shape instances where each shape has its own image).
+  window.uploadShapeImgPixelTex = function(shape, img) {
+    if (!shape) return;
+    const t = getShapeImgPixelTex(shape);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    window.shaderDirty = true;
+  };
+  window.uploadShapeImgPixel2Tex = function(shape, img) {
+    if (!shape) return;
+    const t = getShapeImgPixel2Tex(shape);
     gl.bindTexture(gl.TEXTURE_2D, t);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -1054,10 +1256,111 @@ window.uploadShapeGradient = function(stops) {
 
   function render(now) {
     requestAnimationFrame(render);
+    // Skip rendering entirely if the GL context is lost — calling GL functions
+    // in this state spams warnings and can interfere with context restoration.
+    if (window._contextLost || gl.isContextLost()) return;
     frameCount++;
 
     // Check if fast mode changed — force resize to update resolution
     const p = window.shaderParams;
+
+    // ── Mobile budget: predictive degradation ──────────────────────────
+    // Mobile GPUs cannot survive the full pipeline (multi-instance × multi-shape
+    // × full PP filter chain × pre-process pass × blur). Rather than crashing,
+    // we temporarily clamp the user's params to a budget the GPU can handle
+    // for the duration of the render call. The user's actual config and UI
+    // sliders are untouched (we restore them at the end of render). On desktop
+    // this block is a no-op.
+    //
+    // Budget: 1 instance, 1 shape per instance, 4 filters, no blur, no
+    // pre-process, no quadtree, no image pixel, no opacity patterns, no
+    // global banding/PP stack.
+    let _budgetSaved = null;
+    if (isMobile && p) {
+      if (!window._mobileBudgetNoticeShown) {
+        window._mobileBudgetNoticeShown = true;
+        console.log('%c[mobile budget active] Multi-instance + multi-shape allowed. Heavy features (image pixel, opacity patterns, quadtree, layered overlay, disc outline) stripped at shader compile via MOBILE_ULTRA. Filter stack capped at 4 per instance.', 'background:#fa0;color:#000;padding:2px 6px;border-radius:3px');
+        // Show a small dismissible on-screen banner so the user knows what's
+        // happening — mobile users can't see the console without remote debug.
+        try {
+          var b = document.createElement('div');
+          b.id = 'mobile-budget-banner';
+          b.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);'
+            + 'background:rgba(255,170,0,0.92);color:#000;font:600 11px/1.4 sans-serif;'
+            + 'padding:6px 12px;border-radius:14px;z-index:9999;'
+            + 'box-shadow:0 2px 8px rgba(0,0,0,0.4);max-width:90vw;'
+            + 'display:flex;align-items:center;gap:8px;cursor:pointer';
+          b.innerHTML = '<span>Mobile mode · reduced features</span><span style="opacity:0.6;font-size:14px;line-height:1">×</span>';
+          b.onclick = function(){ if (b.parentNode) b.parentNode.removeChild(b); };
+          // Auto-dismiss after 8s
+          setTimeout(function(){ if (b.parentNode) b.parentNode.removeChild(b); }, 8000);
+          // Wait for DOM to be ready before appending
+          var attach = function(){ if (document.body) document.body.appendChild(b); else setTimeout(attach, 50); };
+          attach();
+        } catch(e) {}
+      }
+      _budgetSaved = {
+        flowBlur: p.flowBlur,
+        preProcess: p.preProcess,
+        prePPStack: p.prePPStack,
+        postProcessEnabled: p.postProcessEnabled,
+        banding: p.banding,
+        pixelateInstances: p.pixelateInstances,
+        ppStack: p.ppStack,
+      };
+      p.flowBlur = false;
+      p.preProcess = false;
+      p.prePPStack = null;
+      p.postProcessEnabled = false;
+      p.banding = false;
+      // Round 1 of feature restoration: allow ALL pixelation instances and
+      // ALL shapes per instance through to the GPU (was clamped to 1/1).
+      // The heavy features (image pixel, opacity patterns, quadtree, etc)
+      // are still force-disabled per instance — those are gated in the
+      // shader by MOBILE_ULTRA so they're free here, but disabling on the
+      // JS side avoids the per-frame texture uploads and uniform binds
+      // that would otherwise be wasted work.
+      if (_budgetSaved.pixelateInstances && _budgetSaved.pixelateInstances.length > 0) {
+        p.pixelateInstances = _budgetSaved.pixelateInstances.map(function(_origInst) {
+          if (!_origInst) return _origInst;
+          const _mc = {};
+          for (var _k in _origInst) { if (_origInst.hasOwnProperty(_k)) _mc[_k] = _origInst[_k]; }
+          // Heavy features off (mobile shader strip can't run them anyway).
+          // NOTE: imgPixelEnabled / imgPixel2Enabled are NOT disabled here,
+          // even though the Image Pixel cell-substitution feature is stripped
+          // by MOBILE_ULTRA. The reason: the image SHAPE SDF (shape type 9)
+          // also reads uImgPixelEnabled, and disabling it here would cause
+          // the inst-to-active-shape sync loop downstream to permanently
+          // mutate the user's shape data (since imgPixelEnabled is in
+          // SHAPE_KEYS), corrupting whichever shape is currently selected
+          // and breaking image shape entirely on mobile.
+          _mc.opPatternsEnabled = false;
+          // quadEnabled: restored on mobile (round 2). The shader's
+          // quadtreeGrid() loop is now active on mobile.
+          _mc.genDiamond        = false;
+          // Shapes: pass through unchanged — multi-shape now allowed on mobile.
+          // Filters: still capped at 4 per instance to bound the unrolled
+          //          PP loop body in grade(). The shader's PP_STACK_MAX is 4
+          //          on mobile, so anything past index 3 is dead anyway.
+          if (_origInst.filters && _origInst.filters.length > 4) {
+            _mc.filters = _origInst.filters.slice(0, 4);
+          }
+          // Persistent cache target — keeps texture-upload signature caches
+          // (the v12 fix) hitting across frames despite per-frame rebuild.
+          _mc._cacheTarget = _origInst;
+          return _mc;
+        });
+      }
+      if (_budgetSaved.ppStack && _budgetSaved.ppStack.length > 4) {
+        p.ppStack = _budgetSaved.ppStack.slice(0, 4);
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────
+
+    // Wrap the rest of render() in try/finally so we always restore the user's
+    // params even if a draw call throws.
+    try {
+
     const resDivisor = isFast() ? (p.renderRes || 2) : 1;
     const hasOverride = isFast() && p.pixelate && p.pixelateInstances &&
       p.pixelateInstances.some(function(inst) { return inst.enabled !== false && inst.overrideResolution; });
@@ -1117,7 +1420,20 @@ window.uploadShapeGradient = function(stops) {
       flowLastMs = 0;
     }
 
-    if (!window.shaderDirty) return;
+    // Dirty-flag early-out: skip the draw if nothing changed.
+    // EXCEPTION: during video recording we MUST draw every frame regardless.
+    // config.js sets p.animating=false during recording so it can drive frames
+    // manually via _flowTimeOverride, which means most rAFs would see
+    // shaderDirty=false and early-return here. On any device where the WebGL
+    // context ended up with preserveDrawingBuffer:false (which engine.js's
+    // fallback chain allows), the browser clears the drawing buffer between
+    // composites — so any rAF that returns without drawing leaves a black
+    // canvas on screen AND a black sample for captureStream. Forcing a draw
+    // every frame during recording keeps the buffer continuously refreshed
+    // and the recording captures actual content. Cost is one extra full draw
+    // per rAF for the duration of the recording, which is fine — recording
+    // is an exceptional state, not a steady-state hot path.
+    if (!window.shaderDirty && !window._recordingActive) return;
     window.shaderDirty = false;
     const W = canvas.width;
     const H = canvas.height;
@@ -1456,11 +1772,19 @@ window.uploadShapeGradient = function(stops) {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         prePPFBO = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, prePPFBO);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, prePPTex, 0);
       }
+      // Only re-allocate texture storage when canvas size actually changes.
+      // The previous code reallocated W*H*4 bytes EVERY frame — on 1080p that
+      // was an 8MB GPU texture realloc per frame, triggering driver sync points
+      // that on mobile would crash the WebGL context within seconds.
       gl.bindTexture(gl.TEXTURE_2D, prePPTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      if (prePPTex._w !== W || prePPTex._h !== H) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        prePPTex._w = W; prePPTex._h = H;
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, prePPFBO);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, prePPTex, 0);
       gl.viewport(0, 0, W, H);
 
       gl.useProgram(edgeProg);
@@ -1564,15 +1888,17 @@ window.uploadShapeGradient = function(stops) {
     // Filter to only enabled instances (inst.enabled !== false)
     // Expand shapes: each shape in an instance becomes a virtual sub-instance
     // sharing the parent's grid config but with its own shape/filter params
-    const SHAPE_KEYS = ['pixelShape','shapeMargin','shapeBleed','shapeSmoothness','shapeScale','forceSquare',
+    const SHAPE_KEYS = ['pixelShape','shapeMargin','shapeBleed','shapeSmoothness','shapeScale','shapeRotation','forceSquare',
       'sdfAffectScale','sdfMinScale','sdfMaxScale','sdfAffectRotate','sdfMinRotate','sdfMaxRotate',
       'sdfAffectOffset','sdfMinOffset','sdfMaxOffset',
       'sdfAffectAlpha','sdfMinAlpha','sdfMaxAlpha',
       'imgPixelEnabled','imgPixelCols','imgPixelRows','imgPixelOpacity','imgPixelBlend','imgPixelHueOff','imgPixelMask',
+      'imgDataURL','imgPixelName',
       'imgPixelAffectScale','imgPixelMinScale','imgPixelMaxScale',
       'imgPixelAffectRotate','imgPixelMinRotate','imgPixelMaxRotate',
       'imgPixelAffectOffset','imgPixelMinOffset','imgPixelMaxOffset',
       'twoImage','imgPixel2Enabled','imgPixel2Cols','imgPixel2Rows',
+      'imgData2URL','imgPixel2Name',
       'imgPixel2Opacity','imgPixel2Blend','imgPixel2HueOff','imgPixel2Mask',
       'imgPixel2AffectScale','imgPixel2AffectRotate','imgPixel2AffectOffset',
       'imgPixel2MinScale','imgPixel2MaxScale','imgPixel2MinRotate','imgPixel2MaxRotate',
@@ -1622,6 +1948,11 @@ window.uploadShapeGradient = function(stops) {
         merged._isFinisher = false;
         merged._parentInst = inst;
         merged._origIdx = insts.indexOf(inst);
+        // CRITICAL: cacheTarget points to a persistent object so per-instance
+        // caches (gradient signatures, etc) survive across frames. The `merged`
+        // object is rebuilt every frame and would lose all cached state — but
+        // the underlying `sh` (from inst.shapes[]) and `inst` are persistent.
+        merged._cacheTarget = (sh !== inst) ? sh : inst;
         expandedInsts.push(merged);
       });
       // Add finisher pass only if needed (blend, opacity, or grading)
@@ -1642,6 +1973,7 @@ window.uploadShapeGradient = function(stops) {
           fin.instanceBlendMode = inst.instanceBlendMode != null ? inst.instanceBlendMode : -1;
           fin.instanceBlendHueOff = inst.instanceBlendHueOff || 0;
           fin.instanceOpacity = inst.instanceOpacity != null ? inst.instanceOpacity : 1.0;
+          fin._cacheTarget = inst; // finisher uses parent inst as persistent cache
           expandedInsts.push(fin);
         } else {
           // No finisher: let last shape handle grading directly
@@ -1725,8 +2057,9 @@ window.uploadShapeGradient = function(stops) {
 
       // Per-instance pixelate params
       gl.uniform1i(ePixelate, p.pixelate ? 1 : 0);
-      const pw = (inst.pixelW || 8) * (inst.pixelScale || 1);
-      const ph = (inst.pixelH || 8) * (inst.pixelScale || 1);
+      const _gps = (p.globalPixelScale != null && p.globalPixelScale > 0) ? p.globalPixelScale : 1;
+      const pw = (inst.pixelW || 8) * (inst.pixelScale || 1) * _gps;
+      const ph = (inst.pixelH || 8) * (inst.pixelScale || 1) * _gps;
       gl.uniform2f(ePixelSize, pw, ph);
       gl.uniform1i(eWeaveMode,   inst.weaveMode  || 0);
       // ── Multi-shape loop ──
@@ -1749,7 +2082,10 @@ window.uploadShapeGradient = function(stops) {
       gl.uniform1f(eSdfMinAlpha,     inst.sdfMinAlpha     != null ? inst.sdfMinAlpha     : 0.0);
       gl.uniform1f(eSdfMaxAlpha,     inst.sdfMaxAlpha     != null ? inst.sdfMaxAlpha     : 1.0);
       gl.uniform1f(ePixelScale,  inst.pixelScale  || 1);
+      gl.uniform1i(eSmoothEdgesEnabled, p.smoothEdgesEnabled ? 1 : 0);
+      gl.uniform1f(eSmoothEdgesAmount,  p.smoothEdgesAmount != null ? p.smoothEdgesAmount : 0.5);
       gl.uniform1f(eShapeScale,  inst.shapeScale  != null ? inst.shapeScale  : 1.0);
+      gl.uniform1f(eShapeRotation, inst.shapeRotation != null ? inst.shapeRotation : 0.0);
       gl.uniform1i(eForceSquare, inst.forceSquare ? 1 : 0);
       gl.uniform1i(eMaintainThickness, inst.maintainThickness ? 1 : 0);
       gl.uniform1i(eQuadReverse, inst.quadReverse ? 1 : 0);
@@ -1774,23 +2110,35 @@ window.uploadShapeGradient = function(stops) {
       const gradFilter = (inst.filters || []).find(f => f.type === 15 && f.enabled !== false);
       const gradStopsSource = gradFilter ? gradFilter.gradStops : (inst.shapeGradStops || null);
       if (gradStopsSource && gradStopsSource.length >= 2) {
-        const stops = gradStopsSource.slice().sort((a,b) => a.pos - b.pos);
-        const gd = new Uint8Array(GRAD_WIDTH * 4);
-        for (let x = 0; x < GRAD_WIDTH; x++) {
-          const t = x / (GRAD_WIDTH - 1);
-          let lo = stops[0], hi = stops[stops.length - 1];
-          for (let j = 0; j < stops.length - 1; j++) {
-            if (t >= stops[j].pos && t <= stops[j+1].pos) { lo = stops[j]; hi = stops[j+1]; break; }
+        // Per-texture cache (NOT per-instance): track what's currently in the
+        // shared shapeGradTex. With multi-instance, each instance has its own
+        // gradient stops but they all share this single texture, so the cache
+        // key must be "what's currently in the texture" not "did this instance
+        // ever upload". A per-instance cache produced wrong colors after the
+        // first frame because instance B's upload would overwrite instance A's
+        // data, but A's per-instance cache still said "uploaded" so frame 2
+        // would skip A's upload and draw with B's data.
+        const _gradSig = JSON.stringify(gradStopsSource);
+        if (shapeGradTex._currentSig !== _gradSig) {
+          const stops = gradStopsSource.slice().sort((a,b) => a.pos - b.pos);
+          const gd = new Uint8Array(GRAD_WIDTH * 4);
+          for (let x = 0; x < GRAD_WIDTH; x++) {
+            const t = x / (GRAD_WIDTH - 1);
+            let lo = stops[0], hi = stops[stops.length - 1];
+            for (let j = 0; j < stops.length - 1; j++) {
+              if (t >= stops[j].pos && t <= stops[j+1].pos) { lo = stops[j]; hi = stops[j+1]; break; }
+            }
+            const range = hi.pos - lo.pos;
+            const f = range < 0.0001 ? 0 : (t - lo.pos) / range;
+            gd[x*4+0] = Math.round(lo.r + (hi.r - lo.r) * f);
+            gd[x*4+1] = Math.round(lo.g + (hi.g - lo.g) * f);
+            gd[x*4+2] = Math.round(lo.b + (hi.b - lo.b) * f);
+            gd[x*4+3] = 255;
           }
-          const range = hi.pos - lo.pos;
-          const f = range < 0.0001 ? 0 : (t - lo.pos) / range;
-          gd[x*4+0] = Math.round(lo.r + (hi.r - lo.r) * f);
-          gd[x*4+1] = Math.round(lo.g + (hi.g - lo.g) * f);
-          gd[x*4+2] = Math.round(lo.b + (hi.b - lo.b) * f);
-          gd[x*4+3] = 255;
+          gl.bindTexture(gl.TEXTURE_2D, shapeGradTex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, gd);
+          shapeGradTex._currentSig = _gradSig;
         }
-        gl.bindTexture(gl.TEXTURE_2D, shapeGradTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, gd);
       }
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, shapeGradTex);
@@ -1815,26 +2163,31 @@ window.uploadShapeGradient = function(stops) {
       gl.uniform1i(eCellColorMode, inst.cellColorMode || 0);
       const ccCol = hexToRgb01(inst.customCellColor || '#ffffff');
       gl.uniform3f(eCustomCellColor, ccCol[0], ccCol[1], ccCol[2]);
-      // Cell gradient: only re-upload when in Gradient mode and stops exist
+      // Cell gradient: per-texture cache (see shape gradient comment above
+      // for why this can't be per-instance with a shared texture).
       if (inst.cellColorMode === 2 && inst.cellGradStops && inst.cellGradStops.length >= 2) {
-        const cgStops = inst.cellGradStops.slice().sort(function(a,b){ return a.pos - b.pos; });
-        const cgd = new Uint8Array(GRAD_WIDTH * 4);
-        for (let x = 0; x < GRAD_WIDTH; x++) {
-          const t = x / (GRAD_WIDTH - 1);
-          let lo = cgStops[0], hi = cgStops[cgStops.length - 1];
-          for (let j = 0; j < cgStops.length - 1; j++) {
-            if (t >= cgStops[j].pos && t <= cgStops[j+1].pos) { lo = cgStops[j]; hi = cgStops[j+1]; break; }
+        const _cgSig = JSON.stringify(inst.cellGradStops);
+        if (cellGradTex._currentSig !== _cgSig) {
+          const cgStops = inst.cellGradStops.slice().sort(function(a,b){ return a.pos - b.pos; });
+          const cgd = new Uint8Array(GRAD_WIDTH * 4);
+          for (let x = 0; x < GRAD_WIDTH; x++) {
+            const t = x / (GRAD_WIDTH - 1);
+            let lo = cgStops[0], hi = cgStops[cgStops.length - 1];
+            for (let j = 0; j < cgStops.length - 1; j++) {
+              if (t >= cgStops[j].pos && t <= cgStops[j+1].pos) { lo = cgStops[j]; hi = cgStops[j+1]; break; }
+            }
+            const range = hi.pos - lo.pos;
+            const f = range < 0.0001 ? 0 : (t - lo.pos) / range;
+            cgd[x*4+0] = Math.round(lo.r + (hi.r - lo.r) * f);
+            cgd[x*4+1] = Math.round(lo.g + (hi.g - lo.g) * f);
+            cgd[x*4+2] = Math.round(lo.b + (hi.b - lo.b) * f);
+            cgd[x*4+3] = 255;
           }
-          const range = hi.pos - lo.pos;
-          const f = range < 0.0001 ? 0 : (t - lo.pos) / range;
-          cgd[x*4+0] = Math.round(lo.r + (hi.r - lo.r) * f);
-          cgd[x*4+1] = Math.round(lo.g + (hi.g - lo.g) * f);
-          cgd[x*4+2] = Math.round(lo.b + (hi.b - lo.b) * f);
-          cgd[x*4+3] = 255;
+          gl.activeTexture(gl.TEXTURE8);
+          gl.bindTexture(gl.TEXTURE_2D, cellGradTex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, cgd);
+          cellGradTex._currentSig = _cgSig;
         }
-        gl.activeTexture(gl.TEXTURE8);
-        gl.bindTexture(gl.TEXTURE_2D, cellGradTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRAD_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, cgd);
       }
       gl.activeTexture(gl.TEXTURE8);
       gl.bindTexture(gl.TEXTURE_2D, cellGradTex);
@@ -1891,23 +2244,28 @@ window.uploadShapeGradient = function(stops) {
       gl.uniform1f(eOpPatternSeed, opFilter ? (opFilter.patternSeed || 0) : (inst.opPatternSeed || 0));
       gl.uniform1i(eOpPatternMode, opFilter ? (opFilter.patternMode || 0) : (inst.opPatternMode || 0));
       for (let k = 0; k < 4; k++) gl.uniform4f(eOpPatternDims[k], 0, 0, 0, 0);
-      // Opacity patterns — upload per-instance patterns to shared texture
+      // Opacity patterns — upload per-instance patterns to shared texture.
+      // Per-texture cache (see shape gradient comment above).
       if (opCount > 0) {
-        gl.activeTexture(gl.TEXTURE3);
-        const opData = new Uint8Array(64 * 16);
-        let opIdx = 0;
-        for (let k = 0; k < opPats.length && opIdx < 4; k++) {
-          if (opPats[k].active === false) continue;
-          const rows = opPats[k].grid || [];
-          for (let r = 0; r < rows.length && r < 16; r++) {
-            for (let c = 0; c < rows[r].length && c < 16; c++) {
-              opData[(r * 64) + (opIdx * 16) + c] = Math.round(Math.max(0, Math.min(1, rows[r][c])) * 255);
+        const _opSig = JSON.stringify(opPats.filter(op => op.active !== false).map(op => op.grid));
+        if (opPatternTex._currentSig !== _opSig) {
+          gl.activeTexture(gl.TEXTURE3);
+          const opData = new Uint8Array(64 * 16);
+          let opIdx = 0;
+          for (let k = 0; k < opPats.length && opIdx < 4; k++) {
+            if (opPats[k].active === false) continue;
+            const rows = opPats[k].grid || [];
+            for (let r = 0; r < rows.length && r < 16; r++) {
+              for (let c = 0; c < rows[r].length && c < 16; c++) {
+                opData[(r * 64) + (opIdx * 16) + c] = Math.round(Math.max(0, Math.min(1, rows[r][c])) * 255);
+              }
             }
+            opIdx++;
           }
-          opIdx++;
+          gl.bindTexture(gl.TEXTURE_2D, opPatternTex);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, opData);
+          opPatternTex._currentSig = _opSig;
         }
-        gl.bindTexture(gl.TEXTURE_2D, opPatternTex);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, opData);
       }
       if (opCount > 0) {
         gl.activeTexture(gl.TEXTURE3);
@@ -1924,10 +2282,13 @@ window.uploadShapeGradient = function(stops) {
         }
       }
 
-      // Image pixel (per-instance texture — use original index so upload slot matches)
+      // Image pixel — per-shape texture (each shape in a multi-shape instance
+      // has its own image so they can use different images independently).
+      // _cacheTarget points to the shape object (or to inst itself for legacy
+      // single-shape instances) — set during multi-shape expansion above.
       gl.uniform1i(eImgPixelEnabled, inst.imgPixelEnabled ? 1 : 0);
       gl.activeTexture(gl.TEXTURE4);
-      gl.bindTexture(gl.TEXTURE_2D, getImgPixelTex(origIdx));
+      gl.bindTexture(gl.TEXTURE_2D, getShapeImgPixelTex(inst._cacheTarget || inst));
       gl.uniform1i(eImgPixelTex, 4);
       gl.uniform1f(eImgPixelCols,   inst.imgPixelCols    || 5);
       gl.uniform1f(eImgPixelRows,   inst.imgPixelRows    || 5);
@@ -1945,11 +2306,11 @@ window.uploadShapeGradient = function(stops) {
       gl.uniform1f(eImgPixelMaxOffset,    inst.imgPixelMaxOffset    != null ? inst.imgPixelMaxOffset    :  0.5);
       gl.uniform1i(eImgPixelMask,         inst.imgPixelMask ? 1 : 0);
 
-      // Layer 2 image pixel (Oct diamond cells — texture unit 5)
+      // Layer 2 image pixel (Oct diamond cells — texture unit 5) — per-shape
       const isOct = (inst.weaveMode || 0) === 4;
       gl.uniform1i(eImgPixel2Enabled, isOct && inst.imgPixel2Enabled ? 1 : 0);
       gl.activeTexture(gl.TEXTURE5);
-      gl.bindTexture(gl.TEXTURE_2D, getImgPixel2Tex(origIdx));
+      gl.bindTexture(gl.TEXTURE_2D, getShapeImgPixel2Tex(inst._cacheTarget || inst));
       gl.uniform1i(eImgPixel2Tex, 5);
       gl.uniform1f(eImgPixel2Cols,   inst.imgPixel2Cols    || 5);
       gl.uniform1f(eImgPixel2Rows,   inst.imgPixel2Rows    || 5);
@@ -2008,6 +2369,20 @@ window.uploadShapeGradient = function(stops) {
       precomputePlayIdx = (precomputePlayIdx + 1) % pcFrames;
     } else {
       blitToScreen(lastTex, W, H);
+    }
+
+    } finally {
+      // Restore user's params after every render (even if a draw call threw),
+      // so the UI / sliders / save / export all see the unmodified config.
+      if (_budgetSaved) {
+        p.flowBlur            = _budgetSaved.flowBlur;
+        p.preProcess          = _budgetSaved.preProcess;
+        p.prePPStack          = _budgetSaved.prePPStack;
+        p.postProcessEnabled  = _budgetSaved.postProcessEnabled;
+        p.banding             = _budgetSaved.banding;
+        p.pixelateInstances   = _budgetSaved.pixelateInstances;
+        p.ppStack             = _budgetSaved.ppStack;
+      }
     }
   }
 
